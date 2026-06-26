@@ -1,9 +1,14 @@
 {
   "version": 2,
+  "outputDirectory": "public",
   "builds": [
     {
       "src": "server.js",
       "use": "@vercel/node"
+    },
+    {
+      "src": "public/**",
+      "use": "@vercel/static"
     }
   ],
   "routes": [
@@ -24,9 +29,12 @@
       "dest": "/assets/$1"
     },
     {
-      "src": "/(.*)",
+      "src": "/(.*\\.(html|css|js|json|png|jpg|jpeg|gif|svg|ico|woff|woff2|ttf|eot))",
       "dest": "/public/$1"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/public/index.html"
     }
-  ],
-  "outputDirectory": "public"
+  ]
 }
