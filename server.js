@@ -5,11 +5,28 @@ import cors from 'cors';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
-import Tesseract from 'tesseract.js';
-import pdfParse from 'pdf-parse';
-import mammoth from 'mammoth';
-import { execSync } from 'child_process';
 import 'dotenv/config';
+
+// Conditionally load heavy dependencies (not needed for Vercel PDF generation)
+let Tesseract, pdfParse, mammoth, execSync;
+const isVercel = !!process.env.VERCEL;
+
+if (!isVercel) {
+  const tesseractModule = await import('tesseract.js');
+  Tesseract = tesseractModule.default;
+  const pdfParseModule = await import('pdf-parse');
+  pdfParse = pdfParseModule.default;
+  const mammothModule = await import('mammoth');
+  mammoth = mammothModule.default;
+  const childProcess = await import('child_process');
+  execSync = childProcess.execSync;
+} else {
+  // Minimal implementations for Vercel
+  Tesseract = { recognize: async () => ({ data: { text: '' } }) };
+  pdfParse = async (buffer) => ({ text: '' });
+  mammoth = { extractRawText: async () => ({ value: '' }) };
+  execSync = () => { throw new Error('execSync not available on Vercel') };
+}
 
 // Import NCR parser
 import { parseNCRContent } from './ncr-parser.js';
