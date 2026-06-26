@@ -1094,9 +1094,13 @@ function detectOrganization(text) {
 }
 
 const PORT = process.env.PORT || 3000;
-initGoogleAuth().then(async () => {
-  // Ensure all sheets exist and have headers
-  if (sheets) {
+
+// Initialize Google Auth and start server
+async function startServer() {
+  await initGoogleAuth();
+  
+  // Ensure all sheets exist and have headers (only when running locally)
+  if (sheets && !process.env.VERCEL) {
     for (const [key, name] of Object.entries(SHEET_NAMES)) {
       await ensureSheetExists(name);
       const columns = key === 'NCR' ? NCR_COLUMNS : key === 'Joint Note' ? JOINT_NOTE_COLUMNS : LETTER_COLUMNS;
@@ -1104,10 +1108,19 @@ initGoogleAuth().then(async () => {
       console.log(`✅ Sheet ready: ${name} (${columns.length} columns)`);
     }
   }
-  app.listen(PORT, () => {
-    console.log(`\n🚀 Letter Processor v4.0 running at http://localhost:${PORT}`);
-    console.log(`📊 Google Sheets: ${sheets ? 'Connected' : 'Not configured'}`);
-    console.log(`📁 Google Drive: ${drive ? 'Connected' : 'Not configured'}`);
-    console.log(`\n📋 Sheets: ${Object.values(SHEET_NAMES).join(', ')}\n`);
-  });
-});
+  
+  // Only listen for connections when running locally (not on Vercel)
+  if (!process.env.VERCEL) {
+    app.listen(PORT, () => {
+      console.log(`\n🚀 Letter Processor v4.0 running at http://localhost:${PORT}`);
+      console.log(`📊 Google Sheets: ${sheets ? 'Connected' : 'Not configured'}`);
+      console.log(`📁 Google Drive: ${drive ? 'Connected' : 'Not configured'}`);
+      console.log(`\n📋 Sheets: ${Object.values(SHEET_NAMES).join(', ')}\n`);
+    });
+  }
+}
+
+startServer().catch(console.error);
+
+// Export for Vercel serverless functions
+export default app;
