@@ -1,0 +1,1293 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>DocVault - Enterprise Document Management</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    :root{
+      --primary:#2563EB;--primary-hover:#1D4ED8;--primary-light:#DBEAFE;
+      --navy:#1E293B;--navy-dark:#0F172A;--navy-light:#334155;
+      --success:#10B981;--success-bg:rgba(16,185,129,.1);
+      --warning:#F59E0B;--warning-bg:rgba(245,158,11,.1);
+      --error:#EF4444;--error-bg:rgba(239,68,68,.1);
+      --bg:#F8FAFC;--card:#FFFFFF;--border:#E2E8F0;
+      --text:#1E293B;--text2:#475569;--text3:#94A3B8;
+      --sidebar:#1E293B;--sidebar-hover:#334155;--sidebar-active:#2563EB;
+      --beml:#F59E0B;--kmrcl:#8B5CF6;--metro:#06B6D4;--ncr:#EF4444;--jn:#10B981;
+      --radius:12px;--radius-sm:8px;--shadow:0 1px 3px rgba(0,0,0,.1);
+      --shadow-lg:0 10px 40px rgba(0,0,0,.15);
+    }
+    body{font-family:'Inter',-apple-system,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;display:flex}
+    .sidebar{width:260px;background:var(--sidebar);color:white;display:flex;flex-direction:column;position:fixed;height:100vh;z-index:100}
+    .sidebar-logo{padding:20px 24px;border-bottom:1px solid var(--navy-light)}
+    .sidebar-logo h1{font-size:1.4rem;font-weight:700;background:linear-gradient(135deg,#3B82F6,#8B5CF6);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+    .sidebar-logo p{font-size:.7rem;color:var(--text3);margin-top:2px}
+    .sidebar-menu{flex:1;padding:12px 0;overflow-y:auto}
+    .menu-item{display:flex;align-items:center;gap:12px;padding:12px 24px;color:var(--text3);cursor:pointer;transition:all .2s;font-size:.85rem;border-left:3px solid transparent}
+    .menu-item:hover{background:var(--sidebar-hover);color:white}
+    .menu-item.active{background:rgba(37,99,235,.15);color:var(--primary);border-left-color:var(--primary)}
+    .menu-item .icon{width:20px;text-align:center}
+    .menu-section{padding:8px 24px;font-size:.65rem;color:var(--text3);text-transform:uppercase;letter-spacing:1px;margin-top:12px}
+    .main{margin-left:260px;flex:1;min-height:100vh}
+    .topbar{background:var(--card);border-bottom:1px solid var(--border);padding:16px 24px;display:flex;align-items:center;gap:16px;position:sticky;top:0;z-index:50}
+    .search-box{flex:1;max-width:500px;position:relative}
+    .search-box input{width:100%;padding:10px 16px 10px 40px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);font-size:.85rem;color:var(--text)}
+    .search-box input:focus{outline:none;border-color:var(--primary);box-shadow:0 0 0 3px rgba(37,99,235,.1)}
+    .search-box .search-icon{position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--text3)}
+    .topbar-actions{display:flex;gap:8px;margin-left:auto}
+    .btn{padding:8px 16px;border:none;border-radius:var(--radius-sm);font-family:inherit;font-size:.8rem;font-weight:500;cursor:pointer;transition:all .2s;display:inline-flex;align-items:center;gap:6px}
+    .btn-primary{background:var(--primary);color:white}.btn-primary:hover{background:var(--primary-hover)}
+    .btn-success{background:var(--success);color:white}.btn-success:hover{background:#059669}
+    .btn-secondary{background:var(--bg);color:var(--text);border:1px solid var(--border)}.btn-secondary:hover{background:var(--border)}
+    .btn-danger{background:var(--error);color:white}.btn-danger:hover{background:#DC2626}
+    .btn-sm{padding:5px 10px;font-size:.7rem}
+    .btn:disabled{opacity:.5;cursor:not-allowed}
+    .content{padding:24px}
+    .page-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:24px}
+    .page-header h2{font-size:1.5rem;font-weight:700;color:var(--text)}
+    .page-header p{color:var(--text3);font-size:.85rem;margin-top:4px}
+    .stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;margin-bottom:24px}
+    .stat-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:20px;box-shadow:var(--shadow)}
+    .stat-card .label{font-size:.75rem;color:var(--text3);text-transform:uppercase;letter-spacing:.5px}
+    .stat-card .value{font-size:1.8rem;font-weight:700;margin-top:4px}
+    .stat-card .change{font-size:.7rem;margin-top:8px;display:flex;align-items:center;gap:4px}
+    .stat-card .change.up{color:var(--success)}.stat-card .change.down{color:var(--error)}
+    .card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);overflow:hidden}
+    .card-header{padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
+    .card-header h3{font-size:.95rem;font-weight:600}
+    .card-body{padding:20px}
+    .table{width:100%;border-collapse:collapse}
+    .table th{padding:12px 16px;text-align:left;font-size:.7rem;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;background:var(--bg);border-bottom:1px solid var(--border)}
+    .table td{padding:12px 16px;border-bottom:1px solid var(--border);font-size:.85rem}
+    .table tr:hover td{background:rgba(37,99,235,.02)}
+    .table .actions{display:flex;gap:6px}
+    .badge{padding:4px 10px;border-radius:20px;font-size:.7rem;font-weight:600}
+    .badge-beml{background:rgba(245,158,11,.1);color:var(--beml)}
+    .badge-kmrcl{background:rgba(139,92,246,.1);color:var(--kmrcl)}
+    .badge-metro{background:rgba(6,182,212,.1);color:var(--metro)}
+    .badge-ncr{background:rgba(239,68,68,.1);color:var(--ncr)}
+    .badge-jn{background:rgba(16,185,129,.1);color:var(--jn)}
+    .badge-open{background:var(--success-bg);color:var(--success)}
+    .badge-closed{background:var(--bg);color:var(--text3)}
+    .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:200;display:none;align-items:center;justify-content:center}
+    .modal-overlay.show{display:flex}
+    .modal{background:var(--card);border-radius:var(--radius);width:90%;max-width:800px;max-height:90vh;overflow-y:auto;box-shadow:var(--shadow-lg)}
+    .modal-header{padding:20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center}
+    .modal-header h3{font-size:1.1rem;font-weight:600}
+    .modal-close{background:none;border:none;font-size:1.5rem;cursor:pointer;color:var(--text3)}
+    .modal-body{padding:20px}
+    .form-group{margin-bottom:16px}
+    .form-group label{display:block;font-size:.75rem;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px}
+    .form-group input,.form-group select,.form-group textarea{width:100%;padding:10px 14px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);font-size:.85rem;color:var(--text)}
+    .form-group input:focus,.form-group select:focus,.form-group textarea:focus{outline:none;border-color:var(--primary);box-shadow:0 0 0 3px rgba(37,99,235,.1)}
+    .form-row{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+    .drop-zone{border:2px dashed var(--border);border-radius:var(--radius);padding:40px;text-align:center;cursor:pointer;transition:all .2s;position:relative}
+    .drop-zone:hover,.drop-zone.dragover{border-color:var(--primary);background:var(--primary-light)}
+    .drop-zone input[type="file"]{position:absolute;inset:0;opacity:0;cursor:pointer}
+    .drop-zone .icon{font-size:2.5rem;margin-bottom:8px}
+    .drop-zone p{color:var(--text2);font-size:.9rem}
+    .drop-zone .types{font-size:.75rem;color:var(--text3);margin-top:8px}
+    .toast{position:fixed;bottom:24px;right:24px;padding:14px 20px;border-radius:var(--radius-sm);font-size:.85rem;font-weight:500;z-index:300;transform:translateY(100px);opacity:0;transition:all .3s}
+    .toast.show{transform:translateY(0);opacity:1}
+    .toast.success{background:var(--success);color:white}
+    .toast.error{background:var(--error);color:white}
+    .spinner{display:inline-block;width:16px;height:16px;border:2px solid rgba(255,255,255,.3);border-top-color:white;border-radius:50%;animation:spin .8s linear infinite}
+    @keyframes spin{to{transform:rotate(360deg)}}
+    .empty-state{text-align:center;padding:60px 20px;color:var(--text3)}
+    .empty-state .icon{font-size:3rem;margin-bottom:12px}
+    .grid-2{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+    .grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+    .filter-bar{display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap}
+    .filter-bar select,.filter-bar input{padding:8px 12px;background:var(--card);border:1px solid var(--border);border-radius:var(--radius-sm);font-size:.8rem}
+    @media(max-width:1024px){.sidebar{width:60px}.sidebar .menu-text,.sidebar-logo p,.menu-section{display:none}.sidebar-logo h1{font-size:1rem}.menu-item{padding:12px;justify-content:center}.main{margin-left:60px}}
+    @media(max-width:768px){.sidebar{display:none}.main{margin-left:0}.form-row{grid-template-columns:1fr}.grid-2,.grid-3{grid-template-columns:1fr}.stats-grid{grid-template-columns:repeat(2,1fr)}}
+  </style>
+</head>
+<body>
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <div class="sidebar-logo">
+      <h1>DocVault</h1>
+      <p>Document Management System</p>
+    </div>
+    <nav class="sidebar-menu">
+      <div class="menu-section">Main</div>
+      <div class="menu-item active" onclick="navigate('dashboard')"><span class="icon">📊</span><span class="menu-text">Dashboard</span></div>
+      <div class="menu-item" onclick="navigate('letters')"><span class="icon">📄</span><span class="menu-text">Letters</span></div>
+      <div class="menu-item" onclick="navigate('ncr')"><span class="icon">📋</span><span class="menu-text">NCR Records</span></div>
+      <div class="menu-item" onclick="navigate('joint')"><span class="icon">📝</span><span class="menu-text">Joint Notes</span></div>
+      <div class="menu-section">Create</div>
+      <div class="menu-item" onclick="navigate('create-ncr')"><span class="icon">➕</span><span class="menu-text">Create NCR</span></div>
+      <div class="menu-item" onclick="navigate('create-letter')"><span class="icon">➕</span><span class="menu-text">Create Letter</span></div>
+      <div class="menu-section">Tools</div>
+      <div class="menu-item" onclick="navigate('upload')"><span class="icon">📤</span><span class="menu-text">Upload</span></div>
+      <div class="menu-item" onclick="navigate('bulk')"><span class="icon">📦</span><span class="menu-text">Bulk Import</span></div>
+      <div class="menu-item" onclick="navigate('search')"><span class="icon">🔍</span><span class="menu-text">Search</span></div>
+      <div class="menu-section">Data</div>
+      <div class="menu-item" onclick="navigate('drive')"><span class="icon">☁️</span><span class="menu-text">Google Drive</span></div>
+      <div class="menu-item" onclick="navigate('export')"><span class="icon">📥</span><span class="menu-text">Export</span></div>
+    </nav>
+  </aside>
+
+  <!-- MAIN CONTENT -->
+  <main class="main">
+    <!-- TOP BAR -->
+    <header class="topbar">
+      <div class="search-box">
+        <span class="search-icon">🔍</span>
+        <input type="text" id="globalSearch" placeholder="Search documents, NCR numbers, letters..." onkeyup="globalSearchFn()">
+      </div>
+      <div class="topbar-actions">
+        <button class="btn btn-primary" onclick="showUploadModal()">📤 Upload</button>
+        <button class="btn btn-secondary" onclick="loadAllData()">🔄 Refresh</button>
+      </div>
+    </header>
+
+    <!-- CONTENT AREA -->
+    <div class="content" id="contentArea"></div>
+  </main>
+
+  <!-- UPLOAD MODAL -->
+  <div class="modal-overlay" id="uploadModal">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>Upload Document</h3>
+        <button class="modal-close" onclick="closeModal('uploadModal')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <form id="uploadForm">
+          <div class="form-row">
+            <div class="form-group">
+              <label>Document Type</label>
+              <select id="uploadType" required>
+                <option value="letter">Letter</option>
+                <option value="ncr">NCR Record</option>
+                <option value="joint_note">Joint Note</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Organization</label>
+              <select id="uploadOrg" required>
+                <option value="BEML">BEML</option>
+                <option value="KMRCL">KMRCL</option>
+                <option value="Metro Rail">Metro Rail</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Upload File</label>
+            <div class="drop-zone" id="uploadDropZone">
+              <input type="file" id="uploadFile" accept=".pdf,.jpg,.jpeg,.png,.tiff,.tif,.docx,.doc,.txt" required>
+              <div class="icon">📄</div>
+              <p>Drop file here or click to browse</p>
+              <div class="types">PDF, JPG, PNG, TIFF, DOCX, TXT (Max 100MB)</div>
+            </div>
+            <div id="uploadFileInfo" style="display:none;margin-top:10px;padding:10px;background:var(--bg);border-radius:8px;font-size:.8rem"></div>
+          </div>
+          <div style="display:flex;gap:12px;justify-content:flex-end">
+            <button type="button" class="btn btn-secondary" onclick="closeModal('uploadModal')">Cancel</button>
+            <button type="submit" class="btn btn-primary" id="uploadBtn">📤 Upload & Extract</button>
+          </div>
+        </form>
+        <div id="uploadProgress" style="display:none;margin-top:16px">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+            <span class="spinner"></span>
+            <span id="uploadStatus">Processing...</span>
+          </div>
+          <div style="height:6px;background:var(--bg);border-radius:3px;overflow:hidden">
+            <div id="uploadProgressBar" style="height:100%;background:linear-gradient(90deg,var(--primary),#8B5CF6);width:0%;transition:width .3s"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- DETAIL MODAL -->
+  <div class="modal-overlay" id="detailModal">
+    <div class="modal" style="max-width:900px">
+      <div class="modal-header">
+        <h3 id="detailTitle">Document Details</h3>
+        <button class="modal-close" onclick="closeModal('detailModal')">&times;</button>
+      </div>
+      <div class="modal-body" id="detailBody"></div>
+    </div>
+  </div>
+
+  <!-- VIEWER MODAL -->
+  <div class="modal-overlay" id="viewerModal">
+    <div class="modal" style="max-width:95vw;max-height:95vh">
+      <div class="modal-header">
+        <h3 id="viewerTitle">Document Viewer</h3>
+        <div style="display:flex;gap:8px">
+          <a id="viewerDownload" class="btn btn-secondary btn-sm" download>📥 Download</a>
+          <button class="modal-close" onclick="closeModal('viewerModal')">&times;</button>
+        </div>
+      </div>
+      <div class="modal-body" id="viewerBody" style="padding:0;min-height:500px"></div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script>
+    let allData = {};
+    let currentPage = 'dashboard';
+    let currentUploadFile = null;
+
+    // === NAVIGATION ===
+    function navigate(page) {
+      currentPage = page;
+      document.querySelectorAll('.menu-item').forEach(m => m.classList.remove('active'));
+      event.currentTarget.classList.add('active');
+      renderPage(page);
+    }
+
+    function renderPage(page) {
+      const content = document.getElementById('contentArea');
+      switch(page) {
+        case 'dashboard': renderDashboard(content); break;
+        case 'letters': renderLetters(content); break;
+        case 'ncr': renderNCR(content); break;
+        case 'joint': renderJointNotes(content); break;
+        case 'create-ncr': renderCreateNCR(content); break;
+        case 'create-letter': renderCreateLetter(content); break;
+        case 'upload': showUploadModal(); navigate('dashboard'); break;
+        case 'bulk': renderBulkImport(content); break;
+        case 'search': renderSearch(content); break;
+        case 'drive': renderDrive(content); break;
+        case 'export': renderExport(content); break;
+        default: renderDashboard(content);
+      }
+    }
+
+    // === DASHBOARD ===
+    function renderDashboard(el) {
+      const stats = getStats();
+      el.innerHTML = `
+        <div class="page-header">
+          <div><h2>Dashboard</h2><p>Overview of all documents and records</p></div>
+        </div>
+        <div class="stats-grid">
+          <div class="stat-card"><div class="label">Total Documents</div><div class="value" style="color:var(--primary)">${stats.total}</div></div>
+          <div class="stat-card"><div class="label">BEML Letters</div><div class="value" style="color:var(--beml)">${stats.beml}</div></div>
+          <div class="stat-card"><div class="label">KMRCL Letters</div><div class="value" style="color:var(--kmrcl)">${stats.kmrcl}</div></div>
+          <div class="stat-card"><div class="label">NCR Records</div><div class="value" style="color:var(--ncr)">${stats.ncr}</div></div>
+          <div class="stat-card"><div class="label">Joint Notes</div><div class="value" style="color:var(--jn)">${stats.jn}</div></div>
+          <div class="stat-card"><div class="label">Open Items</div><div class="value" style="color:var(--success)">${stats.open}</div></div>
+        </div>
+        <div class="grid-2">
+          <div class="card">
+            <div class="card-header"><h3>Recent Documents</h3></div>
+            <div class="card-body" id="recentDocs"></div>
+          </div>
+          <div class="card">
+            <div class="card-header"><h3>Quick Actions</h3></div>
+            <div class="card-body">
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+                <button class="btn btn-primary" onclick="showUploadModal()" style="width:100%">📤 Upload Document</button>
+                <button class="btn btn-secondary" onclick="navigate('bulk')" style="width:100%">📦 Bulk Import</button>
+                <button class="btn btn-secondary" onclick="navigate('search')" style="width:100%">🔍 Search</button>
+                <button class="btn btn-secondary" onclick="navigate('export')" style="width:100%">📥 Export Data</button>
+              </div>
+            </div>
+          </div>
+        </div>`;
+      renderRecentDocs();
+    }
+
+    function getStats() {
+      let total = 0, beml = 0, kmrcl = 0, ncr = 0, jn = 0, open = 0;
+      for (const [key, rows] of Object.entries(allData)) {
+        const count = Math.max(0, rows.length - 1);
+        total += count;
+        if (key.includes('BEML')) beml += count;
+        else if (key.includes('KMRCL')) kmrcl += count;
+        else if (key.includes('NCR')) ncr += count;
+        else if (key.includes('Joint')) jn += count;
+        for (let i = 1; i < rows.length; i++) {
+          const status = (rows[i][rows[i].length - 1] || '').toLowerCase();
+          if (status !== 'closed') open++;
+        }
+      }
+      return { total, beml, kmrcl, ncr, jn, open };
+    }
+
+    function renderRecentDocs() {
+      const all = [];
+      for (const [key, rows] of Object.entries(allData)) {
+        for (let i = 1; i < rows.length; i++) all.push({ sheet: key, row: rows[i], idx: i });
+      }
+      all.sort((a, b) => b.idx - a.idx);
+      const recent = all.slice(0, 5);
+      if (recent.length === 0) {
+        document.getElementById('recentDocs').innerHTML = '<div class="empty-state"><div class="icon">📄</div><p>No documents yet</p></div>';
+        return;
+      }
+      let html = '<table class="table"><thead><tr><th>Document</th><th>Category</th><th>Date</th><th>Status</th></tr></thead><tbody>';
+      recent.forEach(item => {
+        const r = item.row;
+        const badge = item.sheet.includes('NCR') ? 'badge-ncr' : item.sheet.includes('BEML') ? 'badge-beml' : item.sheet.includes('KMRCL') ? 'badge-kmrcl' : 'badge-jn';
+        html += `<tr style="cursor:pointer" onclick="viewDocument('${item.sheet}',${item.idx})">
+          <td><strong>${esc(r[1] || r[3] || 'N/A')}</strong></td>
+          <td><span class="badge ${badge}">${item.sheet}</span></td>
+          <td>${r[3] || r[2] || 'N/A'}</td>
+          <td><span class="badge badge-${(r[r.length-1]||'open').toLowerCase() === 'closed' ? 'closed' : 'open'}">${r[r.length-1] || 'Open'}</span></td>
+        </tr>`;
+      });
+      html += '</tbody></table>';
+      document.getElementById('recentDocs').innerHTML = html;
+    }
+
+    // === LETTERS PAGE ===
+    function renderLetters(el) {
+      const rows = allData['BEML Letters'] || [];
+      const kmrclRows = allData['KMRCL Letters'] || [];
+      const metroRows = allData['Metro Rail Letters'] || [];
+      const allLetters = [];
+      [['BEML Letters', rows], ['KMRCL Letters', kmrclRows], ['Metro Rail Letters', metroRows]].forEach(([name, r]) => {
+        for (let i = 1; i < r.length; i++) allLetters.push({ sheet: name, row: r[i], idx: i });
+      });
+      el.innerHTML = `
+        <div class="page-header">
+          <div><h2>Letters</h2><p>${allLetters.length} total letters across all organizations</p></div>
+          <button class="btn btn-primary" onclick="showUploadModal()">📤 Upload Letter</button>
+        </div>
+        <div class="filter-bar">
+          <select id="letterOrgFilter" onchange="filterLetters()"><option value="">All Organizations</option><option value="BEML Letters">BEML</option><option value="KMRCL Letters">KMRCL</option><option value="Metro Rail Letters">Metro Rail</option></select>
+          <select id="letterStatusFilter" onchange="filterLetters()"><option value="">All Status</option><option value="Open">Open</option><option value="Closed">Closed</option></select>
+          <input type="text" id="letterSearch" placeholder="Search..." onkeyup="filterLetters()">
+        </div>
+        <div class="card"><div class="card-body" style="padding:0">
+          <div id="lettersTable"></div>
+        </div></div>`;
+      renderLettersTable(allLetters);
+    }
+
+    function filterLetters() {
+      const org = document.getElementById('letterOrgFilter').value;
+      const status = document.getElementById('letterStatusFilter').value;
+      const search = document.getElementById('letterSearch').value.toLowerCase();
+      const allLetters = [];
+      [['BEML Letters', allData['BEML Letters'] || []], ['KMRCL Letters', allData['KMRCL Letters'] || []], ['Metro Rail Letters', allData['Metro Rail Letters'] || []]].forEach(([name, rows]) => {
+        for (let i = 1; i < rows.length; i++) allLetters.push({ sheet: name, row: rows[i], idx: i });
+      });
+      let filtered = allLetters;
+      if (org) filtered = filtered.filter(l => l.sheet === org);
+      if (status) filtered = filtered.filter(l => (l.row[l.row.length-1] || '').toLowerCase() === status.toLowerCase());
+      if (search) filtered = filtered.filter(l => l.row.some(c => (c||'').toLowerCase().includes(search)));
+      renderLettersTable(filtered);
+    }
+
+    function renderLettersTable(letters) {
+      if (letters.length === 0) {
+        document.getElementById('lettersTable').innerHTML = '<div class="empty-state"><div class="icon">📄</div><p>No letters found</p></div>';
+        return;
+      }
+      let html = '<table class="table"><thead><tr><th>#</th><th>Organization</th><th>Ref No</th><th>Date</th><th>Subject</th><th>Status</th><th>Actions</th></tr></thead><tbody>';
+      letters.forEach((item, i) => {
+        const r = item.row;
+        const badge = item.sheet.includes('BEML') ? 'badge-beml' : item.sheet.includes('KMRCL') ? 'badge-kmrcl' : 'badge-metro';
+        const status = r[r.length-1] || 'Open';
+        html += `<tr>
+          <td>${i+1}</td>
+          <td><span class="badge ${badge}">${item.sheet.replace(' Letters','')}</span></td>
+          <td><strong>${esc(r[1] || 'N/A')}</strong></td>
+          <td>${r[3] || 'N/A'}</td>
+          <td title="${esc(r[7] || '')}">${esc((r[7] || 'N/A').substring(0,50))}</td>
+          <td><span class="badge badge-${status.toLowerCase() === 'closed' ? 'closed' : 'open'}">${status}</span></td>
+          <td class="actions">
+            <button class="btn btn-secondary btn-sm" onclick="viewDocument('${item.sheet}',${item.idx})">👁️</button>
+            <button class="btn btn-secondary btn-sm" onclick="editRecord('${item.sheet}',${item.idx})">✏️</button>
+          </td>
+        </tr>`;
+      });
+      html += '</tbody></table>';
+      document.getElementById('lettersTable').innerHTML = html;
+    }
+
+    // === NCR PAGE ===
+    function renderNCR(el) {
+      const rows = allData['NCR Records'] || [];
+      const allNCR = [];
+      for (let i = 1; i < rows.length; i++) allNCR.push({ row: rows[i], idx: i });
+      el.innerHTML = `
+        <div class="page-header">
+          <div><h2>NCR Records</h2><p>${allNCR.length} Non-Conformance Reports</p></div>
+          <button class="btn btn-primary" onclick="showUploadModal()">📤 Upload NCR</button>
+        </div>
+        <div class="filter-bar">
+          <select id="ncrStatusFilter" onchange="filterNCR()"><option value="">All Status</option><option value="OPEN">Open</option><option value="CLOSED">Closed</option></select>
+          <input type="text" id="ncrSearch" placeholder="Search NCR..." onkeyup="filterNCR()">
+        </div>
+        <div class="card"><div class="card-body" style="padding:0"><div id="ncrTable"></div></div></div>`;
+      renderNCRTable(allNCR);
+    }
+
+    function filterNCR() {
+      const status = document.getElementById('ncrStatusFilter').value;
+      const search = document.getElementById('ncrSearch').value.toLowerCase();
+      const rows = allData['NCR Records'] || [];
+      let allNCR = [];
+      for (let i = 1; i < rows.length; i++) allNCR.push({ row: rows[i], idx: i });
+      if (status) allNCR = allNCR.filter(n => (n.row[n.row.length-1] || '').toUpperCase() === status);
+      if (search) allNCR = allNCR.filter(n => n.row.some(c => (c||'').toLowerCase().includes(search)));
+      renderNCRTable(allNCR);
+    }
+
+    function renderNCRTable(ncrs) {
+      if (ncrs.length === 0) {
+        document.getElementById('ncrTable').innerHTML = '<div class="empty-state"><div class="icon">📋</div><p>No NCR records found</p></div>';
+        return;
+      }
+      let html = '<table class="table"><thead><tr><th>#</th><th>NCR No</th><th>Date</th><th>Item</th><th>Train</th><th>Status</th><th>Actions</th></tr></thead><tbody>';
+      ncrs.forEach((item, i) => {
+        const r = item.row;
+        const status = r[13] || r[r.length-1] || 'Open';
+        html += `<tr>
+          <td>${i+1}</td>
+          <td><strong>${esc(r[1] || 'N/A')}</strong></td>
+          <td>${r[3] || r[2] || 'N/A'}</td>
+          <td title="${esc(r[4] || '')}">${esc((r[4] || 'N/A').substring(0,40))}</td>
+          <td>${r[10] || 'N/A'}</td>
+          <td><span class="badge badge-${status.toLowerCase() === 'closed' ? 'closed' : 'open'}">${status}</span></td>
+          <td class="actions">
+            <button class="btn btn-secondary btn-sm" onclick="viewDocument('NCR Records',${item.idx})">👁️</button>
+            <button class="btn btn-secondary btn-sm" onclick="editRecord('NCR Records',${item.idx})">✏️</button>
+            <button class="btn btn-secondary btn-sm" onclick="cloneNCR(${item.idx})">📋</button>
+          </td>
+        </tr>`;
+      });
+      html += '</tbody></table>';
+      document.getElementById('ncrTable').innerHTML = html;
+    }
+
+    // === JOINT NOTES PAGE ===
+    function renderJointNotes(el) {
+      const rows = allData['Joint Notes'] || [];
+      const allJN = [];
+      for (let i = 1; i < rows.length; i++) allJN.push({ row: rows[i], idx: i });
+      el.innerHTML = `
+        <div class="page-header">
+          <div><h2>Joint Notes</h2><p>${allJN.length} joint notes</p></div>
+          <button class="btn btn-primary" onclick="showUploadModal()">📤 Upload Joint Note</button>
+        </div>
+        <div class="card"><div class="card-body" style="padding:0"><div id="jnTable"></div></div></div>`;
+      if (allJN.length === 0) {
+        document.getElementById('jnTable').innerHTML = '<div class="empty-state"><div class="icon">📝</div><p>No joint notes found</p></div>';
+        return;
+      }
+      let html = '<table class="table"><thead><tr><th>#</th><th>Joint Note No</th><th>Date</th><th>Subject</th><th>Actions</th></tr></thead><tbody>';
+      allJN.forEach((item, i) => {
+        const r = item.row;
+        html += `<tr>
+          <td>${i+1}</td><td><strong>${esc(r[1] || 'N/A')}</strong></td>
+          <td>${r[2] || 'N/A'}</td><td>${esc((r[4] || 'N/A').substring(0,60))}</td>
+          <td><button class="btn btn-secondary btn-sm" onclick="viewDocument('Joint Notes',${item.idx})">👁️</button></td>
+        </tr>`;
+      });
+      html += '</tbody></table>';
+      document.getElementById('jnTable').innerHTML = html;
+    }
+
+    // === BULK IMPORT ===
+    function renderBulkImport(el) {
+      el.innerHTML = `
+        <div class="page-header"><div><h2>Bulk Import</h2><p>Import data from Excel or JSON files</p></div></div>
+        <div class="card">
+          <div class="card-header"><h3>Import from JSON</h3></div>
+          <div class="card-body">
+            <div class="form-group">
+              <label>Select Target Sheet</label>
+              <select id="importSheet"><option value="BEML Letters">BEML Letters</option><option value="KMRCL Letters">KMRCL Letters</option><option value="Metro Rail Letters">Metro Rail Letters</option><option value="NCR Records">NCR Records</option><option value="Joint Notes">Joint Notes</option></select>
+            </div>
+            <div class="form-group">
+              <label>Upload JSON File</label>
+              <div class="drop-zone" id="importDropZone">
+                <input type="file" id="importFile" accept=".json" onchange="handleImportFile(this)">
+                <div class="icon">📁</div>
+                <p>Drop JSON file here or click to browse</p>
+              </div>
+            </div>
+            <div id="importPreview" style="display:none;margin-top:16px"></div>
+            <button class="btn btn-success" id="importBtn" onclick="doImport()" disabled>📥 Import Data</button>
+          </div>
+        </div>`;
+    }
+
+    let importData = null;
+    function handleImportFile(input) {
+      const file = input.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = e => {
+        try {
+          importData = JSON.parse(e.target.result);
+          document.getElementById('importPreview').innerHTML = `<div style="padding:12px;background:var(--success-bg);border-radius:8px;font-size:.85rem">✅ ${Array.isArray(importData) ? importData.length : 1} record(s) ready to import</div>`;
+          document.getElementById('importBtn').disabled = false;
+        } catch { showToast('Invalid JSON file', 'error'); }
+      };
+      reader.readAsText(file);
+    }
+
+    async function doImport() {
+      if (!importData) return;
+      const sheetName = document.getElementById('importSheet').value;
+      try {
+        const res = await fetch('/api/import/json', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ records: importData, sheetName })
+        });
+        const r = await res.json();
+        if (r.success) { showToast(`Imported ${r.imported} records`, 'success'); loadAllData(); }
+        else showToast('Import failed', 'error');
+      } catch (e) { showToast('Error: ' + e.message, 'error'); }
+    }
+
+    // === SEARCH ===
+    function renderSearch(el) {
+      el.innerHTML = `
+        <div class="page-header"><div><h2>Search</h2><p>Search across all documents</p></div></div>
+        <div class="card">
+          <div class="card-body">
+            <div class="form-group">
+              <label>Search Query</label>
+              <input type="text" id="searchQuery" placeholder="Enter search term (ref number, subject, NCR number...)" onkeyup="if(event.key==='Enter')doSearch()">
+            </div>
+            <div class="filter-bar">
+              <select id="searchSheet"><option value="">All Categories</option><option value="BEML Letters">BEML Letters</option><option value="KMRCL Letters">KMRCL Letters</option><option value="Metro Rail Letters">Metro Rail</option><option value="NCR Records">NCR</option><option value="Joint Notes">Joint Notes</option></select>
+              <button class="btn btn-primary" onclick="doSearch()">🔍 Search</button>
+            </div>
+            <div id="searchResults"></div>
+          </div>
+        </div>`;
+    }
+
+    function doSearch() {
+      const query = document.getElementById('searchQuery').value.toLowerCase();
+      const sheet = document.getElementById('searchSheet').value;
+      if (!query) { document.getElementById('searchResults').innerHTML = ''; return; }
+      const results = [];
+      for (const [key, rows] of Object.entries(allData)) {
+        if (sheet && key !== sheet) continue;
+        for (let i = 1; i < rows.length; i++) {
+          if (rows[i].some(c => (c||'').toLowerCase().includes(query))) {
+            results.push({ sheet: key, row: rows[i], idx: i });
+          }
+        }
+      }
+      if (results.length === 0) {
+        document.getElementById('searchResults').innerHTML = '<div class="empty-state"><p>No results found</p></div>';
+        return;
+      }
+      let html = `<p style="margin-bottom:12px;color:var(--text3)">${results.length} result(s) found</p><table class="table"><thead><tr><th>Category</th><th>Ref/No</th><th>Date</th><th>Subject</th><th>Actions</th></tr></thead><tbody>`;
+      results.forEach(item => {
+        const r = item.row;
+        const badge = item.sheet.includes('NCR') ? 'badge-ncr' : item.sheet.includes('BEML') ? 'badge-beml' : item.sheet.includes('KMRCL') ? 'badge-kmrcl' : 'badge-jn';
+        html += `<tr>
+          <td><span class="badge ${badge}">${item.sheet}</span></td>
+          <td><strong>${esc(r[1] || 'N/A')}</strong></td>
+          <td>${r[3] || r[2] || 'N/A'}</td>
+          <td>${esc((r[7] || r[4] || 'N/A').substring(0,60))}</td>
+          <td><button class="btn btn-secondary btn-sm" onclick="viewDocument('${item.sheet}',${item.idx})">👁️ View</button></td>
+        </tr>`;
+      });
+      html += '</tbody></table>';
+      document.getElementById('searchResults').innerHTML = html;
+    }
+
+    // === DRIVE ===
+    function renderDrive(el) {
+      el.innerHTML = `
+        <div class="page-header"><div><h2>Google Drive</h2><p>Connected documents and file management</p></div></div>
+        <div class="stats-grid">
+          <div class="stat-card"><div class="label">Drive Status</div><div class="value" style="color:var(--success)">Connected</div></div>
+          <div class="stat-card"><div class="label">Files Uploaded</div><div class="value">${getStats().total}</div></div>
+        </div>
+        <div class="card">
+          <div class="card-header"><h3>Drive Folder Structure</h3></div>
+          <div class="card-body">
+            <div style="font-family:monospace;font-size:.85rem;padding:16px;background:var(--bg);border-radius:8px">
+              <div>📁 Google Drive</div>
+              <div style="padding-left:20px">📁 Letters</div>
+              <div style="padding-left:40px">📁 BEML</div>
+              <div style="padding-left:40px">📁 KMRCL</div>
+              <div style="padding-left:40px">📁 Metro Rail</div>
+              <div style="padding-left:20px">📁 NCR</div>
+              <div style="padding-left:20px">📁 Joint Notes</div>
+            </div>
+          </div>
+        </div>`;
+    }
+
+    // === EXPORT ===
+    function renderExport(el) {
+      el.innerHTML = `
+        <div class="page-header"><div><h2>Export Data</h2><p>Export records from Google Sheets</p></div></div>
+        <div class="grid-3">
+          <div class="card" style="cursor:pointer" onclick="exportCSV('BEML Letters')">
+            <div class="card-body" style="text-align:center;padding:30px">
+              <div style="font-size:2rem;margin-bottom:8px">📄</div>
+              <h3>BEML Letters</h3>
+              <p style="color:var(--text3);font-size:.8rem;margin-top:4px">Export as CSV</p>
+            </div>
+          </div>
+          <div class="card" style="cursor:pointer" onclick="exportCSV('KMRCL Letters')">
+            <div class="card-body" style="text-align:center;padding:30px">
+              <div style="font-size:2rem;margin-bottom:8px">📄</div>
+              <h3>KMRCL Letters</h3>
+              <p style="color:var(--text3);font-size:.8rem;margin-top:4px">Export as CSV</p>
+            </div>
+          </div>
+          <div class="card" style="cursor:pointer" onclick="exportCSV('Metro Rail Letters')">
+            <div class="card-body" style="text-align:center;padding:30px">
+              <div style="font-size:2rem;margin-bottom:8px">📄</div>
+              <h3>Metro Rail Letters</h3>
+              <p style="color:var(--text3);font-size:.8rem;margin-top:4px">Export as CSV</p>
+            </div>
+          </div>
+          <div class="card" style="cursor:pointer" onclick="exportCSV('NCR Records')">
+            <div class="card-body" style="text-align:center;padding:30px">
+              <div style="font-size:2rem;margin-bottom:8px">📋</div>
+              <h3>NCR Records</h3>
+              <p style="color:var(--text3);font-size:.8rem;margin-top:4px">Export as CSV</p>
+            </div>
+          </div>
+          <div class="card" style="cursor:pointer" onclick="exportCSV('Joint Notes')">
+            <div class="card-body" style="text-align:center;padding:30px">
+              <div style="font-size:2rem;margin-bottom:8px">📝</div>
+              <h3>Joint Notes</h3>
+              <p style="color:var(--text3);font-size:.8rem;margin-top:4px">Export as CSV</p>
+            </div>
+          </div>
+          <div class="card" style="cursor:pointer" onclick="exportJSON()">
+            <div class="card-body" style="text-align:center;padding:30px">
+              <div style="font-size:2rem;margin-bottom:8px">📦</div>
+              <h3>Export All (JSON)</h3>
+              <p style="color:var(--text3);font-size:.8rem;margin-top:4px">Complete backup</p>
+            </div>
+          </div>
+        </div>`;
+    }
+
+    function exportCSV(sheet) { window.open(`/api/export/csv?sheet=${encodeURIComponent(sheet)}`, '_blank'); showToast('Download started', 'success'); }
+    function exportJSON() { window.open('/api/export/json?sheet=BEML Letters', '_blank'); showToast('Download started', 'success'); }
+
+    // === CREATE NCR ===
+    let ncrAutoSaveTimer = null;
+    async function renderCreateNCR(el) {
+      const res = await fetch('/api/ncr/next-number');
+      const d = await res.json();
+      const ncrNo = d.success ? d.number : 'NCR-' + new Date().getFullYear() + '-001';
+      el.innerHTML = `
+        <div class="page-header">
+          <div><h2>Create NCR</h2><p>Fill form with live preview</p></div>
+          <div style="display:flex;gap:8px">
+            <button class="btn btn-secondary" onclick="navigate('ncr')">Back to NCR</button>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;height:calc(100vh - 180px)">
+          <div class="card" style="overflow-y:auto;padding:20px">
+            <h3 style="margin-bottom:16px;font-size:1rem">NCR Form</h3>
+            <div style="font-size:.75rem;color:var(--text3);margin-bottom:12px;padding:8px;background:var(--success-bg);border-radius:6px">Auto-saves every 5 seconds</div>
+            <div class="form-row"><div class="form-group"><label>NCR Report No.</label><input id="ncr_ncrNo" value="${esc(ncrNo)}" onchange="updateNCRPreview()"></div>
+            <div class="form-group"><label>Distribution to</label><input id="ncr_distribution" value="OEM/ SBU-S&M / R&D/ PM/Purchase/ Quality" onchange="updateNCRPreview()"></div></div>
+            <div class="form-row"><div class="form-group"><label>Project</label><input id="ncr_project" placeholder="KMRCL RS-3R" onchange="updateNCRPreview()"></div>
+            <div class="form-group"><label>Vehicle No.</label><input id="ncr_vehicleNo" placeholder="TS#16 DMC1" onchange="updateNCRPreview()"></div></div>
+            <div class="form-row"><div class="form-group"><label>Product</label><input id="ncr_product" placeholder="FDI/TNI..." onchange="updateNCRPreview()"></div>
+            <div class="form-group"><label>Assy Dwg No. / Rev</label><input id="ncr_assyDwgNo" onchange="updateNCRPreview()"></div></div>
+            <div class="form-row"><div class="form-group"><label>Rev</label><input id="ncr_rev" placeholder="Rev A/B/C..." onchange="updateNCRPreview()"></div>
+            <div class="form-group"><label>Quantity</label><input id="ncr_qty" placeholder="01 no." onchange="updateNCRPreview()"></div></div>
+            <div class="form-group"><label>Part No.</label><input id="ncr_partNo" onchange="updateNCRPreview()"></div></div>
+            <div class="form-row"><div class="form-group"><label>Supplier</label><input id="ncr_supplier" placeholder="M/s Televic" onchange="updateNCRPreview()"></div>
+            <div class="form-group"><label>Assy Serial No.</label><input id="ncr_assySerialNo" onchange="updateNCRPreview()"></div></div>
+            <div class="form-row"><div class="form-group"><label>Detection Date</label><input id="ncr_detectionDate" onchange="updateNCRPreview()"></div>
+            <div class="form-group"><label>Part Serial No.</label><input id="ncr_partSerialNo" onchange="updateNCRPreview()"></div></div>
+            <div class="form-row"><div class="form-group"><label>Place</label><input id="ncr_place" placeholder="CPD Depot" onchange="updateNCRPreview()"></div>
+            <div class="form-group"><label>B/L No.</label><input id="ncr_blNo" onchange="updateNCRPreview()"></div></div>
+            <div class="form-row"><div class="form-group"><label>Stored At</label><input id="ncr_storedAt" onchange="updateNCRPreview()"></div>
+            <div class="form-group"><label>Invoice No.</label><input id="ncr_invoiceNo" onchange="updateNCRPreview()"></div></div>
+            <div class="form-row"><div class="form-group"><label>Severity</label><select id="ncr_severity" onchange="updateNCRPreview()"><option value="Major">Major</option><option value="Minor">Minor</option></select></div>
+            <div class="form-group"><label>Responsible Party</label><input id="ncr_responsibility" onchange="updateNCRPreview()"></div></div>
+            <div class="form-row"><div class="form-group"><label>Material Status</label><select id="ncr_materialStatus" onchange="updateNCRPreview()"><option value="Before installation">Before installation</option><option value="Installed">Installed</option></select></div>
+            <div class="form-group"><label>Disassembled</label><select id="ncr_disassembled" onchange="updateNCRPreview()"><option value="">N/A</option><option value="Disassembled">Disassembled</option><option value="Before receiving">Before receiving</option></select></div></div>
+            <div class="form-group"><label>Description of Non-Conformity</label><textarea id="ncr_ncrDesc" rows="4" placeholder="Describe the non-conformance..." onchange="updateNCRPreview()"></textarea></div>
+            <div class="form-group"><label>Team</label><input id="ncr_team" value="BEML (S&M)" onchange="updateNCRPreview()"></div>
+            <div class="form-row"><div class="form-group"><label>Issued By</label><input id="ncr_issuedBy" onchange="updateNCRPreview()"></div>
+            <div class="form-group"><label>Reviewed & Approved By</label><input id="ncr_reviewedBy" onchange="updateNCRPreview()"></div></div>
+            <div class="form-group"><label>Cause of Non-Conformity</label><textarea id="ncr_cause" rows="3" onchange="updateNCRPreview()"></textarea></div>
+            <div class="form-group"><label>Correction / Corrective Action</label><textarea id="ncr_correction" rows="3" onchange="updateNCRPreview()"></textarea></div>
+            <div class="form-row"><div class="form-group"><label>In (Healthy) Sl. No</label><input id="ncr_healthySl" onchange="updateNCRPreview()"></div>
+            <div class="form-group"><label>Out (Faulty) Sl. No</label><input id="ncr_faultySl" onchange="updateNCRPreview()"></div></div>
+            <div class="form-group"><label>Decision</label><select id="ncr_decision" onchange="updateNCRPreview()"><option value="">Select</option><option value="Claim">Claim</option><option value="Holding">Holding</option><option value="Use as is">Use as is</option><option value="Rework">Rework</option><option value="Waiver">Waiver</option><option value="Scrap">Scrap</option><option value="Repair">Repair</option></select></div>
+            <div class="form-group"><label>Remarks</label><textarea id="ncr_remarks" rows="2" onchange="updateNCRPreview()"></textarea></div>
+            <div style="display:flex;gap:8px;margin-top:16px;flex-wrap:wrap">
+              <button class="btn btn-primary" onclick="saveNCR()">💾 Save NCR</button>
+              <button class="btn btn-success" onclick="generateNCRPdf()">📄 PDF</button>
+              <button class="btn btn-success" onclick="generateNCRDocx()">📝 Word</button>
+              <button class="btn btn-secondary" onclick="downloadNCRPdf()">📥 Download PDF</button>
+              <button class="btn btn-secondary" onclick="downloadNCRDocx()">📥 Download Word</button>
+            </div>
+          </div>
+          <div class="card" style="overflow-y:auto">
+            <div style="padding:12px 20px;border-bottom:1px solid var(--border)"><h3 style="font-size:.95rem">Live Preview</h3></div>
+            <div id="ncrPreview" style="padding:10px;font-size:.7rem;line-height:1.4"></div>
+          </div>
+        </div>`;
+      updateNCRPreview();
+      ncrAutoSaveTimer = setInterval(() => autoSaveNCR(), 5000);
+    }
+
+    function getNCRData() {
+      return {
+        ncrNo: document.getElementById('ncr_ncrNo')?.value || '',
+        distribution: document.getElementById('ncr_distribution')?.value || '',
+        project: document.getElementById('ncr_project')?.value || '',
+        vehicleNo: document.getElementById('ncr_vehicleNo')?.value || '',
+        product: document.getElementById('ncr_product')?.value || '',
+        assyDwgNo: document.getElementById('ncr_assyDwgNo')?.value || '',
+        rev: document.getElementById('ncr_rev')?.value || '',
+        qty: document.getElementById('ncr_qty')?.value || '',
+        partNo: document.getElementById('ncr_partNo')?.value || '',
+        supplier: document.getElementById('ncr_supplier')?.value || '',
+        assySerialNo: document.getElementById('ncr_assySerialNo')?.value || '',
+        detectionDate: document.getElementById('ncr_detectionDate')?.value || '',
+        partSerialNo: document.getElementById('ncr_partSerialNo')?.value || '',
+        place: document.getElementById('ncr_place')?.value || '',
+        blNo: document.getElementById('ncr_blNo')?.value || '',
+        storedAt: document.getElementById('ncr_storedAt')?.value || '',
+        invoiceNo: document.getElementById('ncr_invoiceNo')?.value || '',
+        severity: document.getElementById('ncr_severity')?.value || 'Major',
+        responsibility: document.getElementById('ncr_responsibility')?.value || '',
+        materialStatus: document.getElementById('ncr_materialStatus')?.value || 'Before installation',
+        disassembled: document.getElementById('ncr_disassembled')?.value || '',
+        ncrDesc: document.getElementById('ncr_ncrDesc')?.value || '',
+        team: document.getElementById('ncr_team')?.value || '',
+        issuedBy: document.getElementById('ncr_issuedBy')?.value || '',
+        reviewedBy: document.getElementById('ncr_reviewedBy')?.value || '',
+        cause: document.getElementById('ncr_cause')?.value || '',
+        correction: document.getElementById('ncr_correction')?.value || '',
+        healthySl: document.getElementById('ncr_healthySl')?.value || '',
+        faultySl: document.getElementById('ncr_faultySl')?.value || '',
+        decision: document.getElementById('ncr_decision')?.value || '',
+        remarks: document.getElementById('ncr_remarks')?.value || '',
+        itemDesc: document.getElementById('ncr_product')?.value || '',
+        trainNo: (document.getElementById('ncr_vehicleNo')?.value || '').replace(/TS#?/i, '').split(/\s/)[0],
+        car: (document.getElementById('ncr_vehicleNo')?.value || '').split(/\s+/).slice(1).join(' '),
+        date: document.getElementById('ncr_detectionDate')?.value || new Date().toLocaleDateString('en-GB')
+      };
+    }
+
+    function updateNCRPreview() {
+      const d = getNCRData();
+      const el = document.getElementById('ncrPreview');
+      if (!el) return;
+      const chk = (val, compare) => val === compare ? '☑' : '☐';
+      el.innerHTML = `
+        <div style="font-family:serif;border:1px solid #000;padding:15px;min-height:900px;background:white;font-size:9px;line-height:1.3">
+          <div style="text-align:center;margin-bottom:8px"><b style="font-size:13px">NON-CONFORMITY REPORT</b></div>
+          <hr style="border:1px solid #000;margin:4px 0 6px">
+          <table style="width:100%;border-collapse:collapse;font-size:9px;margin-bottom:4px">
+            <tr>
+              <td style="padding:3px;width:25%"><b>Report no.</b><br>${esc(d.ncrNo)}</td>
+              <td style="padding:3px;width:40%"><b>Distribution to:</b><br>${esc(d.distribution)}</td>
+              <td style="padding:3px;width:35%"></td>
+            </tr>
+          </table>
+          <hr style="border:1px solid #000;margin:4px 0">
+          <table style="width:100%;border-collapse:collapse;font-size:9px">
+            <tr><td style="padding:3px;width:25%"><b>Project</b><br>${esc(d.project)}</td><td style="padding:3px;width:25%"><b>Vehicle no.</b><br>${esc(d.vehicleNo)}</td><td style="padding:3px;width:50%"></td></tr>
+            <tr><td style="padding:3px"><b>Product</b><br>${esc(d.product)}</td><td style="padding:3px"><b>Assy dwg no.</b><br>${esc(d.assyDwgNo)}</td><td style="padding:3px"><b>Rev</b><br>---</td></tr>
+            <tr><td style="padding:3px"><b>Quantity</b><br>${esc(d.qty)}</td><td style="padding:3px"><b>Part no.</b><br>${esc(d.partNo)}</td><td style="padding:3px"></td></tr>
+            <tr><td style="padding:3px"><b>Supplier</b><br>${esc(d.supplier)}</td><td style="padding:3px"><b>Assy serial no.</b><br>${esc(d.assySerialNo)}</td><td style="padding:3px"></td></tr>
+            <tr><td style="padding:3px"><b>Detection</b><br>${esc(d.detectionDate)}</td><td style="padding:3px"><b>Part serial no.</b><br>${esc(d.partSerialNo)}</td><td style="padding:3px"></td></tr>
+            <tr><td style="padding:3px"><b>Place</b><br>${esc(d.place)}</td><td style="padding:3px"><b>B/L No.</b><br>${esc(d.blNo)}</td><td style="padding:3px"></td></tr>
+            <tr><td style="padding:3px"><b>Stored at</b><br>${esc(d.storedAt)}</td><td style="padding:3px"><b>Invoice no.</b><br>${esc(d.invoiceNo)}</td><td style="padding:3px"></td></tr>
+            <tr>
+              <td style="padding:3px"><b>Severity</b> ${chk(d.severity,'Major')} Major ${chk(d.severity,'Minor')} Minor</td>
+              <td style="padding:3px"><b>Responsible party</b><br>${esc(d.responsibility)}</td>
+              <td style="padding:3px"></td>
+            </tr>
+            <tr>
+              <td style="padding:3px" colspan="2"><b>Material status</b> ${chk(d.materialStatus,'Before installation')} Before installation ${chk(d.materialStatus,'Installed')} Installed &nbsp; ${chk(d.disassembled,'Disassembled')} Disassembled ${chk(d.disassembled,'Before receiving')} Before receiving</td>
+              <td style="padding:3px"></td>
+            </tr>
+          </table>
+          <hr style="border:1px solid #000;margin:4px 0">
+          <div style="margin-bottom:4px"><b>Description of non-conformity:</b></div>
+          <div style="padding:3px;border:1px solid #ccc;min-height:30px;margin-bottom:6px">${esc(d.ncrDesc) || '<i>Not filled</i>'}</div>
+          <div style="font-size:8px;color:#666;margin-bottom:6px"><b>Attached documents (if any): (Picture attached)</b></div>
+          <hr style="border:1px solid #000;margin:4px 0">
+          <table style="width:100%;border-collapse:collapse;font-size:8px;border:1px solid #000">
+            <tr style="background:#f0f0f0"><th style="border:1px solid #000;padding:3px;text-align:left">Date</th><th style="border:1px solid #000;padding:3px;text-align:left">Team</th><th style="border:1px solid #000;padding:3px;text-align:left">Issued by</th><th style="border:1px solid #000;padding:3px;text-align:left">Reviewed & approved by</th></tr>
+            <tr><td style="border:1px solid #000;padding:3px">${esc(d.detectionDate)}</td><td style="border:1px solid #000;padding:3px">${esc(d.team)}</td><td style="border:1px solid #000;padding:3px">${esc(d.issuedBy)}</td><td style="border:1px solid #000;padding:3px">${esc(d.reviewedBy)}</td></tr>
+          </table>
+          <hr style="border:1px solid #000;margin:4px 0">
+          <div style="margin-bottom:4px"><b>Cause of non-conformity:</b></div>
+          <div style="padding:3px;border:1px solid #ccc;min-height:20px;margin-bottom:4px">${esc(d.cause) || '<i>Not filled</i>'}</div>
+          <div style="font-size:8px;color:#666;margin-bottom:6px"><b>Attached documents (if any):</b></div>
+          <hr style="border:1px solid #000;margin:4px 0">
+          <div style="margin-bottom:4px"><b>Correction / Corrective Action Result:</b></div>
+          <div style="padding:3px;border:1px solid #ccc;min-height:20px;margin-bottom:4px">${esc(d.correction) || '<i>Not filled</i>'}</div>
+          ${d.healthySl || d.faultySl ? `<div style="padding:3px 15px;font-size:8px">${d.healthySl ? 'In (Healthy) Sl. No: ' + esc(d.healthySl) : ''} ${d.faultySl ? 'Out (Faulty) Sl. No: ' + esc(d.faultySl) : ''}</div>` : ''}
+          <div style="font-size:8px;color:#666;margin-bottom:6px"><b>Attached documents (if any):</b></div>
+          <hr style="border:1px solid #000;margin:4px 0">
+          <table style="width:100%;font-size:8px;margin-bottom:4px">
+            <tr><td style="width:50%"><b>Decision</b> ${['Claim','Holding','Use as is','Rework','Waiver','Scrap','Repair'].map(x => `${chk(d.decision,x)} ${x}`).join('  ')}</td>
+            <td style="width:50%"><b>Repair procedure</b> ☐ Yes / ☐ No</td></tr>
+          </table>
+          <table style="width:100%;font-size:8px">
+            <tr><td style="width:33%"><b>Name</b> _______________</td><td style="width:33%"><b>Date</b> ___/___/___</td><td style="width:33%"><b>Sign</b> _______________</td></tr>
+          </table>
+          <hr style="border:1px solid #000;margin:4px 0">
+          <table style="width:100%;font-size:8px">
+            <tr><td style="width:50%"><b>Verification on correction</b></td><td style="width:50%"><b>Approval</b> ${chk('','Internal')} Internal &nbsp; ${chk('','Customer')} Customer<br><b>Scope</b></td></tr>
+          </table>
+          <hr style="border:1px solid #000;margin:4px 0">
+          <div style="font-size:8px;margin-bottom:4px"><b>Verification on corrective action</b></div>
+          <table style="width:100%;font-size:8px">
+            <tr><td style="width:33%"><b>Entity</b> _______________</td><td style="width:33%"><b>Position</b> _______________</td><td style="width:33%"><b>Name</b> _______________</td></tr>
+          </table>
+          <hr style="border:1px solid #000;margin:4px 0">
+          <table style="width:100%;font-size:8px">
+            <tr><td style="width:50%"><b>Approved by</b></td><td style="width:25%"><b>Date</b> ___/___/___</td><td style="width:25%"><b>Sign</b> _______________</td></tr>
+          </table>
+        </div>`;
+    }
+
+    async function autoSaveNCR() {
+      if (currentPage !== 'create-ncr') { clearInterval(ncrAutoSaveTimer); return; }
+      try {
+        await fetch('/api/auto-save', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ docType: 'ncr', data: getNCRData() })
+        });
+      } catch {}
+    }
+
+    async function saveNCR() {
+      try {
+        const res = await fetch('/api/ncr/create', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(getNCRData())
+        });
+        const r = await res.json();
+        if (r.success) { showToast('NCR saved to Google Sheets!', 'success'); loadAllData(); }
+        else showToast('Save failed: ' + (r.error || ''), 'error');
+      } catch (e) { showToast('Error: ' + e.message, 'error'); }
+    }
+
+    let lastNCRPdfUrl = null;
+    let lastNCRDocxUrl = null;
+    async function generateNCRPdf() {
+      try {
+        const res = await fetch('/api/ncr/generate-pdf', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(getNCRData())
+        });
+        const r = await res.json();
+        if (r.success) { lastNCRPdfUrl = r.filePath; showToast('PDF generated!', 'success'); }
+        else showToast('PDF failed', 'error');
+      } catch (e) { showToast('Error: ' + e.message, 'error'); }
+    }
+    async function generateNCRDocx() {
+      try {
+        const res = await fetch('/api/ncr/generate-docx', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(getNCRData())
+        });
+        const r = await res.json();
+        if (r.success) { lastNCRDocxUrl = r.filePath; showToast('Word document generated!', 'success'); }
+        else showToast('DOCX failed', 'error');
+      } catch (e) { showToast('Error: ' + e.message, 'error'); }
+    }
+    function downloadNCRPdf() { if (lastNCRPdfUrl) window.open(lastNCRPdfUrl, '_blank'); else showToast('Generate PDF first', 'error'); }
+    function downloadNCRDocx() { if (lastNCRDocxUrl) window.open(lastNCRDocxUrl, '_blank'); else showToast('Generate Word doc first', 'error'); }
+
+    // === CREATE LETTER ===
+    let letterAutoSaveTimer = null;
+    async function renderCreateLetter(el) {
+      const org = 'BEML';
+      const res = await fetch('/api/letter/next-number/' + org);
+      const d = await res.json();
+      const refNo = d.success ? d.number : `${org}/LTR/${new Date().getFullYear()}/001`;
+      el.innerHTML = `
+        <div class="page-header">
+          <div><h2>Create BEML Letter</h2><p>Fill form with live preview</p></div>
+          <div style="display:flex;gap:8px">
+            <button class="btn btn-secondary" onclick="navigate('letters')">Back to Letters</button>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;height:calc(100vh - 180px)">
+          <div class="card" style="overflow-y:auto;padding:20px">
+            <h3 style="margin-bottom:16px;font-size:1rem">Letter Form</h3>
+            <div style="font-size:.75rem;color:var(--text3);margin-bottom:12px;padding:8px;background:var(--success-bg);border-radius:6px">Auto-saves every 5 seconds</div>
+            <div class="form-group"><label>Organization</label><select id="letter_org" onchange="updateLetterPreview()"><option value="BEML">BEML</option><option value="KMRCL">KMRCL</option><option value="Metro Rail">Metro Rail</option></select></div>
+            <div class="form-row"><div class="form-group"><label>Letter Number</label><input id="letter_refNumber" value="${esc(refNo)}" onchange="updateLetterPreview()"></div>
+            <div class="form-group"><label>Date</label><input type="text" id="letter_date" value="${new Date().toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'})}" onchange="updateLetterPreview()"></div></div>
+            <div class="form-group"><label>All References</label><textarea id="letter_allReferences" rows="2" placeholder="Previous letter references..." onchange="updateLetterPreview()"></textarea></div>
+            <div class="form-group"><label>To (Addressee)</label><textarea id="letter_to" rows="3" placeholder="The Manager/Director..." onchange="updateLetterPreview()"></textarea></div>
+            <div class="form-group"><label>Kind Attention</label><input id="letter_kindAttn" onchange="updateLetterPreview()"></div>
+            <div class="form-group"><label>Subject</label><input id="letter_subject" placeholder="Subject line..." onchange="updateLetterPreview()"></div>
+            <div class="form-group"><label>Letter Body</label><textarea id="letter_letterContent" rows="10" placeholder="Dear Sir/Madam..." onchange="updateLetterPreview()"></textarea></div>
+            <div class="form-group"><label>Enclosures</label><input id="letter_enclosures" onchange="updateLetterPreview()"></div>
+            <div class="form-row">
+              <div class="form-group"><label>Signatory Name</label><input id="letter_signatory" value="Shashi Shekhar Mishra" onchange="updateLetterPreview()"></div>
+              <div class="form-group"><label>Designation</label><input id="letter_designation" value="Sr. Manager" onchange="updateLetterPreview()"></div>
+            </div>
+            <div class="form-row">
+              <div class="form-group"><label>Project</label><input id="letter_project" value="KMRCL RS(3) Project" onchange="updateLetterPreview()"></div>
+              <div class="form-group"><label>Cc</label><textarea id="letter_cc" rows="2" placeholder="CC recipients..." onchange="updateLetterPreview()"></textarea></div>
+            </div>
+            <div class="form-group"><label>Remarks</label><input id="letter_remarks" onchange="updateLetterPreview()"></div>
+            <div style="display:flex;gap:8px;margin-top:16px;flex-wrap:wrap">
+              <button class="btn btn-primary" onclick="saveLetter()">💾 Save Letter</button>
+              <button class="btn btn-success" onclick="generateLetterPdf()">📄 PDF</button>
+              <button class="btn btn-success" onclick="generateLetterDocx()">📝 Word</button>
+              <button class="btn btn-secondary" onclick="downloadLetterPdf()">📥 Download PDF</button>
+              <button class="btn btn-secondary" onclick="downloadLetterDocx()">📥 Download Word</button>
+            </div>
+          </div>
+          <div class="card" style="overflow-y:auto">
+            <div style="padding:12px 20px;border-bottom:1px solid var(--border)"><h3 style="font-size:.95rem">Live Preview</h3></div>
+            <div id="letterPreview" style="padding:20px;font-size:.8rem;line-height:1.6"></div>
+          </div>
+        </div>`;
+      updateLetterPreview();
+      letterAutoSaveTimer = setInterval(() => autoSaveLetter(), 5000);
+    }
+
+    function getLetterData() {
+      return {
+        refNumber: document.getElementById('letter_refNumber')?.value || '',
+        date: document.getElementById('letter_date')?.value || '',
+        allReferences: document.getElementById('letter_allReferences')?.value || '',
+        to: document.getElementById('letter_to')?.value || '',
+        kindAttn: document.getElementById('letter_kindAttn')?.value || '',
+        subject: document.getElementById('letter_subject')?.value || '',
+        letterContent: document.getElementById('letter_letterContent')?.value || '',
+        enclosures: document.getElementById('letter_enclosures')?.value || '',
+        signatory: document.getElementById('letter_signatory')?.value || 'Shashi Shekhar Mishra',
+        designation: document.getElementById('letter_designation')?.value || 'Sr. Manager',
+        project: document.getElementById('letter_project')?.value || 'KMRCL RS(3) Project',
+        cc: document.getElementById('letter_cc')?.value || '',
+        remarks: document.getElementById('letter_remarks')?.value || '',
+        letterType: 'General', status: 'Open',
+        organization: document.getElementById('letter_org')?.value || 'BEML'
+      };
+    }
+
+    function updateLetterPreview() {
+      const d = getLetterData();
+      const el = document.getElementById('letterPreview');
+      if (!el) return;
+      const letterBodyHtml = (d.letterContent || '').split('\n').map(l => `<p style="margin:4px 0">${esc(l) || '&nbsp;'}</p>`).join('');
+      el.innerHTML = `
+        <div style="font-family:serif;border:2px solid #000;padding:30px;min-height:700px;background:white">
+          <div style="text-align:center;margin-bottom:15px">
+            <div style="font-size:16px;font-weight:bold">BEML LIMITED</div>
+            <div style="font-size:10px;color:#555">BEML Bhavan, No.1, Outer Ring Road, Bengaluru - 560068</div>
+          </div>
+          <hr style="border:1px solid #000;margin-bottom:10px">
+          <table style="width:100%;font-size:11px;margin-bottom:10px">
+            <tr><td style="font-weight:bold">Our Ref: ${esc(d.refNumber)}</td>
+            <td style="text-align:right">Date: ${esc(d.date)}</td></tr>
+          </table>
+          ${d.allReferences ? `<div style="font-size:11px;margin-bottom:8px"><strong>All References:</strong><br>${esc(d.allReferences).replace(/\n/g,'<br>')}</div>` : ''}
+          <div style="font-size:11px;margin-bottom:6px">To,</div>
+          <div style="font-size:11px;margin-bottom:10px;white-space:pre-wrap">${esc(d.to)}</div>
+          ${d.kindAttn ? `<div style="font-size:11px;margin-bottom:8px"><strong>Kind Attn:</strong> ${esc(d.kindAttn)}</div>` : ''}
+          <div style="font-size:12px;font-weight:bold;margin-bottom:12px">Subject: ${esc(d.subject)}</div>
+          <hr style="border:0.5px solid #999;margin-bottom:12px">
+          <div style="font-size:11px;line-height:1.6">${letterBodyHtml || '<em>Letter body not filled</em>'}</div>
+          ${d.enclosures ? `<div style="font-size:11px;margin-top:20px"><strong>Encl:</strong> ${esc(d.enclosures)}</div>` : ''}
+          <div style="margin-top:40px;font-size:10px;color:#666">
+            <p>Generated by DocVault - Enterprise Document Management System</p>
+          </div>
+        </div>`;
+    }
+
+    async function autoSaveLetter() {
+      if (currentPage !== 'create-letter') { clearInterval(letterAutoSaveTimer); return; }
+      try {
+        await fetch('/api/auto-save', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ docType: 'letter', data: getLetterData(), organization: getLetterData().organization })
+        });
+      } catch {}
+    }
+
+    async function saveLetter() {
+      try {
+        const res = await fetch('/api/letter/create', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(getLetterData())
+        });
+        const r = await res.json();
+        if (r.success) { showToast('Letter saved to Google Sheets!', 'success'); loadAllData(); }
+        else showToast('Save failed', 'error');
+      } catch (e) { showToast('Error: ' + e.message, 'error'); }
+    }
+
+    let lastLetterPdfUrl = null;
+    let lastLetterDocxUrl = null;
+    async function generateLetterPdf() {
+      try {
+        const res = await fetch('/api/letter/generate-pdf', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(getLetterData())
+        });
+        const r = await res.json();
+        if (r.success) { lastLetterPdfUrl = r.filePath; showToast('PDF generated!', 'success'); }
+        else showToast('PDF failed', 'error');
+      } catch (e) { showToast('Error: ' + e.message, 'error'); }
+    }
+    async function generateLetterDocx() {
+      try {
+        const res = await fetch('/api/letter/generate-docx', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(getLetterData())
+        });
+        const r = await res.json();
+        if (r.success) { lastLetterDocxUrl = r.filePath; showToast('Word document generated!', 'success'); }
+        else showToast('DOCX failed', 'error');
+      } catch (e) { showToast('Error: ' + e.message, 'error'); }
+    }
+    function downloadLetterPdf() { if (lastLetterPdfUrl) window.open(lastLetterPdfUrl, '_blank'); else showToast('Generate PDF first', 'error'); }
+    function downloadLetterDocx() { if (lastLetterDocxUrl) window.open(lastLetterDocxUrl, '_blank'); else showToast('Generate Word doc first', 'error'); }
+
+    // === VIEW DOCUMENT ===
+    function viewDocument(sheet, idx) {
+      const rows = allData[sheet] || [];
+      if (!rows[idx]) return;
+      const headers = rows[0] || [];
+      const record = rows[idx];
+      const lastCol = record[record.length - 1] || '';
+
+      let html = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">';
+      headers.forEach((h, i) => {
+        if (i === 0) return;
+        const val = record[i] || 'N/A';
+        html += `<div style="padding:10px;background:var(--bg);border-radius:8px">
+          <div style="font-size:.7rem;color:var(--text3);text-transform:uppercase;margin-bottom:4px">${h}</div>
+          <div style="font-size:.85rem;word-break:break-word;max-height:200px;overflow-y:auto">${esc(val)}</div>
+        </div>`;
+      });
+      html += '</div>';
+
+      // Action buttons
+      html += `<div style="margin-top:20px;display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-primary" onclick="editRecord('${sheet}',${idx})">✏️ Edit</button>
+        <button class="btn btn-secondary" onclick="toggleStatus('${sheet}',${idx},'${lastCol}')">🔄 Toggle Status</button>
+        <button class="btn btn-secondary" onclick="downloadFile('${sheet}',${idx})">📥 Download</button>
+        <button class="btn btn-secondary" onclick="openInDrive('${sheet}',${idx})">☁️ Open in Drive</button>
+      </div>`;
+
+      document.getElementById('detailTitle').textContent = sheet + ' - ' + (record[1] || record[3] || 'Record');
+      document.getElementById('detailBody').innerHTML = html;
+      document.getElementById('detailModal').classList.add('show');
+    }
+
+    // === VIEWER ===
+    function openViewer(sheet, idx) {
+      const rows = allData[sheet] || [];
+      if (!rows[idx]) return;
+      const record = rows[idx];
+      const fileName = record[record.length - 2] || '';
+      const link = record[record.length - 3] || '';
+
+      document.getElementById('viewerTitle').textContent = fileName || 'Document';
+      document.getElementById('viewerDownload').href = link || '#';
+
+      if (link && link.includes('drive.google.com')) {
+        document.getElementById('viewerBody').innerHTML = `<iframe src="${link}" style="width:100%;height:700px;border:none;border-radius:8px"></iframe>`;
+      } else {
+        document.getElementById('viewerBody').innerHTML = `<div class="empty-state"><div class="icon">📄</div><p>Original file not available in Drive</p><p style="font-size:.8rem;margin-top:8px">File: ${esc(fileName)}</p></div>`;
+      }
+      document.getElementById('viewerModal').classList.add('show');
+    }
+
+    // === EDIT ===
+    async function editRecord(sheet, idx) {
+      closeModal('detailModal');
+      const rows = allData[sheet] || [];
+      if (!rows[idx]) return;
+      const record = rows[idx];
+      const headers = rows[0] || [];
+
+      let html = `<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">`;
+      headers.forEach((h, i) => {
+        if (i === 0) return;
+        html += `<div class="form-group"><label>${h}</label><input type="text" value="${esc(record[i] || '')}" id="edit_${i}"></div>`;
+      });
+      html += `</div><div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end">
+        <button class="btn btn-secondary" onclick="closeModal('detailModal')">Cancel</button>
+        <button class="btn btn-success" onclick="saveEdit('${sheet}',${idx},${headers.length})">💾 Save Changes</button>
+      </div>`;
+
+      document.getElementById('detailTitle').textContent = 'Edit Record';
+      document.getElementById('detailBody').innerHTML = html;
+      document.getElementById('detailModal').classList.add('show');
+    }
+
+    async function saveEdit(sheet, idx, colCount) {
+      try {
+        for (let i = 1; i < colCount; i++) {
+          const el = document.getElementById('edit_' + i);
+          if (el) {
+            const headers = allData[sheet][0];
+            await fetch('/api/update', {
+              method: 'PUT', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ sheetName: sheet, rowIndex: idx, field: headers[i], value: el.value })
+            });
+          }
+        }
+        showToast('Record updated!', 'success');
+        closeModal('detailModal');
+        loadAllData();
+      } catch (e) { showToast('Error: ' + e.message, 'error'); }
+    }
+
+    async function cloneNCR(idx) {
+      try {
+        const res = await fetch('/api/ncr/clone/' + idx);
+        const r = await res.json();
+        if (r.success) {
+          closeModal('detailModal');
+          navigate('create-ncr');
+          setTimeout(() => {
+            const d = r.data;
+            const fields = ['ncrNo','date','detectionDate','itemDesc','ncrDesc','subSystem','trainNo','car','qty','faultySl','healthySl','responsibility','source','investigationReportDate','gatePassNo','remarks'];
+            fields.forEach(f => { const el = document.getElementById('ncr_' + f); if (el) el.value = d[f] || ''; });
+            const statusEl = document.getElementById('ncr_status');
+            if (statusEl) statusEl.value = 'Major';
+            updateNCRPreview();
+          }, 500);
+        }
+      } catch (e) { showToast('Clone failed: ' + e.message, 'error'); }
+    }
+
+    async function toggleStatus(sheet, idx, currentStatus) {
+      const newStatus = currentStatus.toLowerCase() === 'closed' ? 'Open' : 'Closed';
+      try {
+        await fetch('/api/update', {
+          method: 'PUT', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sheetName: sheet, rowIndex: idx, field: 'Status', value: newStatus })
+        });
+        showToast(`Status: ${newStatus}`, 'success');
+        closeModal('detailModal');
+        loadAllData();
+      } catch (e) { showToast('Error', 'error'); }
+    }
+
+    // === UPLOAD ===
+    function showUploadModal() {
+      document.getElementById('uploadModal').classList.add('show');
+      document.getElementById('uploadForm').reset();
+      document.getElementById('uploadFileInfo').style.display = 'none';
+      document.getElementById('uploadProgress').style.display = 'none';
+      currentUploadFile = null;
+    }
+
+    document.getElementById('uploadDropZone').addEventListener('dragover', e => { e.preventDefault(); e.currentTarget.classList.add('dragover'); });
+    document.getElementById('uploadDropZone').addEventListener('dragleave', e => e.currentTarget.classList.remove('dragover'));
+    document.getElementById('uploadDropZone').addEventListener('drop', e => {
+      e.preventDefault(); e.currentTarget.classList.remove('dragover');
+      if (e.dataTransfer.files[0]) {
+        document.getElementById('uploadFile').files = e.dataTransfer.files;
+        showUploadFileInfo(e.dataTransfer.files[0]);
+      }
+    });
+    document.getElementById('uploadFile').addEventListener('change', e => { if (e.target.files[0]) showUploadFileInfo(e.target.files[0]); });
+
+    function showUploadFileInfo(file) {
+      document.getElementById('uploadFileInfo').style.display = 'block';
+      document.getElementById('uploadFileInfo').innerHTML = `📎 <strong>${file.name}</strong> (${(file.size/1024).toFixed(1)} KB)`;
+      currentUploadFile = file;
+    }
+
+    document.getElementById('uploadForm').addEventListener('submit', async e => {
+      e.preventDefault();
+      const type = document.getElementById('uploadType').value;
+      const org = document.getElementById('uploadOrg').value;
+      const file = document.getElementById('uploadFile').files[0];
+      if (!file) return showToast('Select a file', 'error');
+
+      const btn = document.getElementById('uploadBtn');
+      btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Processing...';
+      document.getElementById('uploadProgress').style.display = 'block';
+      document.getElementById('uploadStatus').textContent = 'Uploading and extracting...';
+
+      let progress = 0;
+      const iv = setInterval(() => { progress = Math.min(progress + 10, 90); document.getElementById('uploadProgressBar').style.width = progress + '%'; }, 500);
+
+      try {
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('organization', org);
+        formData.append('type', type);
+
+        const extractRes = await fetch('/api/extract', { method: 'POST', body: formData });
+        const extractData = await extractRes.json();
+
+        clearInterval(iv);
+        document.getElementById('uploadProgressBar').style.width = '100%';
+        document.getElementById('uploadStatus').textContent = 'Saving to Google Sheets...';
+
+        if (extractData.success) {
+          const saveData = { ...extractData.data, docType: type, organization: org, fileName: file.name, uploadDate: new Date().toISOString().split('T')[0] };
+          const saveFormData = new FormData();
+          saveFormData.append('file', file);
+          saveFormData.append('data', JSON.stringify(saveData));
+
+          const saveRes = await fetch('/api/save', { method: 'POST', body: saveFormData });
+          const saveResult = await saveRes.json();
+
+          if (saveResult.success) {
+            showToast('Document uploaded and saved!', 'success');
+            closeModal('uploadModal');
+            loadAllData();
+          } else {
+            showToast('Saved to local only', 'success');
+            closeModal('uploadModal');
+          }
+        } else {
+          showToast('Extraction failed: ' + extractData.error, 'error');
+        }
+      } catch (e) { showToast('Error: ' + e.message, 'error'); }
+
+      btn.disabled = false; btn.innerHTML = '📤 Upload & Extract';
+      document.getElementById('uploadProgress').style.display = 'none';
+    });
+
+    // === UTILITY ===
+    function closeModal(id) { document.getElementById(id).classList.remove('show'); }
+    function showToast(msg, type) {
+      const t = document.getElementById('toast');
+      t.textContent = msg; t.className = `toast ${type} show`;
+      setTimeout(() => t.classList.remove('show'), 4000);
+    }
+    function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+    function globalSearchFn() {
+      const q = document.getElementById('globalSearch').value;
+      if (q.length >= 2) { navigate('search'); document.getElementById('searchQuery').value = q; doSearch(); }
+    }
+    function downloadFile(sheet, idx) { navigate('export'); showToast('Use Export to download', 'success'); }
+    function openInDrive(sheet, idx) { navigate('drive'); showToast('Check Google Drive', 'success'); }
+
+    // === DATA LOADING ===
+    async function loadAllData() {
+      try {
+        const res = await fetch('/api/records');
+        const data = await res.json();
+        if (data.success) { allData = data.data; renderPage(currentPage); }
+      } catch (e) { console.error('Load error:', e); }
+    }
+
+    // === INIT ===
+    loadAllData();
+  </script>
+</body>
+</html>
