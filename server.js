@@ -66,8 +66,8 @@ async function initGoogleAuth() {
     const oauthConfigPath = path.join(__dirname, 'credentials', 'oauth-config.json');
     const credentialsPath = path.join(__dirname, 'credentials', 'service-account.json');
 
-    // Try OAuth2 first
-    if (fs.existsSync(oauthConfigPath)) {
+    // Try OAuth2 first (local development)
+    if (!process.env.VERCEL && fs.existsSync(oauthConfigPath)) {
       const { client_id, client_secret } = JSON.parse(fs.readFileSync(oauthConfigPath, 'utf8'));
       if (client_id && client_secret) {
         oauth2Client = new google.auth.OAuth2(client_id, client_secret, 'http://localhost:3000/auth/google/callback');
@@ -86,19 +86,37 @@ async function initGoogleAuth() {
       }
     }
 
-    // Fallback to service account
-    if (!fs.existsSync(credentialsPath)) {
-      console.log('⚠️  No credentials found');
+    // Try service account from environment variable (Vercel)
+    if (process.env.GOOGLE_SERVICE_ACCOUNT) {
+      try {
+        const credentials = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT);
+        auth = new google.auth.GoogleAuth({
+          credentials,
+          scopes: ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
+        });
+        sheets = google.sheets({ version: 'v4', auth });
+        drive = google.drive({ version: 'v3', auth });
+        console.log('✅ Google API authenticated (Service Account from env)');
+        return;
+      } catch (e) {
+        console.log('⚠️  Failed to parse GOOGLE_SERVICE_ACCOUNT:', e.message);
+      }
+    }
+
+    // Fallback to service account file (local)
+    if (!process.env.VERCEL && fs.existsSync(credentialsPath)) {
+      const credentials = JSON.parse(fs.readFileSync(credentialsPath, 'utf8'));
+      auth = new google.auth.GoogleAuth({
+        credentials,
+        scopes: ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
+      });
+      sheets = google.sheets({ version: 'v4', auth });
+      drive = google.drive({ version: 'v3', auth });
+      console.log('✅ Google API authenticated (Service Account)');
       return;
     }
-    const credentials = JSON.parse(fs.readFileSync(credentialsPath, 'utf8'));
-    auth = new google.auth.GoogleAuth({
-      credentials,
-      scopes: ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
-    });
-    sheets = google.sheets({ version: 'v4', auth });
-    drive = google.drive({ version: 'v3', auth });
-    console.log('✅ Google API authenticated (Service Account)');
+
+    console.log('⚠️  No credentials found');
   } catch (err) {
     console.log('⚠️  Google auth failed:', err.message);
   }
