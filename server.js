@@ -80,6 +80,34 @@ let oauth2Client;
 let allDataCache = {};
 const TOKEN_PATH = path.join(__dirname, 'credentials', 'oauth-tokens.json');
 
+function columnToLetter(col) {
+  let letter = '';
+  while (col > 0) {
+    const mod = (col - 1) % 26;
+    letter = String.fromCharCode(65 + mod) + letter;
+    col = Math.floor((col - 1) / 26);
+  }
+  return letter;
+}
+
+async function loadAllDataCache() {
+  if (!sheets) return;
+  try {
+    const allData = {};
+    for (const [key, sheetName] of Object.entries(SHEET_NAMES)) {
+      try {
+        const range = `${sheetName}!A1:Z`;
+        const result = await sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range });
+        allData[sheetName] = result.data.values || [];
+      } catch { allData[sheetName] = []; }
+    }
+    allDataCache = allData;
+    console.log('✅ Data cache refreshed');
+  } catch (err) {
+    console.log('⚠️  Cache refresh failed:', err.message);
+  }
+}
+
 async function initGoogleAuth() {
   try {
     const oauthConfigPath = path.join(__dirname, 'credentials', 'oauth-config.json');
@@ -299,7 +327,7 @@ async function ensureHeaders(sheetName, columns) {
   if (!sheets) return;
   try {
     await ensureSheetExists(sheetName);
-    const range = `${sheetName}!A1:${String.fromCharCode(64 + columns.length)}1`;
+    const range = `${sheetName}!A1:${columnToLetter(columns.length)}1`;
     const res = await sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range });
     if (!res.data.values || res.data.values.length === 0) {
       await sheets.spreadsheets.values.update({
@@ -338,7 +366,7 @@ async function appendToSheet(sheetName, data, columns) {
     await ensureHeaders(sheetName, columns);
     const sno = await getNextSerialNumber(sheetName);
     const colCount = columns.length;
-    const range = `${sheetName}!A:${String.fromCharCode(64 + colCount)}`;
+    const range = `${sheetName}!A:${columnToLetter(colCount)}`;
 
     console.log(`\n📝 appendToSheet: ${sheetName}`);
     console.log('   Columns:', columns.join(', '));
@@ -452,7 +480,7 @@ async function refreshOAuthToken() {
   }
 }
 
-async function uploadFileToDrive(filePath, originalName, org, subfolder = '') {
+async function uploadFileToDrive(filePath, originalName, org, subfolder = '', _retryCount = 0) {
   if (!drive) {
     console.log(`📁 [LOCAL] Would upload: ${originalName}`);
     return { success: true, local: true };
@@ -529,12 +557,12 @@ async function uploadFileToDrive(filePath, originalName, org, subfolder = '') {
     return { success: true, fileId: file.data.id, link };
   } catch (err) {
     console.log(`❌ Drive upload failed: ${err.message}`);
-    // Try to refresh token on auth errors
-    if (err.message.includes('invalid_grant') || err.message.includes('Token has been expired') || err.code === 401) {
+    // Try to refresh token on auth errors (max 1 retry)
+    if (_retryCount < 1 && (err.message.includes('invalid_grant') || err.message.includes('Token has been expired') || err.code === 401)) {
       const refreshed = await refreshOAuthToken();
       if (refreshed) {
         console.log('🔄 Retrying Drive upload after token refresh...');
-        return uploadFileToDrive(filePath, originalName, org, subfolder);
+        return uploadFileToDrive(filePath, originalName, org, subfolder, _retryCount + 1);
       }
     }
     return { success: false, error: err.message };
@@ -862,7 +890,7 @@ app.post('/api/ncr/update', async (req, res) => {
     if (sheets) {
       const updates = [];
       NCR_COLUMNS.forEach((col, i) => {
-        if (i > 0) updates.push({ range: `NCR Records!${String.fromCharCode(65+i)}${rowIndex+1}`, values: [[ncrRow[i]]] });
+        if (i > 0) updates.push({ range: `NCR Records!${columnToLetter(i+1)}${rowIndex+1}`, values: [[ncrRow[i]]] });
       });
       await sheets.spreadsheets.values.batchUpdate({
         spreadsheetId: SPREADSHEET_ID,
@@ -894,6 +922,7 @@ app.get('/api/ncr/clone/:idx', async (req, res) => {
       9: 'subSystem', 10: 'trainNo', 11: 'car', 12: 'responsibility',
       13: 'status', 14: 'itemRepaired', 15: 'itemReplaced', 16: 'dateOfRepair',
       17: 'source', 18: 'investigationReportDate', 19: 'gatePassNo', 20: 'remarks',
+      21: 'attachmentLink', 22: 'fileName',
       23: 'project', 24: 'line', 25: 'oem', 26: 'trainSet', 27: 'coachNo',
       28: 'ncrCategory', 29: 'ncrType', 30: 'priority', 31: 'system',
       32: 'location', 33: 'vendor', 34: 'raisedBy', 35: 'assignedTo',
@@ -993,7 +1022,7 @@ app.post('/api/auto-save', async (req, res) => {
             if (i > 0) {
               const key = col.toLowerCase().replace(/[^a-z0-9]/g, '');
               const val = data[key] || data[NCR_COLUMNS[i]] || '';
-              updates.push({ range: `NCR Records!${String.fromCharCode(65+i)}${rowIndex}`, values: [[val]] });
+              updates.push({ range: `NCR Records!${columnToLetter(i+1)}${rowIndex}`, values: [[val]] });
             }
           });
           await sheets.spreadsheets.values.batchUpdate({
@@ -1014,7 +1043,7 @@ app.post('/api/auto-save', async (req, res) => {
             if (i > 0) {
               const key = col.toLowerCase().replace(/[^a-z0-9]/g, '');
               const val = data[key] || data[LETTER_COLUMNS[i]] || '';
-              updates.push({ range: `${sheetName}!${String.fromCharCode(65+i)}${rowIndex}`, values: [[val]] });
+              updates.push({ range: `${sheetName}!${columnToLetter(i+1)}${rowIndex}`, values: [[val]] });
             }
           });
           await sheets.spreadsheets.values.batchUpdate({
@@ -1308,6 +1337,7 @@ app.get('/api/search', async (req, res) => {
 
 app.get('/api/export/csv', async (req, res) => {
   try {
+    if (!sheets) return res.status(503).json({ error: 'Google Sheets not connected. Visit /auth/google to authenticate.' });
     const sheetName = req.query.sheet || 'BEML Letters';
     const range = `${sheetName}!A1:Z`;
     const result = await sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range });
@@ -1322,6 +1352,7 @@ app.get('/api/export/csv', async (req, res) => {
 
 app.get('/api/export/json', async (req, res) => {
   try {
+    if (!sheets) return res.status(503).json({ error: 'Google Sheets not connected. Visit /auth/google to authenticate.' });
     const sheetName = req.query.sheet || 'BEML Letters';
     const range = `${sheetName}!A1:Z`;
     const result = await sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range });
@@ -1338,8 +1369,14 @@ app.post('/api/import/json', express.json({ limit: '50mb' }), async (req, res) =
     const records = req.body.records || req.body;
     const sheetName = req.body.sheetName || 'BEML Letters';
     if (!Array.isArray(records)) return res.status(400).json({ error: 'Invalid format' });
+    
+    let columns;
+    if (sheetName.includes('NCR')) columns = NCR_COLUMNS;
+    else if (sheetName.includes('Joint')) columns = JOINT_NOTE_COLUMNS;
+    else columns = LETTER_COLUMNS;
+    
     let count = 0;
-    for (const r of records) { try { await appendToSheet(sheetName, r, LETTER_COLUMNS); count++; } catch {} }
+    for (const r of records) { try { await appendToSheet(sheetName, r, columns); count++; } catch {} }
     res.json({ success: true, imported: count, total: records.length });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });

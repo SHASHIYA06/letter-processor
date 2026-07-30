@@ -270,8 +270,8 @@
         case 'letters': renderLetters(content); break;
         case 'ncr': renderNCR(content); break;
         case 'joint': renderJointNotes(content); break;
-        case 'create-ncr': renderCreateNCR(content); break;
-        case 'create-letter': renderCreateLetter(content); break;
+        case 'create-ncr': ncrCurrentRowIndex = null; renderCreateNCR(content); break;
+        case 'create-letter': letterCurrentRowIndex = null; renderCreateLetter(content); break;
         case 'upload': showUploadModal(); navigate('dashboard'); break;
         case 'bulk': renderBulkImport(content); break;
         case 'search': renderSearch(content); break;
@@ -1222,9 +1222,11 @@
     async function autoSaveNCR() {
       if (currentPage !== 'create-ncr') { clearInterval(ncrAutoSaveTimer); return; }
       try {
+        const data = getNCRData();
+        if (!data.ncrNo) return;
         await fetch('/api/auto-save', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ docType: 'ncr', data: getNCRData() })
+          body: JSON.stringify({ docType: 'ncr', data, rowIndex: ncrCurrentRowIndex })
         });
       } catch {}
     }
@@ -1242,11 +1244,16 @@
           body: JSON.stringify(data)
         });
         const r = await res.json();
-        if (r.success) { showToast('NCR saved to Google Sheets!', 'success'); loadAllData(); }
+        if (r.success) { 
+          ncrCurrentRowIndex = r.sheet?.sno || null;
+          showToast('NCR saved to Google Sheets!', 'success'); 
+          loadAllData(); 
+        }
         else showToast('Save failed: ' + (r.error || ''), 'error');
       } catch (e) { showToast('Error: ' + e.message, 'error'); }
     }
 
+    let ncrCurrentRowIndex = null;
     let lastNCRPdfUrl = null;
     let lastNCRDocxUrl = null;
     async function generateNCRPdf() {
@@ -1380,9 +1387,11 @@
     async function autoSaveLetter() {
       if (currentPage !== 'create-letter') { clearInterval(letterAutoSaveTimer); return; }
       try {
+        const data = getLetterData();
+        if (!data.refNumber) return;
         await fetch('/api/auto-save', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ docType: 'letter', data: getLetterData(), organization: getLetterData().organization })
+          body: JSON.stringify({ docType: 'letter', data, organization: data.organization, rowIndex: letterCurrentRowIndex })
         });
       } catch {}
     }
@@ -1394,11 +1403,16 @@
           body: JSON.stringify(getLetterData())
         });
         const r = await res.json();
-        if (r.success) { showToast('Letter saved to Google Sheets!', 'success'); loadAllData(); }
+        if (r.success) { 
+          letterCurrentRowIndex = r.sheet?.sno || null;
+          showToast('Letter saved to Google Sheets!', 'success'); 
+          loadAllData(); 
+        }
         else showToast('Save failed', 'error');
       } catch (e) { showToast('Error: ' + e.message, 'error'); }
     }
 
+    let letterCurrentRowIndex = null;
     let lastLetterPdfUrl = null;
     let lastLetterDocxUrl = null;
     async function generateLetterPdf() {
