@@ -41,7 +41,9 @@ app.use(express.json({ limit: '50mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-const storage = multer.diskStorage({
+const isVercelStorage = !!process.env.VERCEL;
+
+const storage = isVercelStorage ? multer.memoryStorage() : multer.diskStorage({
   destination: (req, file, cb) => {
     const dir = path.join(__dirname, 'uploads');
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
@@ -1127,17 +1129,28 @@ app.get('/api/auth/status', (req, res) => {
 // ══════════════════════════════════════════════════════════════
 //  API ROUTES
 // ══════════════════════════════════════════════════════════════
+
+function getFilePath(req) {
+  if (req.file.path) return req.file.path;
+  const tmpDir = path.join(__dirname, 'uploads');
+  if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
+  const tmpPath = path.join(tmpDir, req.file.filename);
+  fs.writeFileSync(tmpPath, req.file.buffer);
+  return tmpPath;
+}
+
 app.post('/api/extract', upload.single('file'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ success: false, error: 'No file uploaded' });
     
+    const filePath = getFilePath(req);
     console.log(`\n📄 Extract: ${req.file.originalname} -> ${req.file.filename}`);
-    console.log(`   Path: ${req.file.path}`);
+    console.log(`   Path: ${filePath}`);
     console.log(`   Size: ${req.file.size} bytes`);
     
     // Verify file exists
-    if (!fs.existsSync(req.file.path)) {
-      console.log('❌ File not found after upload:', req.file.path);
+    if (!fs.existsSync(filePath)) {
+      console.log('❌ File not found after upload:', filePath);
       return res.status(400).json({ success: false, error: 'File not found after upload' });
     }
 
@@ -1147,7 +1160,7 @@ app.post('/api/extract', upload.single('file'), async (req, res) => {
     
     let text;
     try {
-      text = await extractText(req.file.path);
+      text = await extractText(filePath);
       console.log(`📝 Extracted ${text.length} characters`);
     } catch (extractErr) {
       console.log('⚠️  Text extraction failed:', extractErr.message);
@@ -1222,13 +1235,14 @@ app.post('/api/save', upload.single('file'), async (req, res) => {
 
     if (req.file) {
       console.log(`\n📄 Saving: ${req.file.originalname}`);
+      const filePath = getFilePath(req);
       
       // Verify file exists before processing
-      if (!fs.existsSync(req.file.path)) {
+      if (!fs.existsSync(filePath)) {
         console.log('⚠️  Uploaded file not found, skipping OCR');
       } else {
         try {
-          const text = await extractText(req.file.path);
+          const text = await extractText(filePath);
           let parsed;
           if (docType === 'ncr') parsed = parseNCRContent(text);
           else if (docType === 'joint_note') parsed = parseJointNoteContent(text);
@@ -1245,7 +1259,7 @@ app.post('/api/save', upload.single('file'), async (req, res) => {
       else if (docType === 'joint_note') subfolder = 'Joint Notes';
       
       try {
-        driveResult = await uploadFileToDrive(req.file.path, req.file.originalname, org, subfolder);
+        driveResult = await uploadFileToDrive(filePath, req.file.originalname, org, subfolder);
         data.fileName = req.file.filename;
         if (driveResult.link) data.attachmentLink = driveResult.link;
       } catch (driveErr) {
@@ -1285,7 +1299,14 @@ app.post('/api/bulk-upload', (req, res) => {
 
       for (const file of files) {
         try {
-          const text = await extractText(file.path);
+          const filePath = file.path || (() => {
+            const tmpDir = path.join(__dirname, 'uploads');
+            if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
+            const tmpPath = path.join(tmpDir, file.filename);
+            fs.writeFileSync(tmpPath, file.buffer);
+            return tmpPath;
+          })();
+          const text = await extractText(filePath);
           let parsed;
           if (docType === 'ncr') parsed = parseNCRContent(text);
           else if (docType === 'joint_note') parsed = parseJointNoteContent(text);
@@ -1295,7 +1316,7 @@ app.post('/api/bulk-upload', (req, res) => {
           let subfolder = 'Letters';
           if (docType === 'ncr') subfolder = 'NCR';
           else if (docType === 'joint_note') subfolder = 'Joint Notes';
-          const driveRes = await uploadFileToDrive(file.path, file.originalname, org, subfolder);
+          const driveRes = await uploadFileToDrive(filePath, file.originalname, org, subfolder);
           if (driveRes.link) parsed.attachmentLink = driveRes.link;
 
           let sheetName = SHEET_NAMES[org] || `${org} Letters`;
@@ -1426,7 +1447,8 @@ app.post('/api/import/excel', upload.single('file'), async (req, res) => {
     // Dynamic import of xlsx
     const xlsxModule = await import('xlsx');
     const XLSX = xlsxModule.default || xlsxModule;
-    const workbook = XLSX.readFile(req.file.path);
+    const filePath = getFilePath(req);
+    const workbook = XLSX.readFile(filePath);
     const sheetName0 = workbook.SheetNames[0];
     const worksheet = workbook.Sheets[sheetName0];
     const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
@@ -1499,7 +1521,7 @@ app.post('/api/import/excel', upload.single('file'), async (req, res) => {
     }
 
     // Cleanup uploaded file
-    try { fs.unlinkSync(req.file.path); } catch {}
+    try { fs.unlinkSync(filePath); } catch {}
 
     res.json({ 
       success: true, 
