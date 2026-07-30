@@ -51,9 +51,11 @@ const storage = multer.diskStorage({
     try {
       const org = (req.body.organization || 'unknown').replace(/[^a-zA-Z0-9]/g, '_');
       const date = new Date().toISOString().split('T')[0];
-      const ext = path.extname(file.originalname) || '.bin';
-      const safeName = file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_').substring(0, 100);
-      cb(null, `${org}_${date}_${Date.now()}_${safeName}`);
+      const ext = path.extname(file.originalname).toLowerCase() || '.bin';
+      const baseName = path.basename(file.originalname, ext)
+        .replace(/[^a-zA-Z0-9._-]/g, '_')
+        .substring(0, 80);
+      cb(null, `${org}_${date}_${Date.now()}_${baseName}${ext}`);
     } catch (err) {
       cb(null, `${Date.now()}_upload${path.extname(file.originalname) || '.bin'}`);
     }
@@ -1069,8 +1071,13 @@ app.post('/api/extract', upload.single('file'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ success: false, error: 'No file uploaded' });
     
+    console.log(`\n📄 Extract: ${req.file.originalname} -> ${req.file.filename}`);
+    console.log(`   Path: ${req.file.path}`);
+    console.log(`   Size: ${req.file.size} bytes`);
+    
     // Verify file exists
     if (!fs.existsSync(req.file.path)) {
+      console.log('❌ File not found after upload:', req.file.path);
       return res.status(400).json({ success: false, error: 'File not found after upload' });
     }
 
