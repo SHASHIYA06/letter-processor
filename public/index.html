@@ -104,6 +104,24 @@
     .filter-bar select,.filter-bar input{padding:8px 12px;background:var(--card);border:1px solid var(--border);border-radius:var(--radius-sm);font-size:.8rem}
     @media(max-width:1024px){.sidebar{width:60px}.sidebar .menu-text,.sidebar-logo p,.menu-section{display:none}.sidebar-logo h1{font-size:1rem}.menu-item{padding:12px;justify-content:center}.main{margin-left:60px}}
     @media(max-width:768px){.sidebar{display:none}.main{margin-left:0}.form-row{grid-template-columns:1fr}.grid-2,.grid-3{grid-template-columns:1fr}.stats-grid{grid-template-columns:repeat(2,1fr)}}
+    
+    /* NCR Form Styles */
+    .ncr-section{margin-bottom:20px;border:1px solid var(--border);border-radius:var(--radius);overflow:hidden}
+    .ncr-section-header{background:linear-gradient(135deg,#1E293B,#334155);color:white;padding:10px 16px;font-size:.85rem;font-weight:600;display:flex;align-items:center;gap:8px}
+    .ncr-section-header::before{content:'';width:4px;height:16px;background:var(--primary);border-radius:2px}
+    .ncr-section .form-group{margin-bottom:0;padding:8px 16px}
+    .ncr-section .form-row{padding:0 8px}
+    .ncr-required{color:var(--error)!important;font-weight:700!important}
+    .ncr-required::after{content:' *';color:var(--error)}
+    .ncr-select{width:100%;padding:8px 12px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);font-size:.8rem;color:var(--text);cursor:pointer}
+    .ncr-select:focus{outline:none;border-color:var(--primary);box-shadow:0 0 0 3px rgba(37,99,235,.1)}
+    .ncr-dd-wrapper{position:relative}
+    .ncr-dd-input{width:100%;padding:8px 12px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);font-size:.8rem;color:var(--text)}
+    .ncr-dd-input:focus{outline:none;border-color:var(--primary);box-shadow:0 0 0 3px rgba(37,99,235,.1)}
+    .ncr-dd-list{display:none;position:absolute;top:100%;left:0;right:0;background:white;border:1px solid var(--border);border-radius:var(--radius-sm);max-height:200px;overflow-y:auto;z-index:100;box-shadow:var(--shadow-lg)}
+    .ncr-dd-item{padding:8px 12px;cursor:pointer;font-size:.8rem;border-bottom:1px solid var(--border)}
+    .ncr-dd-item:hover{background:var(--primary-light);color:var(--primary)}
+    .ncr-dd-item:last-child{border-bottom:none;color:var(--primary);font-weight:600}
   </style>
 </head>
 <body>
@@ -416,10 +434,12 @@
       el.innerHTML = `
         <div class="page-header">
           <div><h2>NCR Records</h2><p>${allNCR.length} Non-Conformance Reports</p></div>
-          <button class="btn btn-primary" onclick="showUploadModal()">📤 Upload NCR</button>
+          <button class="btn btn-primary" onclick="navigate('create-ncr')">➕ Create NCR</button>
         </div>
         <div class="filter-bar">
-          <select id="ncrStatusFilter" onchange="filterNCR()"><option value="">All Status</option><option value="OPEN">Open</option><option value="CLOSED">Closed</option></select>
+          <select id="ncrStatusFilter" onchange="filterNCR()"><option value="">All Status</option><option value="Open">Open</option><option value="In Progress">In Progress</option><option value="Under Review">Under Review</option><option value="Approved">Approved</option><option value="Closed">Closed</option></select>
+          <select id="ncrSeverityFilter" onchange="filterNCR()"><option value="">All Severity</option><option value="Critical">Critical</option><option value="Major">Major</option><option value="Minor">Minor</option></select>
+          <select id="ncrProjectFilter" onchange="filterNCR()"><option value="">All Projects</option><option value="KMRCL">KMRCL</option><option value="Metro Rail">Metro Rail</option><option value="BEML">BEML</option></select>
           <input type="text" id="ncrSearch" placeholder="Search NCR..." onkeyup="filterNCR()">
         </div>
         <div class="card"><div class="card-body" style="padding:0"><div id="ncrTable"></div></div></div>`;
@@ -428,11 +448,15 @@
 
     function filterNCR() {
       const status = document.getElementById('ncrStatusFilter').value;
+      const severity = document.getElementById('ncrSeverityFilter').value;
+      const project = document.getElementById('ncrProjectFilter').value;
       const search = document.getElementById('ncrSearch').value.toLowerCase();
       const rows = allData['NCR Records'] || [];
       let allNCR = [];
       for (let i = 1; i < rows.length; i++) allNCR.push({ row: rows[i], idx: i });
-      if (status) allNCR = allNCR.filter(n => (n.row[n.row.length-1] || '').toUpperCase() === status);
+      if (status) allNCR = allNCR.filter(n => (n.row[13] || n.row[n.row.length-1] || '').toLowerCase() === status.toLowerCase());
+      if (severity) allNCR = allNCR.filter(n => (n.row[30] || '').toLowerCase() === severity.toLowerCase());
+      if (project) allNCR = allNCR.filter(n => (n.row[23] || '').toLowerCase().includes(project.toLowerCase()));
       if (search) allNCR = allNCR.filter(n => n.row.some(c => (c||'').toLowerCase().includes(search)));
       renderNCRTable(allNCR);
     }
@@ -442,17 +466,24 @@
         document.getElementById('ncrTable').innerHTML = '<div class="empty-state"><div class="icon">📋</div><p>No NCR records found</p></div>';
         return;
       }
-      let html = '<table class="table"><thead><tr><th>#</th><th>NCR No</th><th>Date</th><th>Item</th><th>Train</th><th>Status</th><th>Actions</th></tr></thead><tbody>';
+      let html = '<table class="table"><thead><tr><th>#</th><th>NCR No</th><th>Date</th><th>Item</th><th>Project</th><th>Train</th><th>Severity</th><th>Status</th><th>Actions</th></tr></thead><tbody>';
       ncrs.forEach((item, i) => {
         const r = item.row;
         const status = r[13] || r[r.length-1] || 'Open';
+        const severity = r[30] || 'Major';
+        const project = r[23] || '';
+        const trainSet = r[26] || r[10] || '';
+        const statusClass = status.toLowerCase() === 'closed' ? 'closed' : status.toLowerCase() === 'in progress' ? 'open' : 'open';
+        const severityClass = severity.toLowerCase() === 'critical' ? 'error' : severity.toLowerCase() === 'major' ? 'warning' : 'open';
         html += `<tr>
           <td>${i+1}</td>
           <td><strong>${esc(r[1] || 'N/A')}</strong></td>
           <td>${r[3] || r[2] || 'N/A'}</td>
-          <td title="${esc(r[4] || '')}">${esc((r[4] || 'N/A').substring(0,40))}</td>
-          <td>${r[10] || 'N/A'}</td>
-          <td><span class="badge badge-${status.toLowerCase() === 'closed' ? 'closed' : 'open'}">${status}</span></td>
+          <td title="${esc(r[4] || '')}">${esc((r[4] || 'N/A').substring(0,35))}</td>
+          <td title="${esc(project)}">${esc((project || 'N/A').substring(0,25))}</td>
+          <td>${trainSet || r[10] || 'N/A'}</td>
+          <td><span class="badge badge-${severityClass}">${severity}</span></td>
+          <td><span class="badge badge-${statusClass}">${status}</span></td>
           <td class="actions">
             <button class="btn btn-secondary btn-sm" onclick="viewDocument('NCR Records',${item.idx})">👁️</button>
             <button class="btn btn-secondary btn-sm" onclick="editRecord('NCR Records',${item.idx})">✏️</button>
@@ -755,106 +786,359 @@
 
     // === CREATE NCR ===
     let ncrAutoSaveTimer = null;
+    let ncrMasterData = {};
+
+    async function loadNCRMasterData() {
+      try {
+        const res = await fetch('/api/master-data');
+        const data = await res.json();
+        if (data.success) ncrMasterData = data.data;
+      } catch (e) { console.error('Failed to load master data:', e); }
+    }
+
+    function createDropdown(id, options, value, placeholder, searchable) {
+      const opts = (options || []).map(o => `<option value="${esc(o)}" ${o === value ? 'selected' : ''}>${esc(o)}</option>`).join('');
+      const searchAttr = searchable !== false ? 'data-searchable="true"' : '';
+      return `<select id="${id}" ${searchAttr} onchange="updateNCRPreview()" class="ncr-select">
+        <option value="">-- ${placeholder || 'Select'} --</option>
+        ${opts}
+        <option value="__custom__">+ Add New...</option>
+      </select>`;
+    }
+
+    function createSearchableDropdown(id, options, value, placeholder) {
+      const opts = (options || []).map(o => `<div class="ncr-dd-item" data-value="${esc(o)}" onclick="selectNCRDropdown('${id}','${esc(o).replace(/'/g,"\\'")}')">${esc(o)}</div>`).join('');
+      return `<div class="ncr-dd-wrapper" id="${id}_wrapper">
+        <input type="text" id="${id}_search" placeholder="${placeholder || 'Search...'}" value="${esc(value || '')}" 
+          onfocus="showNCRDropdown('${id}')" oninput="filterNCRDropdown('${id}', this.value)" 
+          onblur="setTimeout(()=>hideNCRDropdown('${id}'),200)" class="ncr-dd-input">
+        <input type="hidden" id="${id}" value="${esc(value || '')}">
+        <div class="ncr-dd-list" id="${id}_list">${opts}</div>
+      </div>`;
+    }
+
+    function showNCRDropdown(id) {
+      const list = document.getElementById(id + '_list');
+      if (list) { list.style.display = 'block'; filterNCRDropdown(id, document.getElementById(id + '_search')?.value || ''); }
+    }
+    function hideNCRDropdown(id) {
+      const list = document.getElementById(id + '_list');
+      if (list) list.style.display = 'none';
+    }
+    function filterNCRDropdown(id, query) {
+      const list = document.getElementById(id + '_list');
+      if (!list) return;
+      const items = list.querySelectorAll('.ncr-dd-item');
+      const q = (query || '').toLowerCase();
+      items.forEach(item => {
+        item.style.display = item.dataset.value.toLowerCase().includes(q) ? 'block' : 'none';
+      });
+    }
+    function selectNCRDropdown(id, value) {
+      const input = document.getElementById(id);
+      const search = document.getElementById(id + '_search');
+      if (input) input.value = value;
+      if (search) search.value = value;
+      hideNCRDropdown(id);
+      updateNCRPreview();
+    }
+    function handleCustomMasterData(category, selectId) {
+      const select = document.getElementById(selectId);
+      if (select && select.value === '__custom__') {
+        const custom = prompt(`Enter new ${category} value:`);
+        if (custom && custom.trim()) {
+          fetch('/api/master-data/' + category, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ value: custom.trim() })
+          }).then(() => {
+            ncrMasterData[category] = ncrMasterData[category] || [];
+            if (!ncrMasterData[category].includes(custom.trim())) ncrMasterData[category].push(custom.trim());
+            select.innerHTML = '';
+            ncrMasterData[category].sort().forEach(o => {
+              const opt = document.createElement('option');
+              opt.value = o; opt.textContent = o;
+              if (o === custom.trim()) opt.selected = true;
+              select.appendChild(opt);
+            });
+            const addOpt = document.createElement('option');
+            addOpt.value = '__custom__'; addOpt.textContent = '+ Add New...';
+            select.appendChild(addOpt);
+            updateNCRPreview();
+          });
+        } else {
+          select.value = '';
+        }
+      }
+    }
+
     async function renderCreateNCR(el) {
+      await loadNCRMasterData();
       const res = await fetch('/api/ncr/next-number');
       const d = await res.json();
       const ncrNo = d.success ? d.number : 'NCR-' + new Date().getFullYear() + '-001';
+      const today = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+      
       el.innerHTML = `
         <div class="page-header">
-          <div><h2>Create NCR</h2><p>Fill form with live preview</p></div>
+          <div><h2>Create NCR</h2><p>Non-Conformity Report - Enterprise Form</p></div>
           <div style="display:flex;gap:8px">
-            <button class="btn btn-secondary" onclick="navigate('ncr')">Back to NCR</button>
+            <button class="btn btn-secondary" onclick="navigate('ncr')">← Back to NCR List</button>
           </div>
         </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;height:calc(100vh - 180px)">
-          <div class="card" style="overflow-y:auto;padding:20px">
-            <h3 style="margin-bottom:16px;font-size:1rem">NCR Form</h3>
-            <div style="font-size:.75rem;color:var(--text3);margin-bottom:12px;padding:8px;background:var(--success-bg);border-radius:6px">Auto-saves every 5 seconds</div>
-            <div class="form-row"><div class="form-group"><label>NCR Report No.</label><input id="ncr_ncrNo" value="${esc(ncrNo)}" onchange="updateNCRPreview()"></div>
-            <div class="form-group"><label>Distribution to</label><input id="ncr_distribution" value="OEM/ SBU-S&M / R&D/ PM/Purchase/ Quality" onchange="updateNCRPreview()"></div></div>
-            <div class="form-row"><div class="form-group"><label>Project</label><input id="ncr_project" placeholder="KMRCL RS-3R" onchange="updateNCRPreview()"></div>
-            <div class="form-group"><label>Vehicle No.</label><input id="ncr_vehicleNo" placeholder="TS#16 DMC1" onchange="updateNCRPreview()"></div></div>
-            <div class="form-row"><div class="form-group"><label>Product</label><input id="ncr_product" placeholder="FDI/TNI..." onchange="updateNCRPreview()"></div>
-            <div class="form-group"><label>Assy Dwg No. / Rev</label><input id="ncr_assyDwgNo" onchange="updateNCRPreview()"></div></div>
-            <div class="form-row"><div class="form-group"><label>Rev</label><input id="ncr_rev" placeholder="Rev A/B/C..." onchange="updateNCRPreview()"></div>
-            <div class="form-group"><label>Quantity</label><input id="ncr_qty" placeholder="01 no." onchange="updateNCRPreview()"></div></div>
-            <div class="form-group"><label>Part No.</label><input id="ncr_partNo" onchange="updateNCRPreview()"></div></div>
-            <div class="form-row"><div class="form-group"><label>Supplier</label><input id="ncr_supplier" placeholder="M/s Televic" onchange="updateNCRPreview()"></div>
-            <div class="form-group"><label>Assy Serial No.</label><input id="ncr_assySerialNo" onchange="updateNCRPreview()"></div></div>
-            <div class="form-row"><div class="form-group"><label>Detection Date</label><input id="ncr_detectionDate" onchange="updateNCRPreview()"></div>
-            <div class="form-group"><label>Part Serial No.</label><input id="ncr_partSerialNo" onchange="updateNCRPreview()"></div></div>
-            <div class="form-row"><div class="form-group"><label>Place</label><input id="ncr_place" placeholder="CPD Depot" onchange="updateNCRPreview()"></div>
-            <div class="form-group"><label>B/L No.</label><input id="ncr_blNo" onchange="updateNCRPreview()"></div></div>
-            <div class="form-row"><div class="form-group"><label>Stored At</label><input id="ncr_storedAt" onchange="updateNCRPreview()"></div>
-            <div class="form-group"><label>Invoice No.</label><input id="ncr_invoiceNo" onchange="updateNCRPreview()"></div></div>
-            <div class="form-row"><div class="form-group"><label>Severity</label><select id="ncr_severity" onchange="updateNCRPreview()"><option value="Major">Major</option><option value="Minor">Minor</option></select></div>
-            <div class="form-group"><label>Responsible Party</label><input id="ncr_responsibility" onchange="updateNCRPreview()"></div></div>
-            <div class="form-row"><div class="form-group"><label>Material Status</label><select id="ncr_materialStatus" onchange="updateNCRPreview()"><option value="Before installation">Before installation</option><option value="Installed">Installed</option></select></div>
-            <div class="form-group"><label>Disassembled</label><select id="ncr_disassembled" onchange="updateNCRPreview()"><option value="">N/A</option><option value="Disassembled">Disassembled</option><option value="Before receiving">Before receiving</option></select></div></div>
-            <div class="form-group"><label>Description of Non-Conformity</label><textarea id="ncr_ncrDesc" rows="4" placeholder="Describe the non-conformance..." onchange="updateNCRPreview()"></textarea></div>
-            <div class="form-group"><label>Team</label><input id="ncr_team" value="BEML (S&M)" onchange="updateNCRPreview()"></div>
-            <div class="form-row"><div class="form-group"><label>Issued By</label><input id="ncr_issuedBy" onchange="updateNCRPreview()"></div>
-            <div class="form-group"><label>Reviewed & Approved By</label><input id="ncr_reviewedBy" onchange="updateNCRPreview()"></div></div>
-            <div class="form-group"><label>Cause of Non-Conformity</label><textarea id="ncr_cause" rows="3" onchange="updateNCRPreview()"></textarea></div>
-            <div class="form-group"><label>Correction / Corrective Action</label><textarea id="ncr_correction" rows="3" onchange="updateNCRPreview()"></textarea></div>
-            <div class="form-row"><div class="form-group"><label>In (Healthy) Sl. No</label><input id="ncr_healthySl" onchange="updateNCRPreview()"></div>
-            <div class="form-group"><label>Out (Faulty) Sl. No</label><input id="ncr_faultySl" onchange="updateNCRPreview()"></div></div>
-            <div class="form-group"><label>Decision</label><select id="ncr_decision" onchange="updateNCRPreview()"><option value="">Select</option><option value="Claim">Claim</option><option value="Holding">Holding</option><option value="Use as is">Use as is</option><option value="Rework">Rework</option><option value="Waiver">Waiver</option><option value="Scrap">Scrap</option><option value="Repair">Repair</option></select></div>
-            <div class="form-group"><label>Remarks</label><textarea id="ncr_remarks" rows="2" onchange="updateNCRPreview()"></textarea></div>
-            <div style="display:flex;gap:8px;margin-top:16px;flex-wrap:wrap">
-              <button class="btn btn-primary" onclick="saveNCR()">💾 Save NCR</button>
-              <button class="btn btn-success" onclick="generateNCRPdf()">📄 PDF</button>
-              <button class="btn btn-success" onclick="generateNCRDocx()">📝 Word</button>
-              <button class="btn btn-secondary" onclick="downloadNCRPdf()">📥 Download PDF</button>
-              <button class="btn btn-secondary" onclick="downloadNCRDocx()">📥 Download Word</button>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;min-height:calc(100vh - 180px)">
+          <!-- LEFT: FORM -->
+          <div class="card" style="overflow-y:auto;padding:0">
+            <div style="padding:12px 20px;border-bottom:1px solid var(--border);background:var(--bg);position:sticky;top:0;z-index:10">
+              <div style="display:flex;justify-content:space-between;align-items:center">
+                <h3 style="font-size:1rem;margin:0">NCR Form</h3>
+                <span style="font-size:.7rem;color:var(--text3)">Auto-saves every 5s</span>
+              </div>
+              <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">
+                <button class="btn btn-primary btn-sm" onclick="saveNCR()">💾 Save</button>
+                <button class="btn btn-success btn-sm" onclick="generateNCRPdf()">📄 PDF</button>
+                <button class="btn btn-success btn-sm" onclick="generateNCRDocx()">📝 Word</button>
+                <button class="btn btn-secondary btn-sm" onclick="downloadNCRPdf()">📥 PDF</button>
+                <button class="btn btn-secondary btn-sm" onclick="downloadNCRDocx()">📥 Word</button>
+              </div>
+            </div>
+            <div style="padding:20px">
+              <!-- Section 1: Basic Information -->
+              <div class="ncr-section">
+                <div class="ncr-section-header">1. Basic Information</div>
+                <div class="form-row">
+                  <div class="form-group"><label class="ncr-required">NCR Report No.</label><input id="ncr_ncrNo" value="${esc(ncrNo)}" onchange="updateNCRPreview()"></div>
+                  <div class="form-group"><label class="ncr-required">Date of NCR</label><input type="date" id="ncr_date" value="${new Date().toISOString().split('T')[0]}" onchange="updateNCRPreview()"></div>
+                </div>
+                <div class="form-row">
+                  <div class="form-group"><label>Date of Detection</label><input type="date" id="ncr_detectionDate" onchange="updateNCRPreview()"></div>
+                  <div class="form-group"><label>Distribution to</label><input id="ncr_distribution" value="OEM/ SBU-S&M / R&D/ PM/Purchase/ Quality" onchange="updateNCRPreview()"></div>
+                </div>
+                <div class="form-row">
+                  <div class="form-group"><label>Project</label>${createDropdown('ncr_project', ncrMasterData.projects || [], '', 'Select Project')}</div>
+                  <div class="form-group"><label>Line</label>${createDropdown('ncr_line', ncrMasterData.lines || [], '', 'Select Line')}</div>
+                </div>
+              </div>
+
+              <!-- Section 2: Location & Vehicle Details -->
+              <div class="ncr-section">
+                <div class="ncr-section-header">2. Location & Vehicle Details</div>
+                <div class="form-row">
+                  <div class="form-group"><label>Train Set</label>${createDropdown('ncr_trainSet', ncrMasterData.trainSets || [], '', 'Select Train Set')}</div>
+                  <div class="form-group"><label>Vehicle No.</label><input id="ncr_vehicleNo" placeholder="e.g. TS#16 DMC1" onchange="updateNCRPreview()"></div>
+                </div>
+                <div class="form-row">
+                  <div class="form-group"><label>Car / Coach</label>${createDropdown('ncr_car', ncrMasterData.cars || [], '', 'Select Car')}</div>
+                  <div class="form-group"><label>Location</label>${createDropdown('ncr_location', ncrMasterData.locations || [], '', 'Select Location')}</div>
+                </div>
+              </div>
+
+              <!-- Section 3: Item Details -->
+              <div class="ncr-section">
+                <div class="ncr-section-header">3. Item / Product Details</div>
+                <div class="form-row">
+                  <div class="form-group"><label class="ncr-required">Product / Item</label><input id="ncr_product" placeholder="e.g. FDI Display Unit" onchange="updateNCRPreview()"></div>
+                  <div class="form-group"><label>OEM / Manufacturer</label>${createDropdown('ncr_oem', ncrMasterData.oem || [], '', 'Select OEM')}</div>
+                </div>
+                <div class="form-row">
+                  <div class="form-group"><label>Part Number</label><input id="ncr_partNo" placeholder="e.g. 3TD04451R07" onchange="updateNCRPreview()"></div>
+                  <div class="form-group"><label>Supplier</label>${createDropdown('ncr_supplier', ncrMasterData.oem || [], '', 'Select Supplier')}</div>
+                </div>
+                <div class="form-row">
+                  <div class="form-group"><label>Assy Dwg No.</label><input id="ncr_assyDwgNo" onchange="updateNCRPreview()"></div>
+                  <div class="form-group"><label>Rev</label><input id="ncr_rev" placeholder="Rev A/B/C" onchange="updateNCRPreview()"></div>
+                </div>
+                <div class="form-row">
+                  <div class="form-group"><label>Assy Serial No.</label><input id="ncr_assySerialNo" onchange="updateNCRPreview()"></div>
+                  <div class="form-group"><label>Part Serial No.</label><input id="ncr_partSerialNo" onchange="updateNCRPreview()"></div>
+                </div>
+                <div class="form-row">
+                  <div class="form-group"><label>Quantity</label><input id="ncr_qty" placeholder="01 no." onchange="updateNCRPreview()"></div>
+                  <div class="form-group"><label>System</label>${createDropdown('ncr_system', ncrMasterData.systems || [], '', 'Select System')}</div>
+                </div>
+                <div class="form-row">
+                  <div class="form-group"><label>Sub-System</label>${createDropdown('ncr_subSystem', ncrMasterData.subsystems || [], '', 'Select Sub-System')}</div>
+                  <div class="form-group"><label>Vendor</label>${createDropdown('ncr_vendor', ncrMasterData.oem || [], '', 'Select Vendor')}</div>
+                </div>
+              </div>
+
+              <!-- Section 4: NCR Classification -->
+              <div class="ncr-section">
+                <div class="ncr-section-header">4. NCR Classification</div>
+                <div class="form-row">
+                  <div class="form-group"><label class="ncr-required">NCR Category</label>${createDropdown('ncr_ncrCategory', ncrMasterData.ncrCategories || [], '', 'Select Category')}</div>
+                  <div class="form-group"><label class="ncr-required">NCR Type</label>${createDropdown('ncr_ncrType', ncrMasterData.ncrTypes || [], '', 'Select Type')}</div>
+                </div>
+                <div class="form-row">
+                  <div class="form-group"><label class="ncr-required">Severity</label>${createDropdown('ncr_severity', ncrMasterData.severities || ['Critical','Major','Minor'], 'Major', 'Select Severity')}</div>
+                  <div class="form-group"><label>Priority</label>${createDropdown('ncr_priority', ncrMasterData.priorities || [], '', 'Select Priority')}</div>
+                </div>
+                <div class="form-row">
+                  <div class="form-group"><label class="ncr-required">Material Status</label>${createDropdown('ncr_materialStatus', ncrMasterData.materialStatuses || [], 'Before Installation', 'Select Status')}</div>
+                  <div class="form-group"><label>Disassembled</label>${createDropdown('ncr_disassembled', ncrMasterData.disassembledOptions || [], 'N/A', 'Select')}</div>
+                </div>
+              </div>
+
+              <!-- Section 5: Non-Conformity Details -->
+              <div class="ncr-section">
+                <div class="ncr-section-header">5. Non-Conformity Details</div>
+                <div class="form-group"><label class="ncr-required">Description of Non-Conformity</label><textarea id="ncr_ncrDesc" rows="4" placeholder="Describe the non-conformance in detail..." onchange="updateNCRPreview()"></textarea></div>
+                <div class="form-row">
+                  <div class="form-group"><label>Place / Depot</label><input id="ncr_place" placeholder="e.g. CPD Depot" onchange="updateNCRPreview()"></div>
+                  <div class="form-group"><label>B/L No.</label><input id="ncr_blNo" onchange="updateNCRPreview()"></div>
+                </div>
+                <div class="form-row">
+                  <div class="form-group"><label>Stored At</label><input id="ncr_storedAt" onchange="updateNCRPreview()"></div>
+                  <div class="form-group"><label>Invoice No.</label><input id="ncr_invoiceNo" onchange="updateNCRPreview()"></div>
+                </div>
+              </div>
+
+              <!-- Section 6: Root Cause & Investigation -->
+              <div class="ncr-section">
+                <div class="ncr-section-header">6. Root Cause & Investigation</div>
+                <div class="form-group"><label>Root Cause</label>${createDropdown('ncr_rootCause', ncrMasterData.rootCauses || [], '', 'Select Root Cause')}</div>
+                <div class="form-group"><label>Cause of Non-Conformity</label><textarea id="ncr_cause" rows="3" placeholder="Describe the root cause..." onchange="updateNCRPreview()"></textarea></div>
+                <div class="form-group"><label>Investigation Report Date</label><input type="date" id="ncr_investigationDate" onchange="updateNCRPreview()"></div>
+              </div>
+
+              <!-- Section 7: Corrective & Preventive Action -->
+              <div class="ncr-section">
+                <div class="ncr-section-header">7. Corrective & Preventive Action</div>
+                <div class="form-group"><label>Corrective Action</label><textarea id="ncr_correction" rows="3" placeholder="Describe corrective action taken..." onchange="updateNCRPreview()"></textarea></div>
+                <div class="form-group"><label>Preventive Action</label><textarea id="ncr_preventiveAction" rows="3" placeholder="Describe preventive action..." onchange="updateNCRPreview()"></textarea></div>
+                <div class="form-row">
+                  <div class="form-group"><label>Disposition</label>${createDropdown('ncr_disposition', ncrMasterData.dispositions || [], '', 'Select Disposition')}</div>
+                  <div class="form-group"><label>Decision</label><select id="ncr_decision" onchange="updateNCRPreview()"><option value="">Select</option><option value="Claim">Claim</option><option value="Holding">Holding</option><option value="Use as is">Use as is</option><option value="Rework">Rework</option><option value="Waiver">Waiver</option><option value="Scrap">Scrap</option><option value="Repair">Repair</option></select></div>
+                </div>
+              </div>
+
+              <!-- Section 8: Replacement & Repair -->
+              <div class="ncr-section">
+                <div class="ncr-section-header">8. Replacement & Repair</div>
+                <div class="form-row">
+                  <div class="form-group"><label>In (Healthy) Sl. No</label><input id="ncr_healthySl" onchange="updateNCRPreview()"></div>
+                  <div class="form-group"><label>Out (Faulty) Sl. No</label><input id="ncr_faultySl" onchange="updateNCRPreview()"></div>
+                </div>
+                <div class="form-row">
+                  <div class="form-group"><label>Item Repaired</label><input id="ncr_itemRepaired" onchange="updateNCRPreview()"></div>
+                  <div class="form-group"><label>Item Replaced</label><input id="ncr_itemReplaced" onchange="updateNCRPreview()"></div>
+                </div>
+                <div class="form-row">
+                  <div class="form-group"><label>Date of Repair</label><input type="date" id="ncr_dateOfRepair" onchange="updateNCRPreview()"></div>
+                  <div class="form-group"><label>Gate Pass No.</label><input id="ncr_gatePassNo" onchange="updateNCRPreview()"></div>
+                </div>
+              </div>
+
+              <!-- Section 9: People & Responsibility -->
+              <div class="ncr-section">
+                <div class="ncr-section-header">9. People & Responsibility</div>
+                <div class="form-row">
+                  <div class="form-group"><label class="ncr-required">Raised By</label><input id="ncr_issuedBy" placeholder="Name of person raising NCR" onchange="updateNCRPreview()"></div>
+                  <div class="form-group"><label>Department</label>${createDropdown('ncr_department', ncrMasterData.departments || [], '', 'Select Department')}</div>
+                </div>
+                <div class="form-row">
+                  <div class="form-group"><label>Assigned To</label><input id="ncr_assignedTo" placeholder="Person responsible for action" onchange="updateNCRPreview()"></div>
+                  <div class="form-group"><label>Responsible Party</label>${createDropdown('ncr_responsibility', ncrMasterData.oem || [], '', 'Select Responsible')}</div>
+                </div>
+                <div class="form-row">
+                  <div class="form-group"><label>Reviewed & Approved By</label><input id="ncr_reviewedBy" onchange="updateNCRPreview()"></div>
+                  <div class="form-group"><label>Team</label><input id="ncr_team" value="BEML (S&M)" onchange="updateNCRPreview()"></div>
+                </div>
+              </div>
+
+              <!-- Section 10: Status & Closure -->
+              <div class="ncr-section">
+                <div class="ncr-section-header">10. Status & Closure</div>
+                <div class="form-row">
+                  <div class="form-group"><label class="ncr-required">Status</label><select id="ncr_status" onchange="updateNCRPreview()">
+                    <option value="Open">Open</option><option value="In Progress">In Progress</option>
+                    <option value="Under Review">Under Review</option><option value="Approved">Approved</option>
+                    <option value="Closed">Closed</option><option value="Reopened">Reopened</option>
+                  </select></div>
+                  <div class="form-group"><label>Closure Date</label><input type="date" id="ncr_closureDate" onchange="updateNCRPreview()"></div>
+                </div>
+                <div class="form-group"><label>Closure Authority</label><input id="ncr_closureAuthority" onchange="updateNCRPreview()"></div>
+                <div class="form-group"><label>Remarks</label><textarea id="ncr_remarks" rows="3" onchange="updateNCRPreview()"></textarea></div>
+              </div>
             </div>
           </div>
+          
+          <!-- RIGHT: LIVE PREVIEW -->
           <div class="card" style="overflow-y:auto">
-            <div style="padding:12px 20px;border-bottom:1px solid var(--border)"><h3 style="font-size:.95rem">Live Preview</h3></div>
+            <div style="padding:12px 20px;border-bottom:1px solid var(--border);position:sticky;top:0;background:white;z-index:10">
+              <h3 style="font-size:.95rem;margin:0">Live Preview</h3>
+            </div>
             <div id="ncrPreview" style="padding:10px;font-size:.7rem;line-height:1.4"></div>
           </div>
         </div>`;
+      
       updateNCRPreview();
       ncrAutoSaveTimer = setInterval(() => autoSaveNCR(), 5000);
     }
 
     function getNCRData() {
+      const getField = (id) => {
+        const el = document.getElementById(id);
+        return el ? el.value : '';
+      };
       return {
-        ncrNo: document.getElementById('ncr_ncrNo')?.value || '',
-        distribution: document.getElementById('ncr_distribution')?.value || '',
-        project: document.getElementById('ncr_project')?.value || '',
-        vehicleNo: document.getElementById('ncr_vehicleNo')?.value || '',
-        product: document.getElementById('ncr_product')?.value || '',
-        assyDwgNo: document.getElementById('ncr_assyDwgNo')?.value || '',
-        rev: document.getElementById('ncr_rev')?.value || '',
-        qty: document.getElementById('ncr_qty')?.value || '',
-        partNo: document.getElementById('ncr_partNo')?.value || '',
-        supplier: document.getElementById('ncr_supplier')?.value || '',
-        assySerialNo: document.getElementById('ncr_assySerialNo')?.value || '',
-        detectionDate: document.getElementById('ncr_detectionDate')?.value || '',
-        partSerialNo: document.getElementById('ncr_partSerialNo')?.value || '',
-        place: document.getElementById('ncr_place')?.value || '',
-        blNo: document.getElementById('ncr_blNo')?.value || '',
-        storedAt: document.getElementById('ncr_storedAt')?.value || '',
-        invoiceNo: document.getElementById('ncr_invoiceNo')?.value || '',
-        severity: document.getElementById('ncr_severity')?.value || 'Major',
-        responsibility: document.getElementById('ncr_responsibility')?.value || '',
-        materialStatus: document.getElementById('ncr_materialStatus')?.value || 'Before installation',
-        disassembled: document.getElementById('ncr_disassembled')?.value || '',
-        ncrDesc: document.getElementById('ncr_ncrDesc')?.value || '',
-        team: document.getElementById('ncr_team')?.value || '',
-        issuedBy: document.getElementById('ncr_issuedBy')?.value || '',
-        reviewedBy: document.getElementById('ncr_reviewedBy')?.value || '',
-        cause: document.getElementById('ncr_cause')?.value || '',
-        correction: document.getElementById('ncr_correction')?.value || '',
-        healthySl: document.getElementById('ncr_healthySl')?.value || '',
-        faultySl: document.getElementById('ncr_faultySl')?.value || '',
-        decision: document.getElementById('ncr_decision')?.value || '',
-        remarks: document.getElementById('ncr_remarks')?.value || '',
-        itemDesc: document.getElementById('ncr_product')?.value || '',
-        trainNo: (document.getElementById('ncr_vehicleNo')?.value || '').replace(/TS#?/i, '').split(/\s/)[0],
-        car: (document.getElementById('ncr_vehicleNo')?.value || '').split(/\s+/).slice(1).join(' '),
-        date: document.getElementById('ncr_detectionDate')?.value || new Date().toLocaleDateString('en-GB')
+        ncrNo: getField('ncr_ncrNo'),
+        date: getField('ncr_date') || new Date().toLocaleDateString('en-GB'),
+        detectionDate: getField('ncr_detectionDate'),
+        distribution: getField('ncr_distribution'),
+        project: getField('ncr_project'),
+        line: getField('ncr_line'),
+        trainSet: getField('ncr_trainSet'),
+        vehicleNo: getField('ncr_vehicleNo'),
+        car: getField('ncr_car'),
+        location: getField('ncr_location'),
+        product: getField('ncr_product'),
+        itemDesc: getField('ncr_product'),
+        oem: getField('ncr_oem'),
+        partNo: getField('ncr_partNo'),
+        supplier: getField('ncr_supplier'),
+        assyDwgNo: getField('ncr_assyDwgNo'),
+        rev: getField('ncr_rev'),
+        assySerialNo: getField('ncr_assySerialNo'),
+        partSerialNo: getField('ncr_partSerialNo'),
+        qty: getField('ncr_qty'),
+        system: getField('ncr_system'),
+        subSystem: getField('ncr_subSystem'),
+        vendor: getField('ncr_vendor'),
+        ncrCategory: getField('ncr_ncrCategory'),
+        ncrType: getField('ncr_ncrType'),
+        severity: getField('ncr_severity') || 'Major',
+        priority: getField('ncr_priority'),
+        materialStatus: getField('ncr_materialStatus'),
+        disassembled: getField('ncr_disassembled'),
+        ncrDesc: getField('ncr_ncrDesc'),
+        place: getField('ncr_place'),
+        blNo: getField('ncr_blNo'),
+        storedAt: getField('ncr_storedAt'),
+        invoiceNo: getField('ncr_invoiceNo'),
+        rootCause: getField('ncr_rootCause'),
+        cause: getField('ncr_cause'),
+        investigationDate: getField('ncr_investigationDate'),
+        correction: getField('ncr_correction'),
+        preventiveAction: getField('ncr_preventiveAction'),
+        disposition: getField('ncr_disposition'),
+        decision: getField('ncr_decision'),
+        healthySl: getField('ncr_healthySl'),
+        faultySl: getField('ncr_faultySl'),
+        itemRepaired: getField('ncr_itemRepaired'),
+        itemReplaced: getField('ncr_itemReplaced'),
+        dateOfRepair: getField('ncr_dateOfRepair'),
+        gatePassNo: getField('ncr_gatePassNo'),
+        issuedBy: getField('ncr_issuedBy'),
+        department: getField('ncr_department'),
+        assignedTo: getField('ncr_assignedTo'),
+        responsibility: getField('ncr_responsibility'),
+        reviewedBy: getField('ncr_reviewedBy'),
+        team: getField('ncr_team'),
+        status: getField('ncr_status') || 'Open',
+        closureDate: getField('ncr_closureDate'),
+        closureAuthority: getField('ncr_closureAuthority'),
+        remarks: getField('ncr_remarks'),
+        trainNo: (getField('ncr_trainSet') || getField('ncr_vehicleNo') || '').replace(/TS#?/i, '').split(/\s/)[0]
       };
     }
 
@@ -947,9 +1231,15 @@
 
     async function saveNCR() {
       try {
+        const data = getNCRData();
+        // Validation
+        if (!data.ncrNo) return showToast('NCR Report No is required', 'error');
+        if (!data.ncrDesc) return showToast('Description of Non-Conformity is required', 'error');
+        if (!data.severity) return showToast('Severity is required', 'error');
+        
         const res = await fetch('/api/ncr/create', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(getNCRData())
+          body: JSON.stringify(data)
         });
         const r = await res.json();
         if (r.success) { showToast('NCR saved to Google Sheets!', 'success'); loadAllData(); }
@@ -1237,10 +1527,17 @@
           navigate('create-ncr');
           setTimeout(() => {
             const d = r.data;
-            const fields = ['ncrNo','date','detectionDate','itemDesc','ncrDesc','subSystem','trainNo','car','qty','faultySl','healthySl','responsibility','source','investigationReportDate','gatePassNo','remarks'];
-            fields.forEach(f => { const el = document.getElementById('ncr_' + f); if (el) el.value = d[f] || ''; });
-            const statusEl = document.getElementById('ncr_status');
-            if (statusEl) statusEl.value = 'Major';
+            const fields = ['ncrNo','date','detectionDate','itemDesc','ncrDesc','subSystem','trainNo','car','qty','faultySl','healthySl','responsibility','source','investigationReportDate','gatePassNo','remarks',
+              'project','line','trainSet','vehicleNo','location','oem','partNo','supplier','assyDwgNo','rev','assySerialNo','partSerialNo',
+              'system','vendor','ncrCategory','ncrType','severity','priority','materialStatus','disassembled',
+              'rootCause','cause','correction','preventiveAction','disposition','decision',
+              'itemRepaired','itemReplaced','dateOfRepair',
+              'issuedBy','department','assignedTo','reviewedBy','team',
+              'status','closureDate','closureAuthority','distribution'];
+            fields.forEach(f => { 
+              const el = document.getElementById('ncr_' + f); 
+              if (el && d[f]) el.value = d[f]; 
+            });
             updateNCRPreview();
           }, 500);
         }

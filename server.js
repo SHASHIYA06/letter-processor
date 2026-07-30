@@ -163,8 +163,111 @@ const NCR_COLUMNS = [
   'Qty', 'Sub-System', 'Train No', 'Car', 'Responsibility',
   'Status', 'Item Repaired', 'Item Replaced', 'Date of Repair',
   'Source', 'Investigation Report Date', 'Gate Pass No', 'Remarks',
-  'Attachment Link', 'File Name'
+  'Attachment Link', 'File Name',
+  'Project', 'Line', 'OEM', 'Train Set', 'Coach No',
+  'NCR Category', 'NCR Type', 'Priority', 'System',
+  'Location', 'Vendor', 'Raised By', 'Assigned To',
+  'Root Cause', 'Corrective Action', 'Preventive Action', 'Disposition',
+  'Closure Date', 'Closure Authority'
 ];
+
+// ══════════════════════════════════════════════════════════════
+//  MASTER DATA FOR NCR DROPDOWNS
+// ══════════════════════════════════════════════════════════════
+const NCR_MASTER_DATA = {
+  oem: [
+    'M/s Televic Rail N.V.', 'M/s KBI', 'M/s Alstom', 'M/s Siemens',
+    'M/s BEML Limited', 'M/s Medha', 'M/s Triton', 'M/s Astra Microwave',
+    'M/s Tech Mahindra', 'M/s Wipro', 'M/s HCL', 'M/s L&T',
+    'M/s Samsung', 'M/s Bosch', 'M/s ABB', 'M/s Honeywell',
+    'M/s Emerson', 'M/s Schneider Electric', 'M/s GE', 'M/s Rockwell'
+  ],
+  trainSets: [
+    'TS#1', 'TS#2', 'TS#3', 'TS#4', 'TS#5', 'TS#6', 'TS#7', 'TS#8',
+    'TS#9', 'TS#10', 'TS#11', 'TS#12', 'TS#13', 'TS#14', 'TS#15', 'TS#16',
+    'TS#17', 'TS#18', 'TS#19', 'TS#20', 'TS#21', 'TS#22', 'TS#23', 'TS#24',
+    'TS#25', 'TS#26'
+  ],
+  cars: [
+    'DMC1', 'DMC2', 'DMC3', 'DMC4', 'TC1', 'TC2', 'TC3', 'TC4',
+    'M1', 'M2', 'M3', 'M4', 'T1', 'T2', 'T3', 'T4',
+    'RMC1', 'RMC2', 'RIC1', 'RIC2', 'DMC-R1', 'DMC-R2', 'TC-R1', 'TC-R2',
+    'MC1', 'MC2', 'MC3', 'MC4', 'C1', 'C2', 'C3', 'C4'
+  ],
+  lines: [
+    'Line 1 (North-South)', 'Line 2 (East-West)', 'Line 3 (East-West Corridor)',
+    'Line 4 (Joka-Esplanade)', 'Line 5 (New Garia-Airport)',
+    'KMRCL RS-3R Phase 1', 'KMRCL RS-3R Phase 2', 'KMRCL RS-3R Phase 3',
+    'Kolkata Metro Line 1', 'Kolkata Metro Line 2'
+  ],
+  projects: [
+    'KMRCL RS-3R Project', 'Kolkata Metro Phase 1', 'Kolkata Metro Phase 2',
+    'Kolkata Metro Phase 3', 'BEML Rolling Stock', 'Metro Rail Extension',
+    'Nagpur Metro', 'Pune Metro', 'Ahmedabad Metro', 'Bhopal Metro',
+    'Kanpur Metro', 'Agra Metro', 'Delhi Metro Phase 4', 'Chennai Metro Phase 2',
+    'Bangalore Metro Phase 2', 'Hyderabad Metro Phase 2'
+  ],
+  systems: [
+    'Communication', 'Signalling', 'Telecom', 'Power Supply', 'Traction',
+    'Rolling Stock', 'Track', 'Pway', 'E&M', 'Civil',
+    'Automated Fare Collection', 'Passeral Information Display',
+    'Public Address', 'CCTV', 'Fire Detection & Suppression',
+    'HVAC', 'Lighting', 'Bridge Gate', 'Screen Door', 'Elevator',
+    'Escalator', 'DG Set', 'Transformer', 'Switchgear', 'Cable'
+  ],
+  subsystems: [
+    'FDI/TNI', 'TETRA Radio', 'Leaky Feeder', 'Antenna', 'Repeater',
+    'Base Station', 'Dispatch Console', 'ODN', 'OTN', 'MPLS',
+    'CCTV Camera', 'NVR', 'DVR', 'Monitor', 'UPS',
+    'Battery', 'Rectifier', 'Inverter', 'ATS', 'Panel',
+    'Speaker', 'Microphone', 'Amplifier', 'Mixer', 'Audio Processor',
+    'Signal Lamp', 'Point Machine', 'Track Circuit', 'Axle Counter', 'Interlocking',
+    'Pantograph', 'Traction Motor', 'Blower', 'Compressor', 'Brake System',
+    'Door System', 'Window', 'Seat', 'Flooring', 'Ceiling Panel'
+  ],
+  locations: [
+    'CPD Depot', 'Tapan Depot', 'Noapara Depot', 'Joka Depot',
+    'Salt Lake Depot', 'New Garia Depot', 'Airport Depot',
+    'North South Workshop', 'East West Workshop',
+    'Main Workshop', 'Electrical Workshop', 'Mechanical Workshop',
+    'Bogie Shop', 'Car Body Shop', 'Paint Shop', 'Final Assembly',
+    'Testing Track', 'Commissioning Area', 'Storage Yard', 'Siding'
+  ],
+  ncrCategories: [
+    'Material Non-Conformance', 'Process Non-Conformance',
+    'Documentation Non-Conformance', 'Calibration Non-Conformance',
+    'Environmental Non-Conformance', 'Safety Non-Conformance',
+    'Quality System Non-Conformance', 'Supplier Non-Conformance',
+    'Design Non-Conformance', 'Installation Non-Conformance'
+  ],
+  ncrTypes: [
+    'Critical', 'Major', 'Minor', 'Observation',
+    'Non-Conformity', 'Deficiency', 'Deviation', 'Non-Compliance'
+  ],
+  priorities: [
+    'Critical', 'High', 'Medium', 'Low', 'Immediate', 'Urgent', 'Routine'
+  ],
+  dispositions: [
+    'Use As Is', 'Rework', 'Repair', 'Scrap', 'Return to Supplier',
+    'Reject', 'Waiver/Concession', 'Regrade', 'Salvage', 'Hold'
+  ],
+  rootCauses: [
+    'Design Error', 'Manufacturing Defect', 'Material Defect',
+    'Process Deviation', 'Inadequate Training', 'Equipment Failure',
+    'Environmental Factors', 'Human Error', 'Supplier Issue',
+    'Specification Gap', 'Communication Failure', 'Storage Issue',
+    'Handling Damage', 'Calibration Drift', 'Wear and Tear'
+  ],
+  departments: [
+    'Quality Assurance', 'Quality Control', 'Production', 'Engineering',
+    'Design', 'Procurement', 'Stores', 'Maintenance', 'Safety',
+    'Project Management', 'Commercial', 'Finance', 'HR',
+    'IT', 'Logistics', 'Planning', 'R&D', 'S&M'
+  ],
+  severities: ['Critical', 'Major', 'Minor'],
+  materialStatuses: ['Before Installation', 'Installed', 'In Transit', 'In Storage', 'Under Maintenance'],
+  disassembledOptions: ['N/A', 'Disassembled', 'Before Receiving', 'During Installation', 'After Installation']
+};
 
 const JOINT_NOTE_COLUMNS = [
   'S.No', 'Joint Note No', 'Date', 'Parties',
@@ -739,13 +842,20 @@ app.post('/api/ncr/create', async (req, res) => {
 app.post('/api/ncr/update', async (req, res) => {
   try {
     const { rowIndex, data } = req.body;
+    // Build row data based on NCR_COLUMNS (42 columns)
     const ncrRow = [
-      '', data.ncrNo, data.date, data.detectionDate, data.itemDesc,
-      data.ncrDesc, data.faultySl, data.healthySl, data.qty,
-      data.subSystem, data.trainNo, data.car, data.responsibility,
-      data.status || 'Open', data.itemRepaired, data.itemReplaced,
-      data.dateOfRepair, data.source, data.investigationReportDate,
-      data.gatePassNo, data.remarks, data.attachmentLink || '', data.fileName || ''
+      '', // S.No (auto-generated)
+      data.ncrNo || '', data.date || '', data.detectionDate || '', data.itemDesc || '',
+      data.ncrDesc || '', data.faultySl || '', data.healthySl || '', data.qty || '',
+      data.subSystem || '', data.trainNo || '', data.car || '', data.responsibility || '',
+      data.status || 'Open', data.itemRepaired || '', data.itemReplaced || '',
+      data.dateOfRepair || '', data.source || '', data.investigationReportDate || '',
+      data.gatePassNo || '', data.remarks || '', data.attachmentLink || '', data.fileName || '',
+      data.project || '', data.line || '', data.oem || '', data.trainSet || '', data.coachNo || '',
+      data.ncrCategory || '', data.ncrType || '', data.priority || '', data.system || '',
+      data.location || '', data.vendor || '', data.raisedBy || data.issuedBy || '', data.assignedTo || '',
+      data.rootCause || '', data.correctiveAction || data.correction || '', data.preventiveAction || '',
+      data.disposition || '', data.closureDate || '', data.closureAuthority || ''
     ];
     if (sheets) {
       const updates = [];
@@ -775,24 +885,25 @@ app.get('/api/ncr/clone/:idx', async (req, res) => {
       const n = rows[i][1] || '';
       if (n.startsWith(prefix)) { const num = parseInt(n.replace(prefix, ''), 10); if (num > maxNum) maxNum = num; }
     }
-    const clonedData = {
-      ncrNo: `${prefix}${String(maxNum + 1).padStart(3, '0')}`,
-      date: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
-      detectionDate: original[3] || '',
-      itemDesc: original[4] || '',
-      ncrDesc: original[5] || '',
-      faultySl: original[6] || '',
-      healthySl: original[7] || '',
-      qty: original[8] || '',
-      subSystem: original[9] || '',
-      trainNo: original[10] || '',
-      car: original[11] || '',
-      responsibility: original[12] || '',
-      status: 'Open',
-      itemRepaired: '', itemReplaced: '', dateOfRepair: '',
-      source: original[17] || '', investigationReportDate: original[18] || '',
-      gatePassNo: original[19] || '', remarks: original[20] || ''
+    // Map row indices to field names based on NCR_COLUMNS
+    const fieldMap = {
+      1: 'ncrNo', 2: 'date', 3: 'detectionDate', 4: 'itemDesc',
+      5: 'ncrDesc', 6: 'faultySl', 7: 'healthySl', 8: 'qty',
+      9: 'subSystem', 10: 'trainNo', 11: 'car', 12: 'responsibility',
+      13: 'status', 14: 'itemRepaired', 15: 'itemReplaced', 16: 'dateOfRepair',
+      17: 'source', 18: 'investigationReportDate', 19: 'gatePassNo', 20: 'remarks',
+      23: 'project', 24: 'line', 25: 'oem', 26: 'trainSet', 27: 'coachNo',
+      28: 'ncrCategory', 29: 'ncrType', 30: 'priority', 31: 'system',
+      32: 'location', 33: 'vendor', 34: 'raisedBy', 35: 'assignedTo',
+      36: 'rootCause', 37: 'correctiveAction', 38: 'preventiveAction', 39: 'disposition',
+      40: 'closureDate', 41: 'closureAuthority'
     };
+    const clonedData = { ncrNo: `${prefix}${String(maxNum + 1).padStart(3, '0')}` };
+    for (const [idx, field] of Object.entries(fieldMap)) {
+      clonedData[field] = original[parseInt(idx)] || '';
+    }
+    clonedData.status = 'Open';
+    clonedData.date = new Date().toISOString().split('T')[0];
     res.json({ success: true, data: clonedData });
   } catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
@@ -1395,6 +1506,42 @@ app.delete('/api/clear/:sheetName', async (req, res) => {
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'running', googleConnected: !!sheets, timestamp: new Date().toISOString() });
+});
+
+// ══════════════════════════════════════════════════════════════
+//  MASTER DATA API
+// ══════════════════════════════════════════════════════════════
+app.get('/api/master-data', (req, res) => {
+  res.json({ success: true, data: NCR_MASTER_DATA });
+});
+
+app.get('/api/master-data/:category', (req, res) => {
+  const category = req.params.category;
+  if (NCR_MASTER_DATA[category]) {
+    res.json({ success: true, data: NCR_MASTER_DATA[category] });
+  } else {
+    res.status(404).json({ success: false, error: `Category '${category}' not found` });
+  }
+});
+
+// Add custom master data item
+app.post('/api/master-data/:category', express.json(), async (req, res) => {
+  try {
+    const category = req.params.category;
+    const { value } = req.body;
+    if (!value) return res.status(400).json({ success: false, error: 'Value is required' });
+    
+    if (!NCR_MASTER_DATA[category]) {
+      NCR_MASTER_DATA[category] = [];
+    }
+    if (!NCR_MASTER_DATA[category].includes(value)) {
+      NCR_MASTER_DATA[category].push(value);
+      NCR_MASTER_DATA[category].sort();
+    }
+    res.json({ success: true, data: NCR_MASTER_DATA[category] });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
 });
 
 // Global error handling middleware
