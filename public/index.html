@@ -180,7 +180,7 @@
           <div class="form-group">
             <label>Upload File</label>
             <div class="drop-zone" id="uploadDropZone">
-              <input type="file" id="uploadFile" accept=".pdf,.jpg,.jpeg,.png,.tiff,.tif,.docx,.doc,.txt" required>
+              <input type="file" id="uploadFile">
               <div class="icon">📄</div>
               <p>Drop file here or click to browse</p>
               <div class="types">PDF, JPG, PNG, TIFF, DOCX, TXT (Max 100MB)</div>
@@ -241,7 +241,7 @@
     function navigate(page) {
       currentPage = page;
       document.querySelectorAll('.menu-item').forEach(m => m.classList.remove('active'));
-      event.currentTarget.classList.add('active');
+      if (typeof event !== 'undefined' && event.currentTarget) event.currentTarget.classList.add('active');
       renderPage(page);
     }
 
@@ -495,26 +495,104 @@
     // === BULK IMPORT ===
     function renderBulkImport(el) {
       el.innerHTML = `
-        <div class="page-header"><div><h2>Bulk Import</h2><p>Import data from Excel or JSON files</p></div></div>
-        <div class="card">
-          <div class="card-header"><h3>Import from JSON</h3></div>
-          <div class="card-body">
-            <div class="form-group">
-              <label>Select Target Sheet</label>
-              <select id="importSheet"><option value="BEML Letters">BEML Letters</option><option value="KMRCL Letters">KMRCL Letters</option><option value="Metro Rail Letters">Metro Rail Letters</option><option value="NCR Records">NCR Records</option><option value="Joint Notes">Joint Notes</option></select>
-            </div>
-            <div class="form-group">
-              <label>Upload JSON File</label>
-              <div class="drop-zone" id="importDropZone">
-                <input type="file" id="importFile" accept=".json" onchange="handleImportFile(this)">
-                <div class="icon">📁</div>
-                <p>Drop JSON file here or click to browse</p>
+        <div class="page-header"><div><h2>Bulk Import</h2><p>Import data from Excel (.xlsx) or JSON files</p></div></div>
+        <div class="grid-2">
+          <div class="card">
+            <div class="card-header"><h3>Import from Excel (.xlsx)</h3></div>
+            <div class="card-body">
+              <div class="form-group">
+                <label>Select Target Sheet</label>
+                <select id="importSheetExcel"><option value="BEML Letters">BEML Letters</option><option value="KMRCL Letters">KMRCL Letters</option><option value="Metro Rail Letters">Metro Rail Letters</option><option value="NCR Records">NCR Records</option><option value="Joint Notes">Joint Notes</option></select>
               </div>
+              <div class="form-group">
+                <label>Upload Excel File</label>
+                <div class="drop-zone" id="importExcelDropZone">
+                  <input type="file" id="importExcelFile" accept=".xlsx,.xls" onchange="handleExcelImportFile(this)">
+                  <div class="icon">📊</div>
+                  <p>Drop Excel file here or click to browse</p>
+                  <div class="types">.xlsx, .xls files supported</div>
+                </div>
+              </div>
+              <div id="importExcelPreview" style="display:none;margin-top:16px"></div>
+              <button class="btn btn-success" id="importExcelBtn" onclick="doExcelImport()" disabled>📥 Import from Excel</button>
             </div>
-            <div id="importPreview" style="display:none;margin-top:16px"></div>
-            <button class="btn btn-success" id="importBtn" onclick="doImport()" disabled>📥 Import Data</button>
+          </div>
+          <div class="card">
+            <div class="card-header"><h3>Import from JSON</h3></div>
+            <div class="card-body">
+              <div class="form-group">
+                <label>Select Target Sheet</label>
+                <select id="importSheet"><option value="BEML Letters">BEML Letters</option><option value="KMRCL Letters">KMRCL Letters</option><option value="Metro Rail Letters">Metro Rail Letters</option><option value="NCR Records">NCR Records</option><option value="Joint Notes">Joint Notes</option></select>
+              </div>
+              <div class="form-group">
+                <label>Upload JSON File</label>
+                <div class="drop-zone" id="importDropZone">
+                  <input type="file" id="importFile" accept=".json" onchange="handleImportFile(this)">
+                  <div class="icon">📁</div>
+                  <p>Drop JSON file here or click to browse</p>
+                </div>
+              </div>
+              <div id="importPreview" style="display:none;margin-top:16px"></div>
+              <button class="btn btn-success" id="importBtn" onclick="doImport()" disabled>📥 Import from JSON</button>
+            </div>
+          </div>
+        </div>
+        <div class="card" style="margin-top:20px">
+          <div class="card-header"><h3>Import Format Guide</h3></div>
+          <div class="card-body">
+            <p style="font-size:.85rem;color:var(--text2);margin-bottom:12px">For Excel import, ensure your columns match one of these schemas:</p>
+            <div style="font-size:.8rem;font-family:monospace;background:var(--bg);padding:12px;border-radius:8px;overflow-x:auto">
+              <div><strong>Letters:</strong> Ref. Letter Number, Date, From, To (Addressee), Kind Attention, Subject, Letter Type, Letter Content, Enclosures, Remarks, Status</div>
+              <div style="margin-top:8px"><strong>NCR Records:</strong> NCR Report No, Date of NCR, Date of Detection, Item Description, NCR Description, Faulty Sl No, Healthy Sl No, Qty, Sub-System, Train No, Car, Responsibility, Status</div>
+              <div style="margin-top:8px"><strong>Joint Notes:</strong> Joint Note No, Date, Parties, Subject, Description, Items Discussed, Decisions, Action Items, Status</div>
+            </div>
           </div>
         </div>`;
+    }
+
+    let excelImportFile = null;
+    function handleExcelImportFile(input) {
+      const file = input.files[0];
+      if (!file) return;
+      excelImportFile = file;
+      document.getElementById('importExcelPreview').innerHTML = `<div style="padding:12px;background:var(--success-bg);border-radius:8px;font-size:.85rem">📊 <strong>${file.name}</strong> (${(file.size/1024).toFixed(1)} KB) ready to import</div>`;
+      document.getElementById('importExcelBtn').disabled = false;
+    }
+
+    async function doExcelImport() {
+      if (!excelImportFile) return;
+      const sheetName = document.getElementById('importSheetExcel').value;
+      const btn = document.getElementById('importExcelBtn');
+      btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Importing...';
+      
+      try {
+        const formData = new FormData();
+        formData.append('file', excelImportFile);
+        formData.append('sheetName', sheetName);
+        
+        const res = await fetch('/api/import/excel', {
+          method: 'POST',
+          body: formData
+        });
+        const r = await res.json();
+        
+        if (r.success) {
+          let msg = `Imported ${r.imported} of ${r.total} records to ${r.sheetName}`;
+          if (r.errors && r.errors.length > 0) {
+            msg += ` (${r.errors.length} errors)`;
+          }
+          showToast(msg, 'success');
+          loadAllData();
+          excelImportFile = null;
+          document.getElementById('importExcelPreview').innerHTML = `<div style="padding:12px;background:var(--success-bg);border-radius:8px;font-size:.85rem">✅ ${r.imported} records imported successfully</div>`;
+        } else {
+          showToast('Import failed: ' + (r.error || ''), 'error');
+        }
+      } catch (e) { 
+        showToast('Error: ' + e.message, 'error'); 
+      }
+      
+      btn.disabled = false; btn.innerHTML = '📥 Import from Excel';
     }
 
     let importData = null;
@@ -903,8 +981,8 @@
         else showToast('DOCX failed', 'error');
       } catch (e) { showToast('Error: ' + e.message, 'error'); }
     }
-    function downloadNCRPdf() { if (lastNCRPdfUrl) window.open(lastNCRPdfUrl, '_blank'); else showToast('Generate PDF first', 'error'); }
-    function downloadNCRDocx() { if (lastNCRDocxUrl) window.open(lastNCRDocxUrl, '_blank'); else showToast('Generate Word doc first', 'error'); }
+    function downloadNCRPdf() { if (lastNCRPdfUrl) { const a = document.createElement('a'); a.href = lastNCRPdfUrl; a.download = ''; document.body.appendChild(a); a.click(); document.body.removeChild(a); } else showToast('Generate PDF first', 'error'); }
+    function downloadNCRDocx() { if (lastNCRDocxUrl) { const a = document.createElement('a'); a.href = lastNCRDocxUrl; a.download = ''; document.body.appendChild(a); a.click(); document.body.removeChild(a); } else showToast('Generate Word doc first', 'error'); }
 
     // === CREATE LETTER ===
     let letterAutoSaveTimer = null;
@@ -1055,8 +1133,8 @@
         else showToast('DOCX failed', 'error');
       } catch (e) { showToast('Error: ' + e.message, 'error'); }
     }
-    function downloadLetterPdf() { if (lastLetterPdfUrl) window.open(lastLetterPdfUrl, '_blank'); else showToast('Generate PDF first', 'error'); }
-    function downloadLetterDocx() { if (lastLetterDocxUrl) window.open(lastLetterDocxUrl, '_blank'); else showToast('Generate Word doc first', 'error'); }
+    function downloadLetterPdf() { if (lastLetterPdfUrl) { const a = document.createElement('a'); a.href = lastLetterPdfUrl; a.download = ''; document.body.appendChild(a); a.click(); document.body.removeChild(a); } else showToast('Generate PDF first', 'error'); }
+    function downloadLetterDocx() { if (lastLetterDocxUrl) { const a = document.createElement('a'); a.href = lastLetterDocxUrl; a.download = ''; document.body.appendChild(a); a.click(); document.body.removeChild(a); } else showToast('Generate Word doc first', 'error'); }
 
     // === VIEW DOCUMENT ===
     function viewDocument(sheet, idx) {
@@ -1196,7 +1274,7 @@
     document.getElementById('uploadDropZone').addEventListener('drop', e => {
       e.preventDefault(); e.currentTarget.classList.remove('dragover');
       if (e.dataTransfer.files[0]) {
-        document.getElementById('uploadFile').files = e.dataTransfer.files;
+        currentUploadFile = e.dataTransfer.files[0];
         showUploadFileInfo(e.dataTransfer.files[0]);
       }
     });
@@ -1212,8 +1290,21 @@
       e.preventDefault();
       const type = document.getElementById('uploadType').value;
       const org = document.getElementById('uploadOrg').value;
-      const file = document.getElementById('uploadFile').files[0];
+      const file = currentUploadFile || document.getElementById('uploadFile').files[0];
+      console.log('Upload attempt:', { type, org, file: file ? file.name : 'none' });
       if (!file) return showToast('Select a file', 'error');
+
+      // Validate file size
+      if (file.size > 100 * 1024 * 1024) {
+        return showToast('File too large (max 100MB)', 'error');
+      }
+
+      // Validate file type
+      const allowedExts = ['.pdf', '.jpg', '.jpeg', '.png', '.gif', '.tiff', '.tif', '.doc', '.docx', '.txt', '.bmp', '.xlsx', '.xls'];
+      const ext = '.' + file.name.split('.').pop().toLowerCase();
+      if (!allowedExts.includes(ext)) {
+        return showToast('Unsupported file type: ' + ext, 'error');
+      }
 
       const btn = document.getElementById('uploadBtn');
       btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Processing...';
@@ -1229,7 +1320,15 @@
         formData.append('organization', org);
         formData.append('type', type);
 
+        console.log('Fetching /api/extract...');
         const extractRes = await fetch('/api/extract', { method: 'POST', body: formData });
+        console.log('Extract response status:', extractRes.status);
+        
+        if (!extractRes.ok) {
+          const errorText = await extractRes.text();
+          throw new Error(`Server error ${extractRes.status}: ${errorText}`);
+        }
+        
         const extractData = await extractRes.json();
 
         clearInterval(iv);
@@ -1246,18 +1345,27 @@
           const saveResult = await saveRes.json();
 
           if (saveResult.success) {
-            showToast('Document uploaded and saved!', 'success');
+            let msg = 'Document uploaded and saved!';
+            if (saveResult.drive && saveResult.drive.link) {
+              msg += ' (Google Drive: ✅)';
+            } else if (saveResult.drive && saveResult.drive.error) {
+              msg += ' (Drive upload failed: ' + saveResult.drive.error.substring(0, 50) + ')';
+            }
+            showToast(msg, 'success');
             closeModal('uploadModal');
             loadAllData();
           } else {
-            showToast('Saved to local only', 'success');
-            closeModal('uploadModal');
+            showToast('Save failed: ' + (saveResult.error || 'Unknown error'), 'error');
           }
         } else {
-          showToast('Extraction failed: ' + extractData.error, 'error');
+          showToast('Extraction failed: ' + (extractData.error || 'Unknown error'), 'error');
         }
-      } catch (e) { showToast('Error: ' + e.message, 'error'); }
+      } catch (e) { 
+        console.error('Upload error:', e); 
+        showToast('Error: ' + e.message, 'error'); 
+      }
 
+      clearInterval(iv);
       btn.disabled = false; btn.innerHTML = '📤 Upload & Extract';
       document.getElementById('uploadProgress').style.display = 'none';
     });

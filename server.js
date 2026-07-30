@@ -48,13 +48,30 @@ const storage = multer.diskStorage({
     cb(null, dir);
   },
   filename: (req, file, cb) => {
-    const org = req.body.organization || 'unknown';
-    const date = new Date().toISOString().split('T')[0];
-    const ext = path.extname(file.originalname);
-    cb(null, `${org}_${date}_${Date.now()}${ext}`);
+    try {
+      const org = (req.body.organization || 'unknown').replace(/[^a-zA-Z0-9]/g, '_');
+      const date = new Date().toISOString().split('T')[0];
+      const ext = path.extname(file.originalname) || '.bin';
+      const safeName = file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_').substring(0, 100);
+      cb(null, `${org}_${date}_${Date.now()}_${safeName}`);
+    } catch (err) {
+      cb(null, `${Date.now()}_upload${path.extname(file.originalname) || '.bin'}`);
+    }
   }
 });
-const upload = multer({ storage, limits: { fileSize: 100 * 1024 * 1024 } });
+const upload = multer({ 
+  storage, 
+  limits: { fileSize: 100 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const allowedExts = ['.pdf', '.jpg', '.jpeg', '.png', '.gif', '.tiff', '.tif', '.doc', '.docx', '.txt', '.bmp', '.xlsx', '.xls'];
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (allowedExts.includes(ext)) {
+      cb(null, true);
+    } else {
+      cb(new Error(`Unsupported file type: ${ext}. Allowed: ${allowedExts.join(', ')}`));
+    }
+  }
+});
 
 let auth, sheets, drive;
 let oauth2Client;
@@ -271,14 +288,35 @@ async function appendToSheet(sheetName, data, columns) {
       const key = col.toLowerCase().replace(/[^a-z0-9]/g, '');
       const dataKey = keyMap[key] || key;
       
-      // Debug: log mapping
-      if (idx < 5) console.log(`   Col[${idx}] "${col}" -> key "${key}" -> dataKey "${dataKey}" -> value "${data[dataKey] ? 'FOUND' : 'NOT FOUND'}"`);
-      
       // Try exact match first
       if (data[dataKey] !== undefined) return clean(String(data[dataKey]));
-      // Try fuzzy match
+      // Try fuzzy match - normalized key comparison
       for (const [k, v] of Object.entries(data)) {
         if (k.toLowerCase().replace(/[^a-z0-9]/g, '') === key) return clean(String(v));
+      }
+      // Try alternative common field names
+      const altKeys = {
+        'toaddressee': ['to', 'addressee', 'recipient'],
+        'kindattention': ['kindAttn', 'attention', 'kindattn'],
+        'lettercontent': ['letterContent', 'content', 'body', 'letterBody'],
+        'attachmentlink': ['attachmentLink', 'driveLink', 'link'],
+        'filename': ['fileName', 'file', 'originalName'],
+        'ncrreportno': ['ncrNo', 'ncrNumber', 'reportNo'],
+        'dateofncr': ['date', 'ncrDate', 'reportDate'],
+        'itemdescription': ['itemDesc', 'itemDescription', 'product', 'productName'],
+        'ncrdescription': ['ncrDesc', 'ncrDescription', 'description'],
+        'healthyslno': ['healthySl', 'healthySlNo', 'healthySerial'],
+        'faultyslno': ['faultySl', 'faultySlNo', 'faultySerial'],
+        'dateofrepair': ['dateOfRepair', 'repairDate'],
+        'investigationreportdate': ['investigationDate', 'investigationReportDate'],
+        'jointnoteno': ['jointNoteNo', 'noteNo', 'jnNo'],
+        'itemsdiscussed': ['items', 'itemsDiscussed'],
+        'actionitems': ['actionItems', 'action'],
+      };
+      if (altKeys[key]) {
+        for (const ak of altKeys[key]) {
+          if (data[ak] !== undefined) return clean(String(data[ak]));
+        }
       }
       return 'N/A';
     });
@@ -295,40 +333,86 @@ async function appendToSheet(sheetName, data, columns) {
   }
 }
 
+async function refreshOAuthToken() {
+  if (!oauth2Client || !oauth2Client.credentials || !oauth2Client.credentials.refresh_token) return false;
+  try {
+    const { credentials } = await oauth2Client.refreshAccessToken();
+    oauth2Client.setCredentials(credentials);
+    fs.writeFileSync(TOKEN_PATH, JSON.stringify(credentials, null, 2));
+    console.log('✅ OAuth token refreshed');
+    return true;
+  } catch (err) {
+    console.log('⚠️  Token refresh failed:', err.message);
+    return false;
+  }
+}
+
 async function uploadFileToDrive(filePath, originalName, org, subfolder = '') {
   if (!drive) {
     console.log(`📁 [LOCAL] Would upload: ${originalName}`);
     return { success: true, local: true };
   }
   try {
-    // Find or create subfolder in Shared Drive
-    let folderId = DRIVE_FOLDER_ID;
-    if (subfolder) {
-      const subfolderName = subfolder;
-      const query = `name='${subfolderName}' and mimeType='application/vnd.google-apps.folder' and '${folderId}' in parents`;
-      const existing = await drive.files.list({ q: query, fields: 'files(id)', supportsAllDrives: true, includeItemsFromAllDrives: true });
-      if (existing.data.files.length > 0) {
-        folderId = existing.data.files[0].id;
-      } else {
-        const folder = await drive.files.create({
-          requestBody: { name: subfolderName, mimeType: 'application/vnd.google-apps.folder', parents: [DRIVE_FOLDER_ID] },
-          fields: 'id',
-          supportsAllDrives: true
-        });
-        folderId = folder.data.id;
-        console.log(`📁 Created folder: ${subfolderName}`);
+    // Check if token needs refresh
+    if (oauth2Client && oauth2Client.credentials && oauth2Client.credentials.expiry_date) {
+      const now = Date.now();
+      const expiry = oauth2Client.credentials.expiry_date;
+      if (now >= expiry - 60000) { // Refresh 1 minute before expiry
+        await refreshOAuthToken();
       }
     }
 
-    const fileName = `${org}_${new Date().toISOString().split('T')[0]}_${originalName}`;
+    // Find or create subfolder in Shared Drive
+    let folderId = DRIVE_FOLDER_ID;
+    if (!folderId) {
+      console.log('⚠️  No Drive folder ID configured');
+      return { success: false, error: 'No Drive folder ID configured' };
+    }
+
+    if (subfolder) {
+      const subfolderName = subfolder;
+      // Search for existing subfolder
+      const query = `name='${subfolderName}' and mimeType='application/vnd.google-apps.folder' and '${folderId}' in parents and trashed=false`;
+      try {
+        const existing = await drive.files.list({ 
+          q: query, 
+          fields: 'files(id)', 
+          supportsAllDrives: true, 
+          includeItemsFromAllDrives: true 
+        });
+        if (existing.data.files.length > 0) {
+          folderId = existing.data.files[0].id;
+        } else {
+          const folder = await drive.files.create({
+            requestBody: { 
+              name: subfolderName, 
+              mimeType: 'application/vnd.google-apps.folder', 
+              parents: [folderId] 
+            },
+            fields: 'id',
+            supportsAllDrives: true
+          });
+          folderId = folder.data.id;
+          console.log(`📁 Created folder: ${subfolderName}`);
+        }
+      } catch (folderErr) {
+        console.log(`⚠️  Folder search/create failed, using parent: ${folderErr.message}`);
+        folderId = DRIVE_FOLDER_ID;
+      }
+    }
+
+    const dateStr = new Date().toISOString().split('T')[0];
+    const fileName = `${org}_${dateStr}_${originalName}`;
     const media = { mimeType: getMimeType(originalName), body: fs.createReadStream(filePath) };
+    
     const file = await drive.files.create({
       resource: { name: fileName, parents: [folderId] },
-      media, fields: 'id, webViewLink',
+      media, 
+      fields: 'id, webViewLink',
       supportsAllDrives: true
     });
 
-    // Make file viewable
+    // Make file viewable by anyone with the link
     await drive.permissions.create({
       fileId: file.data.id,
       requestBody: { type: 'anyone', role: 'reader' },
@@ -336,10 +420,18 @@ async function uploadFileToDrive(filePath, originalName, org, subfolder = '') {
     });
 
     const link = file.data.webViewLink || `https://drive.google.com/file/d/${file.data.id}/view`;
-    console.log(`✅ File uploaded: ${fileName}`);
+    console.log(`✅ File uploaded to Drive: ${fileName}`);
     return { success: true, fileId: file.data.id, link };
   } catch (err) {
     console.log(`❌ Drive upload failed: ${err.message}`);
+    // Try to refresh token on auth errors
+    if (err.message.includes('invalid_grant') || err.message.includes('Token has been expired') || err.code === 401) {
+      const refreshed = await refreshOAuthToken();
+      if (refreshed) {
+        console.log('🔄 Retrying Drive upload after token refresh...');
+        return uploadFileToDrive(filePath, originalName, org, subfolder);
+      }
+    }
     return { success: false, error: err.message };
   }
 }
@@ -398,13 +490,44 @@ async function extractTextFromImage(filePath) {
 }
 
 async function extractText(filePath) {
-  const ext = path.extname(filePath).toLowerCase();
-  if (ext === '.pdf') return await extractTextFromPDF(filePath);
-  if (ext === '.docx') return await extractTextFromDOCX(filePath);
-  if (ext === '.doc') return fs.readFileSync(filePath, 'utf8');
-  if (['.jpg', '.jpeg', '.png', '.gif', '.tiff', '.tif', '.bmp'].includes(ext)) return await extractTextFromImage(filePath);
-  if (ext === '.txt') return fs.readFileSync(filePath, 'utf8');
-  throw new Error(`Unsupported file type: ${ext}`);
+  try {
+    if (!fs.existsSync(filePath)) {
+      throw new Error(`File not found: ${filePath}`);
+    }
+    const ext = path.extname(filePath).toLowerCase();
+    if (ext === '.pdf') return await extractTextFromPDF(filePath);
+    if (ext === '.docx') return await extractTextFromDOCX(filePath);
+    if (ext === '.doc') {
+      // For .doc files, try to read as text (basic support)
+      try {
+        return fs.readFileSync(filePath, 'utf8');
+      } catch {
+        throw new Error('Cannot read .doc file. Please convert to .docx first.');
+      }
+    }
+    if (['.jpg', '.jpeg', '.png', '.gif', '.tiff', '.tif', '.bmp'].includes(ext)) {
+      return await extractTextFromImage(filePath);
+    }
+    if (ext === '.txt') return fs.readFileSync(filePath, 'utf8');
+    if (ext === '.xlsx' || ext === '.xls') {
+      // Excel files - extract text from cells
+      try {
+        const xlsxModule = await import('xlsx');
+        const XLSX = xlsxModule.default || xlsxModule;
+        const workbook = XLSX.readFile(filePath);
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+        const data = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+        return data.map(row => row.filter(c => c !== null && c !== undefined).join(' ')).join('\n');
+      } catch (xlsxErr) {
+        throw new Error(`Failed to read Excel file: ${xlsxErr.message}`);
+      }
+    }
+    throw new Error(`Unsupported file type: ${ext}`);
+  } catch (err) {
+    console.error(`❌ Text extraction failed for ${filePath}:`, err.message);
+    throw err;
+  }
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -498,96 +621,86 @@ function parseLetterContent(text, org) {
     from: extracted.from || 'N/A', to: extracted.to || 'N/A',
     kindAttn: extracted.kindAttn || 'N/A', subject: extracted.subject || 'N/A',
     letterContent: extracted.letterContent, enclosures: extracted.enclosures || 'N/A',
-    remarks: remarks || 'N/A', fileName: '', uploadDate: new Date().toISOString().split('T')[0]
+    remarks: remarks || 'N/A', fileName: '', 
+    uploadDate: new Date().toISOString().split('T')[0],
+    status: 'Open'
   };
 }
 
 // parseNCRContent is imported from ncr-parser.js
 
 function parseJointNoteContent(text) {
+  const normalized = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').replace(/\t/g, ' ').replace(/ {2,}/g, ' ');
+  const lines = normalized.split('\n').map(l => l.trim()).filter(Boolean);
+  const fullText = lines.join('\n');
 
-  // Date of Detection - "Date of Detection30 Dec 2025" or "Date of Detection: 30 Dec 2025"
-  m = fullText.match(/Date\s+of\s+Detection\s*[:\—\-]?\s*(\d{1,2}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+\d{2,4})/i);
-  if (m) extracted.detectionDate = m[1].trim();
-  
-  // Date of NCR
-  m = fullText.match(/Date\s+of\s+NCR\s*[:\—\-]?\s*(\d{1,2}[\.\/\-]\d{1,2}[\.\/\-]\d{2,4})/i);
-  if (m) extracted.date = m[1];
-  if (!extracted.date && extracted.detectionDate) extracted.date = extracted.detectionDate;
+  const extracted = {
+    jointNoteNo: '', date: '', parties: '', subject: '', description: '',
+    items: '', decisions: '', actionItems: '', attachments: '', status: ''
+  };
 
-  // Item/Product Description - "ProductSaloon door spindle" (no space)
-  m = fullText.match(/Product\s*(.+?)(?:\n|Part\s*Number)/i);
-  if (m) extracted.itemDesc = m[1].trim().substring(0, 200);
-  if (!extracted.itemDesc) {
-    m = fullText.match(/(?:Item\s+Description|Component)\s*[:\.]?\s*(.+?)(?:\n|$)/i);
-    if (m) extracted.itemDesc = m[1].trim().substring(0, 200);
+  let m;
+
+  // Joint Note Number
+  m = fullText.match(/Joint\s*Note\s*(?:No|Number)\.?\s*[:\.]?\s*(.+?)(?:\n|$)/i);
+  if (m) extracted.jointNoteNo = m[1].trim();
+  if (!extracted.jointNoteNo) {
+    m = fullText.match(/JN[\-\/]?\s*(\d[\w\-\/]+)/i);
+    if (m) extracted.jointNoteNo = m[1].trim();
   }
 
-  // Part Number and Supplier - "Part Number3TD04451R07SupplierM/s KBIQty.1"
-  m = fullText.match(/Part\s*Number\s*(\S+?)(?:Supplier)/i);
-  const partNo = m ? m[1] : '';
-  m = fullText.match(/Supplier\s*(.+?)(?:Qty|Quantity)/i);
-  const supplier = m ? m[1].trim() : '';
-  if (partNo || supplier) {
-    extracted.itemDesc = extracted.itemDesc.replace(/\s*\[Part:.*?\]/, '') + ` [Part: ${partNo}, Supplier: ${supplier}]`;
+  // Date
+  m = fullText.match(/(?:Date|Dated?)\s*[:\.]?\s*(\d{1,2}[\.\/\-]\d{1,2}[\.\/\-]\d{2,4})/i);
+  if (m) extracted.date = m[1].trim();
+  if (!extracted.date) {
+    m = fullText.match(/(?:Date|Dated?)\s*[:\.]?\s*(\d{1,2}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+\d{2,4})/i);
+    if (m) extracted.date = m[1].trim();
   }
 
-  // Qty
-  m = fullText.match(/Qty\.?\s*[:\.]?\s*(\d+)/i);
-  if (m) extracted.qty = m[1];
+  // Parties
+  m = fullText.match(/(?:Parties|Between|Participants)\s*[:\.]?\s*(.+?)(?:\n\n|Subject|$)/is);
+  if (m) extracted.parties = m[1].trim().replace(/\n/g, ', ').substring(0, 300);
 
-  // NCR Description - "Description of Non-Conformity" or "Description"
-  m = fullText.match(/Description\s+of\s+Non[\-\s]?Conformity\s*\n(.+?)(?:\nDate|\nIssued|\nCorrection|$)/is);
-  if (m) extracted.ncrDesc = m[1].trim().replace(/\n/g, ' ').substring(0, 500);
-  if (!extracted.ncrDesc) {
-    m = fullText.match(/(?:Description|Details|Observation)\s*[:\.]?\s*(.+?)(?:\n\n|$)/is);
-    if (m) extracted.ncrDesc = m[1].trim().replace(/\n/g, ' ').substring(0, 500);
+  // Subject
+  m = fullText.match(/Subject\s*[:\.—–\-]\s*(.+)/i);
+  if (m) extracted.subject = m[1].trim().substring(0, 500);
+  if (!extracted.subject) {
+    m = fullText.match(/Sub\.?\s*[:\.—–\-]\s*(.+)/i);
+    if (m) extracted.subject = m[1].trim().substring(0, 500);
   }
 
-  // Train No - "Vehicle No.TS#16" or "TS#16"
-  m = fullText.match(/Vehicle\s+No\.?\s*[:\.]?\s*(?:TS#?)?(\d+)/i);
-  if (m) extracted.trainNo = m[1];
-  if (!extracted.trainNo) {
-    m = fullText.match(/TS[#\s]*(\d+)/i);
-    if (m) extracted.trainNo = m[1];
+  // Description
+  m = fullText.match(/(?:Description|Details|Summary)\s*[:\.]?\s*\n(.+?)(?:\nItems|\nDecisions|\nAction|$)/is);
+  if (m) extracted.description = m[1].trim().replace(/\n/g, ' ').substring(0, 1000);
+  if (!extracted.description) {
+    m = fullText.match(/(?:Description|Details)\s*[:\.]?\s*(.+?)(?:\n\n|$)/is);
+    if (m) extracted.description = m[1].trim().replace(/\n/g, ' ').substring(0, 1000);
   }
 
-  // Car - "DMC2 - R1" or "Car: DMC2"
-  m = fullText.match(/(?:DMC|TC|Car|Coach)\s*[-#]?\s*([A-Z0-9\-]+)/i);
-  if (m) extracted.car = m[1];
+  // Items Discussed
+  m = fullText.match(/(?:Items?\s+Discussed|Discussion\s+Points?)\s*[:\.]?\s*\n(.+?)(?:\nDecisions|\nAction|$)/is);
+  if (m) extracted.items = m[1].trim().replace(/\n/g, ' ').substring(0, 1000);
 
-  // Sub-system
-  m = fullText.match(/Sub[\-\s]?System\s*[:\.]?\s*(\w+)/i);
-  if (m) extracted.subSystem = m[1];
+  // Decisions
+  m = fullText.match(/(?:Decisions?|Resolution|Agreed)\s*[:\.]?\s*\n(.+?)(?:\nAction|\nNext|$)/is);
+  if (m) extracted.decisions = m[1].trim().replace(/\n/g, ' ').substring(0, 1000);
 
-  // Status - "StatusOPEN" or "Status: OPEN"
-  m = fullText.match(/Status\s*[:\.]?\s*(OPEN|CLOSED|PENDING|RESOLVED)/i);
+  // Action Items
+  m = fullText.match(/(?:Action\s+Items?|Next\s+Steps?|Follow[\s\-]?up)\s*[:\.]?\s*\n(.+?)(?:\n\n|$)/is);
+  if (m) extracted.actionItems = m[1].trim().replace(/\n/g, ' ').substring(0, 1000);
+
+  // Status
+  m = fullText.match(/Status\s*[:\.]?\s*(OPEN|CLOSED|PENDING|RESOLVED|COMPLETED)/i);
   if (m) extracted.status = m[1].toUpperCase();
 
-  // Responsibility
-  m = fullText.match(/(?:Responsibility|Vendor|OEM)\s*[:\.]?\s*(.+?)(?:\n|$)/i);
-  if (m) extracted.responsibility = m[1].trim().substring(0, 100);
-
-  // Faulty/Healthy Sl No - format: "Faulty Sl. No.—Healthy Sl. No.—StatusOPEN"
-  // Split by em dash to get individual values
-  const faultyHealthyLine = fullText.match(/Faulty\s+Sl\.?\s*No\.?\s*[:\u2014\-]?\s*Healthy\s+Sl\.?\s*No\.?\s*[:\u2014\-]?\s*Status\s*(OPEN|CLOSED|PENDING)/i);
-  if (faultyHealthyLine) {
-    // The entire line matches, so values are empty between em dashes
-    extracted.faultySl = '';
-    extracted.healthySl = '';
-  } else {
-    // Try individual patterns
-    const faultyLine = fullText.match(/Faulty\s+Sl\.?\s*No\.?\s*[:\u2014\-]?\s*(.+?)(?:\u2014|\n|$)/i);
-    if (faultyLine) extracted.faultySl = faultyLine[1].trim();
-    
-    const healthyLine = fullText.match(/Healthy\s+Sl\.?\s*No\.?\s*[:\u2014\-]?\s*(.+?)(?:\u2014|\n|$)/i);
-    if (healthyLine) extracted.healthySl = healthyLine[1].trim();
-  }
-
-  // Responsibility - look for Distribution line
-  if (!extracted.responsibility) {
-    m = fullText.match(/Distribution\s*[:\.]?\s*(.+?)(?:\n|$)/i);
-    if (m) extracted.responsibility = m[1].trim().substring(0, 100);
+  // If no subject found, try to get first meaningful line as subject
+  if (!extracted.subject && lines.length > 0) {
+    for (const line of lines.slice(0, 10)) {
+      if (line.length > 10 && !line.match(/^(joint|date|between|participant|subject)/i)) {
+        extracted.subject = line.substring(0, 200);
+        break;
+      }
+    }
   }
 
   return extracted;
@@ -844,29 +957,69 @@ app.get('/api/auth/status', (req, res) => {
 app.post('/api/extract', upload.single('file'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ success: false, error: 'No file uploaded' });
+    
+    // Verify file exists
+    if (!fs.existsSync(req.file.path)) {
+      return res.status(400).json({ success: false, error: 'File not found after upload' });
+    }
+
     let org = req.body.organization || 'Unknown';
     const docType = req.body.type || 'letter'; // letter, ncr, joint_note
     console.log(`\n📄 Processing: ${req.file.originalname} for ${org} (${docType})`);
-    const text = await extractText(req.file.path);
-    console.log(`📝 Extracted ${text.length} characters`);
+    
+    let text;
+    try {
+      text = await extractText(req.file.path);
+      console.log(`📝 Extracted ${text.length} characters`);
+    } catch (extractErr) {
+      console.log('⚠️  Text extraction failed:', extractErr.message);
+      // Return a partial result with filename
+      return res.json({ 
+        success: true, 
+        data: {
+          organization: org,
+          fileName: req.file.filename,
+          uploadDate: new Date().toISOString().split('T')[0],
+          letterType: 'General',
+          status: 'Open',
+          error: 'Text extraction failed: ' + extractErr.message
+        }, 
+        rawText: '' 
+      });
+    }
 
-    if (org === 'Unknown' || !org) { const det = detectOrganization(text); if (det) { org = det; console.log(`🔍 Auto-detected: ${org}`); } }
+    if (org === 'Unknown' || !org) { 
+      const det = detectOrganization(text); 
+      if (det) { org = det; console.log(`🔍 Auto-detected: ${org}`); } 
+    }
 
     let parsed;
-    if (docType === 'ncr') {
-      parsed = parseNCRContent(text);
-      parsed.organization = org;
-      parsed.fileName = req.file.filename;
-      parsed.uploadDate = new Date().toISOString().split('T')[0];
-    } else if (docType === 'joint_note') {
-      parsed = parseJointNoteContent(text);
-      parsed.organization = org;
-      parsed.fileName = req.file.filename;
-      parsed.uploadDate = new Date().toISOString().split('T')[0];
-    } else {
-      parsed = parseLetterContent(text, org);
-      parsed.fileName = req.file.filename;
-      parsed.detectedOrg = org;
+    try {
+      if (docType === 'ncr') {
+        parsed = parseNCRContent(text);
+        parsed.organization = org;
+        parsed.fileName = req.file.filename;
+        parsed.uploadDate = new Date().toISOString().split('T')[0];
+      } else if (docType === 'joint_note') {
+        parsed = parseJointNoteContent(text);
+        parsed.organization = org;
+        parsed.fileName = req.file.filename;
+        parsed.uploadDate = new Date().toISOString().split('T')[0];
+      } else {
+        parsed = parseLetterContent(text, org);
+        parsed.fileName = req.file.filename;
+        parsed.detectedOrg = org;
+      }
+    } catch (parseErr) {
+      console.log('⚠️  Content parsing failed:', parseErr.message);
+      parsed = {
+        organization: org,
+        fileName: req.file.filename,
+        uploadDate: new Date().toISOString().split('T')[0],
+        letterType: 'General',
+        status: 'Open',
+        error: 'Parsing failed: ' + parseErr.message
+      };
     }
 
     res.json({ success: true, data: parsed, rawText: text.substring(0, 5000) });
@@ -878,29 +1031,51 @@ app.post('/api/extract', upload.single('file'), async (req, res) => {
 
 app.post('/api/save', upload.single('file'), async (req, res) => {
   try {
-    const data = JSON.parse(req.body.data);
-    const org = data.organization;
+    let data;
+    try {
+      data = JSON.parse(req.body.data);
+    } catch (parseErr) {
+      return res.status(400).json({ success: false, error: 'Invalid data format: ' + parseErr.message });
+    }
+    
+    const org = data.organization || 'Unknown';
     const docType = data.docType || 'letter';
     let driveResult = { success: false };
 
     if (req.file) {
       console.log(`\n📄 Saving: ${req.file.originalname}`);
-      try {
-        const text = await extractText(req.file.path);
-        let parsed;
-        if (docType === 'ncr') parsed = parseNCRContent(text);
-        else if (docType === 'joint_note') parsed = parseJointNoteContent(text);
-        else parsed = parseLetterContent(text, org);
-        Object.assign(data, parsed);
-      } catch (e) { console.log('⚠️  OCR failed:', e.message); }
+      
+      // Verify file exists before processing
+      if (!fs.existsSync(req.file.path)) {
+        console.log('⚠️  Uploaded file not found, skipping OCR');
+      } else {
+        try {
+          const text = await extractText(req.file.path);
+          let parsed;
+          if (docType === 'ncr') parsed = parseNCRContent(text);
+          else if (docType === 'joint_note') parsed = parseJointNoteContent(text);
+          else parsed = parseLetterContent(text, org);
+          Object.assign(data, parsed);
+        } catch (e) { 
+          console.log('⚠️  OCR failed:', e.message); 
+        }
+      }
 
       // Upload to Drive with subfolder
       let subfolder = 'Letters';
       if (docType === 'ncr') subfolder = 'NCR';
       else if (docType === 'joint_note') subfolder = 'Joint Notes';
-      driveResult = await uploadFileToDrive(req.file.path, req.file.originalname, org, subfolder);
-      data.fileName = req.file.filename;
-      if (driveResult.link) data.attachmentLink = driveResult.link;
+      
+      try {
+        driveResult = await uploadFileToDrive(req.file.path, req.file.originalname, org, subfolder);
+        data.fileName = req.file.filename;
+        if (driveResult.link) data.attachmentLink = driveResult.link;
+      } catch (driveErr) {
+        console.log('⚠️  Drive upload failed:', driveErr.message);
+        driveResult = { success: false, error: driveErr.message };
+        // Still save to sheet even if Drive fails
+        data.fileName = req.file.filename;
+      }
     }
 
     // Determine sheet name
@@ -1051,6 +1226,108 @@ app.post('/api/import/json', express.json({ limit: '50mb' }), async (req, res) =
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// Excel Import Route
+app.post('/api/import/excel', upload.single('file'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ success: false, error: 'No file uploaded' });
+    const sheetName = req.body.sheetName || 'BEML Letters';
+    const ext = path.extname(req.file.originalname).toLowerCase();
+    
+    if (ext !== '.xlsx' && ext !== '.xls') {
+      return res.status(400).json({ success: false, error: 'Only Excel files (.xlsx, .xls) are supported' });
+    }
+
+    // Dynamic import of xlsx
+    const xlsxModule = await import('xlsx');
+    const XLSX = xlsxModule.default || xlsxModule;
+    const workbook = XLSX.readFile(req.file.path);
+    const sheetName0 = workbook.SheetNames[0];
+    const worksheet = workbook.Sheets[sheetName0];
+    const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+
+    if (jsonData.length < 2) {
+      return res.status(400).json({ success: false, error: 'Excel file is empty or has no data rows' });
+    }
+
+    const headers = jsonData[0];
+    const dataRows = jsonData.slice(1);
+    
+    // Determine column set based on sheet name
+    let columns;
+    if (sheetName.includes('NCR')) columns = NCR_COLUMNS;
+    else if (sheetName.includes('Joint')) columns = JOINT_NOTE_COLUMNS;
+    else columns = LETTER_COLUMNS;
+
+    console.log(`📊 Importing ${dataRows.length} rows from Excel to ${sheetName}`);
+    console.log(`   Excel headers: ${headers.join(', ')}`);
+    console.log(`   Target columns: ${columns.join(', ')}`);
+
+    let count = 0;
+    let errors = [];
+    
+    for (let i = 0; i < dataRows.length; i++) {
+      try {
+        const row = dataRows[i];
+        const record = {};
+        
+        // Map Excel headers to record fields
+        headers.forEach((header, idx) => {
+          if (header && row[idx] !== undefined) {
+            const cleanHeader = header.toString().toLowerCase().replace(/[^a-z0-9]/g, '');
+            // Find matching column in target schema
+            for (const col of columns) {
+              const cleanCol = col.toLowerCase().replace(/[^a-z0-9]/g, '');
+              if (cleanHeader === cleanCol || cleanHeader.includes(cleanCol) || cleanCol.includes(cleanHeader)) {
+                record[col] = row[idx] !== null ? String(row[idx]) : '';
+                break;
+              }
+            }
+            // Also try direct key mapping
+            const keyMap = {
+              'refno': 'Ref. Letter Number', 'refnumber': 'Ref. Letter Number',
+              'date': 'Date', 'from': 'From', 'to': 'To (Addressee)',
+              'subject': 'Subject', 'status': 'Status', 'remarks': 'Remarks',
+              'ncrno': 'NCR Report No', 'ncrnumber': 'NCR Report No',
+              'ncrdate': 'Date of NCR', 'detectiondate': 'Date of Detection',
+              'itemdescription': 'Item Description', 'ncrdescription': 'NCR Description',
+              'trainno': 'Train No', 'car': 'Car', 'subsystem': 'Sub-System',
+              'qty': 'Qty', 'responsibility': 'Responsibility',
+              'faultyslno': 'Faulty Sl No', 'healthyslno': 'Healthy Sl No',
+              'jointnoteno': 'Joint Note No', 'parties': 'Parties',
+              'decisions': 'Decisions', 'actionitems': 'Action Items',
+            };
+            if (keyMap[cleanHeader] && !record[keyMap[cleanHeader]]) {
+              record[keyMap[cleanHeader]] = row[idx] !== null ? String(row[idx]) : '';
+            }
+          }
+        });
+
+        // Add S.No if not present
+        if (!record['S.No']) record['S.No'] = String(count + 1);
+
+        await appendToSheet(sheetName, record, columns);
+        count++;
+      } catch (rowErr) {
+        errors.push(`Row ${i + 2}: ${rowErr.message}`);
+      }
+    }
+
+    // Cleanup uploaded file
+    try { fs.unlinkSync(req.file.path); } catch {}
+
+    res.json({ 
+      success: true, 
+      imported: count, 
+      total: dataRows.length, 
+      errors: errors.length > 0 ? errors.slice(0, 10) : [],
+      sheetName 
+    });
+  } catch (err) {
+    console.error('❌ Excel import error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // Update record status or fields
 app.put('/api/update', express.json(), async (req, res) => {
   if (!sheets) return res.json({ success: true, local: true });
@@ -1118,6 +1395,25 @@ app.delete('/api/clear/:sheetName', async (req, res) => {
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'running', googleConnected: !!sheets, timestamp: new Date().toISOString() });
+});
+
+// Global error handling middleware
+app.use((err, req, res, next) => {
+  console.error('❌ Global error:', err.message);
+  
+  // Handle multer errors
+  if (err.code === 'LIMIT_FILE_SIZE') {
+    return res.status(413).json({ success: false, error: 'File too large. Maximum size is 100MB.' });
+  }
+  if (err.code === 'LIMIT_UNEXPECTED_FILE') {
+    return res.status(400).json({ success: false, error: 'Unexpected file field.' });
+  }
+  if (err.message && err.message.includes('Unsupported file type')) {
+    return res.status(400).json({ success: false, error: err.message });
+  }
+  
+  // Handle other errors
+  res.status(500).json({ success: false, error: err.message || 'Internal server error' });
 });
 
 function detectOrganization(text) {
