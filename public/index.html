@@ -258,6 +258,8 @@
     // === NAVIGATION ===
     function navigate(page) {
       currentPage = page;
+      if (ncrAutoSaveTimer) { clearInterval(ncrAutoSaveTimer); ncrAutoSaveTimer = null; }
+      if (letterAutoSaveTimer) { clearInterval(letterAutoSaveTimer); letterAutoSaveTimer = null; }
       document.querySelectorAll('.menu-item').forEach(m => m.classList.remove('active'));
       if (typeof event !== 'undefined' && event.currentTarget) event.currentTarget.classList.add('active');
       renderPage(page);
@@ -326,8 +328,10 @@
         else if (key.includes('NCR')) ncr += count;
         else if (key.includes('Joint')) jn += count;
         for (let i = 1; i < rows.length; i++) {
-          const status = (rows[i][rows[i].length - 1] || '').toLowerCase();
-          if (status !== 'closed') open++;
+          const isNCR = key.includes('NCR');
+          const statusIdx = isNCR ? 13 : rows[i].length - 1;
+          const status = (rows[i][statusIdx] || '').toLowerCase();
+          if (status !== 'closed' && status !== '' && status !== 'n/a') open++;
         }
       }
       return { total, beml, kmrcl, ncr, jn, open };
@@ -771,18 +775,32 @@
               <p style="color:var(--text3);font-size:.8rem;margin-top:4px">Export as CSV</p>
             </div>
           </div>
-          <div class="card" style="cursor:pointer" onclick="exportJSON()">
+          <div class="card" style="cursor:pointer" onclick="exportJSON('BEML Letters')">
             <div class="card-body" style="text-align:center;padding:30px">
               <div style="font-size:2rem;margin-bottom:8px">📦</div>
-              <h3>Export All (JSON)</h3>
-              <p style="color:var(--text3);font-size:.8rem;margin-top:4px">Complete backup</p>
+              <h3>BEML Letters (JSON)</h3>
+              <p style="color:var(--text3);font-size:.8rem;margin-top:4px">Backup as JSON</p>
+            </div>
+          </div>
+          <div class="card" style="cursor:pointer" onclick="exportJSON('NCR Records')">
+            <div class="card-body" style="text-align:center;padding:30px">
+              <div style="font-size:2rem;margin-bottom:8px">📦</div>
+              <h3>NCR Records (JSON)</h3>
+              <p style="color:var(--text3);font-size:.8rem;margin-top:4px">Backup as JSON</p>
+            </div>
+          </div>
+          <div class="card" style="cursor:pointer" onclick="exportJSON('Joint Notes')">
+            <div class="card-body" style="text-align:center;padding:30px">
+              <div style="font-size:2rem;margin-bottom:8px">📦</div>
+              <h3>Joint Notes (JSON)</h3>
+              <p style="color:var(--text3);font-size:.8rem;margin-top:4px">Backup as JSON</p>
             </div>
           </div>
         </div>`;
     }
 
     function exportCSV(sheet) { window.open(`/api/export/csv?sheet=${encodeURIComponent(sheet)}`, '_blank'); showToast('Download started', 'success'); }
-    function exportJSON() { window.open('/api/export/json?sheet=BEML Letters', '_blank'); showToast('Download started', 'success'); }
+    function exportJSON(sheet) { window.open(`/api/export/json?sheet=${encodeURIComponent(sheet || 'BEML Letters')}`, '_blank'); showToast('Download started', 'success'); }
 
     // === CREATE NCR ===
     let ncrAutoSaveTimer = null;
@@ -793,7 +811,8 @@
         const res = await fetch('/api/master-data');
         const data = await res.json();
         if (data.success) ncrMasterData = data.data;
-      } catch (e) { console.error('Failed to load master data:', e); }
+        else showToast('Failed to load master data', 'error');
+      } catch (e) { console.error('Failed to load master data:', e); showToast('Master data unavailable', 'error'); }
     }
 
     function createDropdown(id, options, value, placeholder, searchable) {
@@ -1306,6 +1325,9 @@
             <div class="form-group"><label>Organization</label><select id="letter_org" onchange="updateLetterPreview()"><option value="BEML">BEML</option><option value="KMRCL">KMRCL</option><option value="Metro Rail">Metro Rail</option></select></div>
             <div class="form-row"><div class="form-group"><label>Letter Number</label><input id="letter_refNumber" value="${esc(refNo)}" onchange="updateLetterPreview()"></div>
             <div class="form-group"><label>Date</label><input type="text" id="letter_date" value="${new Date().toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'})}" onchange="updateLetterPreview()"></div></div>
+            <div class="form-row">
+              <div class="form-group"><label>From</label><input id="letter_from" value="Shashi Shekhar Mishra, Sr. Manager" placeholder="Sender name and designation" onchange="updateLetterPreview()"></div>
+            </div>
             <div class="form-group"><label>All References</label><textarea id="letter_allReferences" rows="2" placeholder="Previous letter references..." onchange="updateLetterPreview()"></textarea></div>
             <div class="form-group"><label>To (Addressee)</label><textarea id="letter_to" rows="3" placeholder="The Manager/Director..." onchange="updateLetterPreview()"></textarea></div>
             <div class="form-group"><label>Kind Attention</label><input id="letter_kindAttn" onchange="updateLetterPreview()"></div>
@@ -1343,14 +1365,15 @@
         refNumber: document.getElementById('letter_refNumber')?.value || '',
         date: document.getElementById('letter_date')?.value || '',
         allReferences: document.getElementById('letter_allReferences')?.value || '',
+        from: document.getElementById('letter_from')?.value || '',
         to: document.getElementById('letter_to')?.value || '',
         kindAttn: document.getElementById('letter_kindAttn')?.value || '',
         subject: document.getElementById('letter_subject')?.value || '',
         letterContent: document.getElementById('letter_letterContent')?.value || '',
         enclosures: document.getElementById('letter_enclosures')?.value || '',
-        signatory: document.getElementById('letter_signatory')?.value || 'Shashi Shekhar Mishra',
-        designation: document.getElementById('letter_designation')?.value || 'Sr. Manager',
-        project: document.getElementById('letter_project')?.value || 'KMRCL RS(3) Project',
+        signatory: document.getElementById('letter_signatory')?.value || '',
+        designation: document.getElementById('letter_designation')?.value || '',
+        project: document.getElementById('letter_project')?.value || '',
         cc: document.getElementById('letter_cc')?.value || '',
         remarks: document.getElementById('letter_remarks')?.value || '',
         letterType: 'General', status: 'Open',
@@ -1471,7 +1494,7 @@
         <button class="btn btn-secondary" onclick="openInDrive('${sheet}',${idx})">☁️ Open in Drive</button>
       </div>`;
 
-      document.getElementById('detailTitle').textContent = sheet + ' - ' + (record[1] || record[3] || 'Record');
+      document.getElementById('detailTitle').textContent = sheet + ' - ' + (record[1] || record[2] || record[3] || 'Record');
       document.getElementById('detailBody').innerHTML = html;
       document.getElementById('detailModal').classList.add('show');
     }
@@ -1692,10 +1715,10 @@
       t.textContent = msg; t.className = `toast ${type} show`;
       setTimeout(() => t.classList.remove('show'), 4000);
     }
-    function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+    function esc(s) { if (!s) return ''; return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;'); }
     function globalSearchFn() {
       const q = document.getElementById('globalSearch').value;
-      if (q.length >= 2) { navigate('search'); document.getElementById('searchQuery').value = q; doSearch(); }
+      if (q.length >= 2) { navigate('search'); setTimeout(() => { const el = document.getElementById('searchQuery'); if (el) { el.value = q; doSearch(); } }, 100); }
     }
     function downloadFile(sheet, idx) { navigate('export'); showToast('Use Export to download', 'success'); }
     function openInDrive(sheet, idx) { navigate('drive'); showToast('Check Google Drive', 'success'); }

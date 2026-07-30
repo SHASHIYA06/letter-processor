@@ -170,7 +170,7 @@ async function initGoogleAuth() {
 }
 
 const SPREADSHEET_ID = process.env.GOOGLE_SPREADSHEET_ID || '1qx5FAkOE959ng8eOGb_NC_DuF381x-NYRwKED0hgRIk';
-const DRIVE_FOLDER_ID = process.env.GOOGLE_DRIVE_FOLDER_ID || '0AKn4jR1qLh4TUk9PVA';
+const DRIVE_FOLDER_ID = process.env.GOOGLE_DRIVE_FOLDER_ID || '1M3k66ROJSNVUe-TB5rcF4bJ0O6obBGRp';
 
 // Sheet names for each organization
 const SHEET_NAMES = {
@@ -631,12 +631,16 @@ async function extractText(filePath) {
     if (ext === '.pdf') return await extractTextFromPDF(filePath);
     if (ext === '.docx') return await extractTextFromDOCX(filePath);
     if (ext === '.doc') {
-      // For .doc files, try to read as text (basic support)
+      // .doc is binary format — try mammoth first, then antiword, then warn
       try {
-        return fs.readFileSync(filePath, 'utf8');
-      } catch {
-        throw new Error('Cannot read .doc file. Please convert to .docx first.');
-      }
+        const buffer = fs.readFileSync(filePath);
+        const result = await mammoth.extractRawText({ buffer });
+        if (result.value && result.value.trim().length > 10) return result.value;
+      } catch {}
+      try {
+        return execSync(`antiword "${filePath}" 2>/dev/null || cat "${filePath}"`, { encoding: 'utf8', timeout: 30000 });
+      } catch {}
+      throw new Error('Cannot extract text from .doc file. Please convert to .docx first.');
     }
     if (['.jpg', '.jpeg', '.png', '.gif', '.tiff', '.tif', '.bmp'].includes(ext)) {
       return await extractTextFromImage(filePath);
@@ -882,7 +886,7 @@ app.post('/api/ncr/update', async (req, res) => {
     const { rowIndex, data } = req.body;
     // Build row data based on NCR_COLUMNS (43 columns)
     const ncrRow = [
-      '', // S.No (auto-generated)
+      rowIndex, // S.No (keep original)
       data.ncrNo || '', data.date || '', data.detectionDate || '', data.itemDesc || '',
       data.ncrDesc || '', data.faultySl || '', data.healthySl || '', data.qty || '',
       data.subSystem || '', data.trainNo || '', data.car || '', data.responsibility || '',
@@ -913,8 +917,8 @@ app.post('/api/ncr/update', async (req, res) => {
 app.get('/api/ncr/clone/:idx', async (req, res) => {
   try {
     const rows = allDataCache['NCR Records'] || [];
-    const idx = parseInt(req.params.idx);
-    if (!rows[idx]) return res.status(404).json({ success: false, error: 'NCR not found' });
+    const idx = parseInt(req.params.idx, 10);
+    if (isNaN(idx) || !rows[idx]) return res.status(404).json({ success: false, error: 'NCR not found' });
     const original = rows[idx];
     const year = new Date().getFullYear();
     const prefix = `NCR-${year}-`;
@@ -1074,6 +1078,17 @@ app.post('/api/auto-save', async (req, res) => {
     res.json({ success: true });
   } catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
+
+// ══════════════════════════════════════════════════════════════
+//  HELPER FUNCTIONS
+// ══════════════════════════════════════════════════════════════
+function detectOrganization(text) {
+  const l = text.toLowerCase();
+  if (l.includes('kmrcl') || l.includes('kolkata metro')) return 'KMRCL';
+  if (l.includes('metro rail') || l.includes('metro railway')) return 'Metro Rail';
+  if (l.includes('beml') || l.includes('bharat earth')) return 'BEML';
+  return null;
+}
 
 // ══════════════════════════════════════════════════════════════
 //  OAUTH2 ROUTES
@@ -1380,7 +1395,7 @@ app.get('/api/export/json', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-app.post('/api/import/json', express.json({ limit: '50mb' }), async (req, res) => {
+app.post('/api/import/json', async (req, res) => {
   try {
     const records = req.body.records || req.body;
     const sheetName = req.body.sheetName || 'BEML Letters';
@@ -1500,7 +1515,7 @@ app.post('/api/import/excel', upload.single('file'), async (req, res) => {
 });
 
 // Update record status or fields
-app.put('/api/update', express.json(), async (req, res) => {
+app.put('/api/update', async (req, res) => {
   if (!sheets) return res.json({ success: true, local: true });
   try {
     const { sheetName, rowIndex, field, value } = req.body;
@@ -1585,7 +1600,7 @@ app.get('/api/master-data/:category', (req, res) => {
 });
 
 // Add custom master data item
-app.post('/api/master-data/:category', express.json(), async (req, res) => {
+app.post('/api/master-data/:category', async (req, res) => {
   try {
     const category = req.params.category;
     const { value } = req.body;
@@ -1622,14 +1637,6 @@ app.use((err, req, res, next) => {
   // Handle other errors
   res.status(500).json({ success: false, error: err.message || 'Internal server error' });
 });
-
-function detectOrganization(text) {
-  const l = text.toLowerCase();
-  if (l.includes('kmrcl') || l.includes('kolkata metro')) return 'KMRCL';
-  if (l.includes('metro rail') || l.includes('metro railway')) return 'Metro Rail';
-  if (l.includes('beml') || l.includes('bharat earth')) return 'BEML';
-  return null;
-}
 
 const PORT = process.env.PORT || 3000;
 

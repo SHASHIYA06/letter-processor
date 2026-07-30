@@ -1,9 +1,26 @@
 ✅ OAuth2 tokens loaded
 ✅ Google API authenticated (OAuth2)
+(node:38596) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
+(Use `node --trace-warnings ...` to show where the warning was created)
+⚠️  Sheet check failed: invalid_grant
+⚠️  Sheet check failed: invalid_grant
+⚠️  Headers failed for BEML Letters: invalid_grant
 ✅ Sheet ready: BEML Letters (15 columns)
+⚠️  Sheet check failed: invalid_grant
+⚠️  Sheet check failed: invalid_grant
+⚠️  Headers failed for KMRCL Letters: invalid_grant
 ✅ Sheet ready: KMRCL Letters (15 columns)
+⚠️  Sheet check failed: invalid_grant
+⚠️  Sheet check failed: invalid_grant
+⚠️  Headers failed for Metro Rail Letters: invalid_grant
 ✅ Sheet ready: Metro Rail Letters (15 columns)
-✅ Sheet ready: NCR Records (23 columns)
+⚠️  Sheet check failed: invalid_grant
+⚠️  Sheet check failed: invalid_grant
+⚠️  Headers failed for NCR Records: invalid_grant
+✅ Sheet ready: NCR Records (42 columns)
+⚠️  Sheet check failed: invalid_grant
+⚠️  Sheet check failed: invalid_grant
+⚠️  Headers failed for Joint Notes: invalid_grant
 ✅ Sheet ready: Joint Notes (13 columns)
 
 🚀 Letter Processor v4.0 running at http://localhost:3000
@@ -12,3 +29,70 @@
 
 📋 Sheets: BEML Letters, KMRCL Letters, Metro Rail Letters, NCR Records, Joint Notes
 
+
+📄 Extract: test_upload.pdf -> unknown_2026-07-30_1785432710293_test_upload.pdf
+   Path: /Users/shashishekharmishra/letter application/uploads/unknown_2026-07-30_1785432710293_test_upload.pdf
+   Size: 591 bytes
+
+📄 Processing: test_upload.pdf for BEML (letter)
+Warning: Indexing all PDF objects
+❌ Text extraction failed for /Users/shashishekharmishra/letter application/uploads/unknown_2026-07-30_1785432710293_test_upload.pdf: bad XRef entry
+⚠️  Text extraction failed: bad XRef entry
+
+📄 Extract: BEML_Letter_2026.txt -> unknown_2026-07-30_1785432735619_BEML_Letter_2026.txt
+   Path: /Users/shashishekharmishra/letter application/uploads/unknown_2026-07-30_1785432735619_BEML_Letter_2026.txt
+   Size: 1081 bytes
+
+📄 Processing: BEML_Letter_2026.txt for BEML (letter)
+📝 Extracted 1081 characters
+
+📄 Saving: BEML_Letter_2026.txt
+⚠️  Token refresh failed: invalid_grant
+⚠️  Folder search/create failed, using parent: invalid_grant
+❌ Drive upload failed: invalid_grant
+⚠️  Token refresh failed: invalid_grant
+⚠️  Sheet check failed: invalid_grant
+⚠️  Headers failed for BEML Letters: invalid_grant
+
+📝 appendToSheet: BEML Letters
+   Columns: S.No, Ref. Letter Number, All References, Date, From, To (Addressee), Kind Attention, Subject, Letter Type, Letter Content, Enclosures, Remarks, Attachment Link, File Name, Status
+   Data keys: organization, docType, letterType, refLetterNumber, date, from, to, subject, letterContent, status, allReferences, kindAttn, enclosures, remarks, fileName, uploadDate
+❌ Sheet append failed: invalid_grant
+📊 Importing 3 rows from Excel to BEML Letters
+   Excel headers: Ref. Letter Number, Date, From, To (Addressee), Subject, Letter Type, Letter Content, Status
+   Target columns: S.No, Ref. Letter Number, All References, Date, From, To (Addressee), Kind Attention, Subject, Letter Type, Letter Content, Enclosures, Remarks, Attachment Link, File Name, Status
+⚠️  Sheet check failed: invalid_grant
+⚠️  Headers failed for BEML Letters: invalid_grant
+
+📝 appendToSheet: BEML Letters
+   Columns: S.No, Ref. Letter Number, All References, Date, From, To (Addressee), Kind Attention, Subject, Letter Type, Letter Content, Enclosures, Remarks, Attachment Link, File Name, Status
+   Data keys: Ref. Letter Number, Date, From, To (Addressee), Subject, Letter Type, Letter Content, Status, S.No
+❌ Sheet append failed: invalid_grant
+⚠️  Sheet check failed: invalid_grant
+⚠️  Headers failed for BEML Letters: invalid_grant
+
+📝 appendToSheet: BEML Letters
+   Columns: S.No, Ref. Letter Number, All References, Date, From, To (Addressee), Kind Attention, Subject, Letter Type, Letter Content, Enclosures, Remarks, Attachment Link, File Name, Status
+   Data keys: Ref. Letter Number, Date, From, To (Addressee), Subject, Letter Type, Letter Content, Status, S.No
+❌ Sheet append failed: invalid_grant
+⚠️  Sheet check failed: invalid_grant
+⚠️  Headers failed for BEML Letters: invalid_grant
+
+📝 appendToSheet: BEML Letters
+   Columns: S.No, Ref. Letter Number, All References, Date, From, To (Addressee), Kind Attention, Subject, Letter Type, Letter Content, Enclosures, Remarks, Attachment Link, File Name, Status
+   Data keys: Ref. Letter Number, Date, From, To (Addressee), Subject, Letter Type, Letter Content, Status, S.No
+❌ Sheet append failed: invalid_grant
+⚠️  Sheet check failed: invalid_grant
+⚠️  Headers failed for NCR Records: invalid_grant
+
+📝 appendToSheet: NCR Records
+   Columns: S.No, NCR Report No, Date of NCR, Date of Detection, Item Description, NCR Description, Faulty Sl No, Healthy Sl No, Qty, Sub-System, Train No, Car, Responsibility, Status, Item Repaired, Item Replaced, Date of Repair, Source, Investigation Report Date, Gate Pass No, Remarks, Attachment Link, File Name, Project, Line, OEM, Train Set, Coach No, NCR Category, NCR Type, Priority, System, Location, Vendor, Raised By, Assigned To, Root Cause, Corrective Action, Preventive Action, Disposition, Closure Date, Closure Authority
+   Data keys: ncrNo, date, ncrDesc, severity, status
+❌ Sheet append failed: invalid_grant
+⚠️  Sheet check failed: invalid_grant
+⚠️  Headers failed for BEML Letters: invalid_grant
+
+📝 appendToSheet: BEML Letters
+   Columns: S.No, Ref. Letter Number, All References, Date, From, To (Addressee), Kind Attention, Subject, Letter Type, Letter Content, Enclosures, Remarks, Attachment Link, File Name, Status
+   Data keys: refNumber, date, subject, status
+❌ Sheet append failed: invalid_grant
