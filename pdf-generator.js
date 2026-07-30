@@ -6,6 +6,16 @@ import { Document, Packer, Paragraph, TextRun, AlignmentType, BorderStyle, Table
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
+const PAGE_MARGIN_BOTTOM = 50;
+
+function checkPageBreak(doc, y, neededHeight, L, R) {
+  if (y + neededHeight > doc.page.height - PAGE_MARGIN_BOTTOM) {
+    doc.addPage();
+    return 50;
+  }
+  return y;
+}
+
 function drawCheckbox(doc, x, y, checked) {
   doc.rect(x, y, 8, 8).lineWidth(0.5).stroke();
   if (checked) {
@@ -14,78 +24,44 @@ function drawCheckbox(doc, x, y, checked) {
 }
 
 // ══════════════════════════════════════════════════════════════
-//  BEML LETTER HEADER (exact image from original PDF)
+//  BEML LETTER HEADER
 // ══════════════════════════════════════════════════════════════
 function drawBEMLHeader(doc, W) {
-  // A4 = 595.28 x 841.89 points
-  // Header image: 1648 x 280 pixels
-  // Scale to fit A4 width: 595.28 / 1648 = 0.3612
-  // Scaled height: 280 * 0.3612 = 101.1 points
   const headerPath = path.join(__dirname, 'assets', 'beml-letterhead-header.png');
   if (fs.existsSync(headerPath)) {
-    doc.image(headerPath, 0, 0, { width: W });
+    doc.image(headerPath, 0, 0, { width: W, fit: [W, 132] });
   }
-  // Return y position below header (101 points + small padding)
-  return 108;
+  return 142;
 }
 
-// ══════════════════════════════════════════════════════════════
-//  BEML LETTER FOOTER (exact image as watermark)
-// ══════════════════════════════════════════════════════════════
 function drawBEMLFooter(doc, W, H) {
-  // Footer image: 1648 x 140 pixels
-  // Scale to fit A4 width: 595.28 / 1648 = 0.3612
-  // Scaled height: 140 * 0.3612 = 50.6 points
-  // Position at bottom with slight padding from edge
   const footerPath = path.join(__dirname, 'assets', 'beml-letterhead-footer.png');
   if (fs.existsSync(footerPath)) {
     doc.save();
-    doc.opacity(0.5); // watermark effect - light and subtle
-    doc.image(footerPath, 0, H - 52, { width: W });
+    doc.opacity(0.55);
+    doc.image(footerPath, 0, H - 108, { width: W, fit: [W, 115] });
     doc.restore();
   }
 }
 
 // ══════════════════════════════════════════════════════════════
-// ══════════════════════════════════════════════════════════════
-//  NCR PDF GENERATOR
+//  NCR PDF
 // ══════════════════════════════════════════════════════════════
 function generateNCRPdf(data, outputPath) {
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({ size: 'A4', margins: { top: 0, bottom: 0, left: 0, right: 0 } });
     const stream = fs.createWriteStream(outputPath);
     doc.pipe(stream);
-
-    const W = doc.page.width, H = doc.page.height;
-    const L = 55, R = 555;
-    const CW = R - L;
-    let y = 10;
-
-    // NCR Header - use extracted images from original NCR format
-    // beml-header.jpg (306x115) = left logo, beml-logo.jpg (329x115) = right logo
-    const ncrLeftLogo = path.join(__dirname, 'assets', 'beml-header.jpg');
-    const ncrRightLogo = path.join(__dirname, 'assets', 'beml-logo.jpg');
-    
-    // Place left logo (BEML emblem)
-    if (fs.existsSync(ncrLeftLogo)) {
-      doc.image(ncrLeftLogo, L - 5, y, { width: 75, height: 45 });
-    }
-    // Place right logo (BEML Beyond Possibilities)
-    if (fs.existsSync(ncrRightLogo)) {
-      doc.image(ncrRightLogo, W - 135, y, { width: 100, height: 40 });
-    }
-    y += 50;
-
-    doc.font('Times-Bold').fontSize(13).fillColor('#000');
-    doc.text('NON-CONFORMITY REPORT', 0, y + 5, { width: W, align: 'center' });
-    y += 25;
-
-    // Main table
-    const c1 = L, c2 = L + 110, c3 = L + 280, c4 = L + 390;
-    const rowH = 22;
-
+    const W = doc.page.width, H = doc.page.height, L = 55, R = 555, CW = R - L;
+    let y = 15;
+    const ncrH = path.join(__dirname, 'assets', 'beml-header.jpg');
+    const ncrL = path.join(__dirname, 'assets', 'beml-logo.jpg');
+    if (fs.existsSync(ncrH)) doc.image(ncrH, L - 5, y, { width: 80, height: 50 });
+    if (fs.existsSync(ncrL)) doc.image(ncrL, W - 140, y, { width: 110, height: 45 });
+    doc.font('Times-Bold').fontSize(13).fillColor('#000').text('NON-CONFORMITY REPORT', 0, y + 58, { width: W, align: 'center' });
+    y += 78;
+    const c1 = L, c2 = L + 110, c3 = L + 280, c4 = L + 390, rowH = 22;
     doc.rect(L, y, CW, 0).lineWidth(0.5).stroke();
-
     function tRow(l1, v1, l2, v2, h) {
       const rh = h || rowH;
       doc.moveTo(L, y + rh).lineTo(R, y + rh).lineWidth(0.5).stroke();
@@ -100,7 +76,6 @@ function generateNCRPdf(data, outputPath) {
       if (v2 !== undefined) doc.text(v2 || '---', c4 + 3, y + 5, { width: R - c4 - 6 });
       y += rh;
     }
-
     tRow('Report no.', data.ncrNo, 'Distribution to:', data.distribution || 'OEM/ SBU-S&M / R&D/ PM/Purchase/ Quality');
     tRow('Project', data.project, 'Vehicle no.', data.vehicleNo);
     tRow('Product', data.product, 'Assy dwg no.', (data.assyDwgNo || '---') + '    Rev ' + (data.rev || '---'));
@@ -109,8 +84,6 @@ function generateNCRPdf(data, outputPath) {
     tRow('Detection', data.detectionDate, 'Part serial no.', data.partSerialNo);
     tRow('Place', data.place, 'B/L No.', data.blNo);
     tRow('Stored at', data.storedAt, 'Invoice no.', data.invoiceNo);
-
-    // Severity
     doc.moveTo(L, y + rowH).lineTo(R, y + rowH).lineWidth(0.5).stroke();
     doc.moveTo(c2, y).lineTo(c2, y + rowH).lineWidth(0.5).stroke();
     doc.moveTo(c3, y).lineTo(c3, y + rowH).lineWidth(0.5).stroke();
@@ -124,8 +97,6 @@ function generateNCRPdf(data, outputPath) {
     doc.font('Times-Bold').fontSize(8).text('Responsible party', c3 + 3, y + 5, { width: c4 - c3 - 6 });
     doc.font('Helvetica').fontSize(8).text(data.responsibility || '---', c4 + 3, y + 5, { width: R - c4 - 6 });
     y += rowH;
-
-    // Material status
     doc.moveTo(L, y + rowH).lineTo(R, y + rowH).lineWidth(0.5).stroke();
     doc.moveTo(c2, y).lineTo(c2, y + rowH).lineWidth(0.5).stroke();
     doc.moveTo(c3, y).lineTo(c3, y + rowH).lineWidth(0.5).stroke();
@@ -141,28 +112,24 @@ function generateNCRPdf(data, outputPath) {
     drawCheckbox(doc, c4 + 5, mv, data.disassembled === 'Before receiving');
     doc.text(' Before receiving', c4 + 15, mv, { width: 80 });
     y += rowH;
-
-    doc.moveTo(L, 105).lineTo(L, y).lineWidth(0.5).stroke();
-    doc.moveTo(R, 105).lineTo(R, y).lineWidth(0.5).stroke();
-
-    // Description
+    doc.moveTo(L, 93).lineTo(L, y).lineWidth(0.5).stroke();
+    doc.moveTo(R, 93).lineTo(R, y).lineWidth(0.5).stroke();
     y += 6;
+    y = checkPageBreak(doc, y, 60, L, R);
     doc.font('Times-Bold').fontSize(8).fillColor('#000').text('Description of non-conformity:', L, y);
     y += 12;
     doc.font('Helvetica').fontSize(8).text(data.ncrDesc || '---', L + 3, y, { width: CW - 6, lineGap: 2 });
     const dLines = Math.ceil((data.ncrDesc || '').length / 80);
     y += Math.max(18, dLines * 10 + 8);
-    doc.font('Times-Bold').fontSize(7).fillColor('#666').text('Attached documents (if any): (Picture attached)', L, y);
+    doc.font('Times-Bold').fontSize(7).fillColor('#666').text('Attached documents (if any):', L, y);
     y += 12;
     doc.rect(L, y - dLines * 10 - 30, CW, dLines * 10 + 42).lineWidth(0.3).stroke();
-
-    // Date/Team table
     y += 4;
     const tC = [L, L + 90, L + 220, L + 350, R];
     doc.moveTo(L, y).lineTo(R, y).lineWidth(0.3).stroke();
     doc.moveTo(L, y + 16).lineTo(R, y + 16).lineWidth(0.3).stroke();
     doc.moveTo(L, y + 32).lineTo(R, y + 32).lineWidth(0.3).stroke();
-    tC.forEach((cx, i) => { if (i > 0 && i < 5) { doc.moveTo(cx, y).lineTo(cx, y + 32).lineWidth(0.3).stroke(); } });
+    tC.forEach((cx, i) => { if (i > 0 && i < 5) doc.moveTo(cx, y).lineTo(cx, y + 32).lineWidth(0.3).stroke(); });
     doc.moveTo(L, y).lineTo(L, y + 32).lineWidth(0.3).stroke();
     doc.moveTo(R, y).lineTo(R, y + 32).lineWidth(0.3).stroke();
     doc.font('Times-Bold').fontSize(7).fillColor('#000');
@@ -176,9 +143,8 @@ function generateNCRPdf(data, outputPath) {
     doc.text(data.issuedBy || '---', tC[2] + 3, y + 19, { width: 124 });
     doc.text(data.reviewedBy || '---', tC[3] + 3, y + 19, { width: R - tC[3] - 3 });
     y += 36;
-
-    // Cause
     y += 4;
+    y = checkPageBreak(doc, y, 60, L, R);
     doc.font('Times-Bold').fontSize(8).fillColor('#000').text('Cause of non-conformity:', L, y);
     y += 12;
     doc.font('Helvetica').fontSize(8).text(data.cause || '---', L + 3, y, { width: CW - 6, lineGap: 2 });
@@ -187,9 +153,8 @@ function generateNCRPdf(data, outputPath) {
     doc.font('Times-Bold').fontSize(7).fillColor('#666').text('Attached documents (if any):', L, y);
     y += 10;
     doc.rect(L, y - cLines * 10 - 28, CW, cLines * 10 + 38).lineWidth(0.3).stroke();
-
-    // Correction
     y += 4;
+    y = checkPageBreak(doc, y, 80, L, R);
     doc.font('Times-Bold').fontSize(9).fillColor('#000').text('Correction / Corrective Action Result:', L + 2, y);
     y += 14;
     doc.font('Helvetica').fontSize(8).text(data.correction || '---', L + 12, y, { width: CW - 15, lineGap: 2 });
@@ -203,11 +168,9 @@ function generateNCRPdf(data, outputPath) {
     doc.font('Times-Bold').fontSize(7).fillColor('#666').text('Attached documents (if any):', L, y);
     y += 10;
     doc.rect(L, y - coLines * 10 - 50, CW, coLines * 10 + 62).lineWidth(0.3).stroke();
-
-    // Bottom table
     y += 4;
-    const bC = [L, L + 70, L + 190, L + 310, L + 385, R];
-    const bH = 16;
+    y = checkPageBreak(doc, y, 120, L, R);
+    const bC = [L, L + 70, L + 190, L + 310, L + 385, R], bH = 16;
     doc.moveTo(L, y).lineTo(R, y).lineWidth(0.3).stroke();
     doc.moveTo(L, y + bH).lineTo(R, y + bH).lineWidth(0.3).stroke();
     [1,2,3,4,5].forEach(i => doc.moveTo(bC[i], y).lineTo(bC[i], y + bH).lineWidth(0.3).stroke());
@@ -225,7 +188,6 @@ function generateNCRPdf(data, outputPath) {
     doc.moveTo(L, y).lineTo(L, y + bH).lineWidth(0.3).stroke();
     doc.moveTo(R, y).lineTo(R, y + bH).lineWidth(0.3).stroke();
     y += bH;
-
     const dH = 24;
     doc.moveTo(L, y + dH).lineTo(R, y + dH).lineWidth(0.3).stroke();
     doc.moveTo(bC[1], y).lineTo(bC[1], y + dH).lineWidth(0.3).stroke();
@@ -235,16 +197,10 @@ function generateNCRPdf(data, outputPath) {
     doc.font('Times-Bold').fontSize(8).fillColor('#000').text('Decision', bC[0] + 2, y + 4, { width: 66 });
     const decs = ['Claim','Holding','Use as is','Rework','Waiver','Scrap','Repair'];
     let dx = bC[1] + 5, dy = y + 4;
-    decs.forEach((d, i) => {
-      drawCheckbox(doc, dx, dy, data.decision === d);
-      doc.font('Helvetica').fontSize(7).text(' ' + d, dx + 9, dy, { width: 48 });
-      dx += 62;
-      if (i === 3) { dx = bC[1] + 5; dy += 10; }
-    });
+    decs.forEach((d, i) => { drawCheckbox(doc, dx, dy, data.decision === d); doc.font('Helvetica').fontSize(7).text(' ' + d, dx + 9, dy, { width: 48 }); dx += 62; if (i === 3) { dx = bC[1] + 5; dy += 10; } });
     doc.font('Times-Bold').fontSize(7).text('Repair procedure', bC[4] + 2, y + 3, { width: 70 });
     doc.font('Helvetica').fontSize(7).text(' Yes /  No', bC[4] + 2, y + 13, { width: 70 });
     y += dH;
-
     const vH = 20;
     doc.moveTo(L, y + vH).lineTo(R, y + vH).lineWidth(0.3).stroke();
     doc.moveTo(bC[1], y).lineTo(bC[1], y + vH).lineWidth(0.3).stroke();
@@ -255,7 +211,6 @@ function generateNCRPdf(data, outputPath) {
     doc.font('Times-Bold').text('Approval\nScope', bC[4] + 2, y + 2, { width: 70 });
     doc.font('Helvetica').fontSize(7).text(' Internal /  Customer', bC[4] + 2, y + 12, { width: 70 });
     y += vH;
-
     doc.moveTo(L, y + vH).lineTo(R, y + vH).lineWidth(0.3).stroke();
     doc.moveTo(bC[1], y).lineTo(bC[1], y + vH).lineWidth(0.3).stroke();
     doc.moveTo(bC[4], y).lineTo(bC[4], y + vH).lineWidth(0.3).stroke();
@@ -263,7 +218,6 @@ function generateNCRPdf(data, outputPath) {
     doc.moveTo(R, y).lineTo(R, y + vH).lineWidth(0.3).stroke();
     doc.font('Times-Bold').fontSize(7).fillColor('#000').text('Verification on\ncorrective action', bC[0] + 2, y + 2, { width: 66 });
     y += vH;
-
     const aH = 20;
     doc.moveTo(L, y + aH).lineTo(R, y + aH).lineWidth(0.3).stroke();
     doc.moveTo(bC[1], y).lineTo(bC[1], y + aH).lineWidth(0.3).stroke();
@@ -278,7 +232,6 @@ function generateNCRPdf(data, outputPath) {
     doc.text('Name', bC[3] + 2, y + 2, { width: 66 });
     doc.text('Date', bC[4] + 2, y + 2, { width: 40 });
     doc.text('Sign', R - 40, y + 2, { width: 38 });
-
     doc.end();
     stream.on('finish', () => resolve(outputPath));
     stream.on('error', reject);
@@ -286,116 +239,40 @@ function generateNCRPdf(data, outputPath) {
 }
 
 // ══════════════════════════════════════════════════════════════
-//  BEML LETTER PDF GENERATOR
+//  BEML LETTER PDF
 // ══════════════════════════════════════════════════════════════
 function generateLetterPdf(data, outputPath) {
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({ size: 'A4', margins: { top: 0, bottom: 0, left: 0, right: 0 } });
     const stream = fs.createWriteStream(outputPath);
     doc.pipe(stream);
-
-    const W = doc.page.width, H = doc.page.height;
-    const L = 55, R = W - 55;
-    const CW = R - L;
-
-    // Draw header (returns y position below header)
+    const W = doc.page.width, H = doc.page.height, L = 55, R = W - 55, CW = R - L;
     let y = drawBEMLHeader(doc, W);
-
-    // Draw footer (placed at bottom)
     drawBEMLFooter(doc, W, H);
-
-    // Content margins
-    const contentL = L;
-    const contentR = R;
-    const contentW = contentR - contentL;
-
-    // Schedule A line (centered below header)
-    doc.font('Times-Roman').fontSize(8).fillColor('#000');
-    doc.text("Schedule 'A' Company under Ministry of Defence, Govt. of India", 0, y, { width: W, align: 'center' });
-    y += 10;
-    doc.text('Defence & Aerospace | Mining & Construction | Rail & Metro', 0, y, { width: W, align: 'center' });
-    y += 16;
-
-    // Reference (left) + Date (right)
-    doc.font('Times-Bold').fontSize(10).fillColor('#000');
-    doc.text(data.refNumber || '---', contentL, y);
-    doc.font('Times-Roman').fontSize(10);
-    doc.text('Date: ' + (data.date || '---'), contentR - 140, y, { width: 140, align: 'right' });
-    y += 20;
-
-    // To
-    doc.font('Times-Roman').fontSize(10);
-    doc.text('To,', contentL, y); y += 16;
-    if (data.to) { 
-      doc.text(data.to, contentL, y, { width: contentW }); 
-      y += data.to.split('\n').length * 14 + 8; 
-    }
-
-    // Kind Attn (centered)
-    if (data.kindAttn) {
-      doc.font('Times-Bold').fontSize(10);
-      doc.text('Kind Attn: ' + data.kindAttn, contentL, y, { width: contentW, align: 'center' });
-      y += 22;
-    }
-
-    // Subject (underlined)
-    y += 6;
-    doc.font('Times-Bold').fontSize(10);
-    doc.text('Subject: ' + (data.subject || '---'), contentL, y, { width: contentW, underline: true });
-    y += 20;
-
-    // Ref
-    if (data.allReferences) {
-      doc.font('Times-Roman').fontSize(10);
-      doc.text('Ref: ' + data.allReferences, contentL, y, { width: contentW });
-      y += data.allReferences.split('\n').length * 14 + 8;
-    }
-
-    // Dear Sir - only add if not already in body
+    doc.font('Times-Bold').fontSize(10).fillColor('#000').text(data.refNumber || '---', L, y);
+    doc.font('Times-Roman').fontSize(10).text('Date: ' + (data.date || '---'), R - 140, y, { width: 140, align: 'right' });
+    y += 18;
+    doc.font('Times-Roman').fontSize(10).text('To,', L, y); y += 14;
+    if (data.to) { doc.text(data.to, L, y, { width: CW }); y += data.to.split('\n').length * 14 + 6; }
+    if (data.kindAttn) { doc.font('Times-Bold').fontSize(10).text('Kind Attn: ' + data.kindAttn, L, y, { width: CW, align: 'center' }); y += 20; }
+    y += 5;
+    doc.font('Times-Bold').fontSize(10).text('Subject: ' + (data.subject || '---'), L, y, { width: CW, underline: true });
+    y += 18;
+    if (data.allReferences) { doc.font('Times-Roman').fontSize(10).text('Ref: ' + data.allReferences, L, y, { width: CW }); y += data.allReferences.split('\n').length * 13 + 6; }
+    y += 5;
+    doc.font('Times-Roman').fontSize(10).text('Dear Sir,', L, y); y += 18;
     const body = data.letterContent || data.letterBody || '---';
-    const bodyHasGreeting = /^Dear\s+(Sir|Madam|Sir\/Madam)/i.test(body.trim());
-    if (!bodyHasGreeting) {
-      y += 6;
-      doc.font('Times-Roman').fontSize(10);
-      doc.text('Dear Sir,', contentL, y); y += 20;
-    }
-
-    // Body - use actual height from doc.text() with proper line spacing
+    doc.font('Times-Roman').fontSize(10).text(body, L, y, { width: CW, lineGap: 4 });
+    y = doc.y + 5;
     doc.font('Times-Roman').fontSize(10);
-    const bodyResult = doc.text(body, contentL, y, { width: contentW, lineGap: 2 });
-    y = bodyResult.y + 16;
-
-    // Closing
-    y += 4;
-    doc.font('Times-Roman').fontSize(10);
-    doc.text('Thanking you.', contentL, y); y += 16;
-    doc.text('Yours sincerely,', contentL, y); y += 16;
-    doc.text('for BEML Limited', contentL, y); y += 30;
-
-    // Signature
-    doc.font('Times-Bold').fontSize(10);
-    doc.text(data.signatory || 'Shashi Shekhar Mishra', contentL, y); y += 16;
-    doc.font('Times-Roman').fontSize(10);
-    doc.text(data.designation || 'Sr. Manager', contentL, y); y += 16;
-    doc.text(data.project || 'KMRCL RS(3) Project', contentL, y); y += 24;
-
-    // Encl
-    if (data.enclosures) {
-      doc.font('Times-Roman').fontSize(10);
-      doc.text('Encl: ' + data.enclosures, contentL, y, { width: contentW, align: 'center' });
-      y += 20;
-    }
-
-    // Cc
-    if (data.cc) {
-      doc.font('Times-Roman').fontSize(10);
-      const ccLines = data.cc.split('\n');
-      doc.text('Cc: ' + ccLines[0], contentL, y, { width: contentW }); y += 16;
-      for (let i = 1; i < ccLines.length; i++) {
-        doc.text('      ' + ccLines[i], contentL, y, { width: contentW }); y += 16;
-      }
-    }
-
+    doc.text('Thanking you.', L, y); y += 16;
+    doc.text('Yours sincerely,', L, y); y += 16;
+    doc.text('for BEML Limited', L, y); y += 30;
+    doc.font('Times-Bold').fontSize(10).text(data.signatory || 'Shashi Shekhar Mishra', L, y); y += 14;
+    doc.font('Times-Roman').fontSize(10).text(data.designation || 'Sr. Manager', L, y); y += 14;
+    doc.text(data.project || 'KMRCL RS(3) Project', L, y); y += 22;
+    if (data.enclosures) { doc.font('Times-Roman').fontSize(10).text('Encl: ' + data.enclosures, L, y, { width: CW, align: 'center' }); y += 18; }
+    if (data.cc) { doc.font('Times-Roman').fontSize(10); const ccLines = data.cc.split('\n'); doc.text('Cc: ' + ccLines[0], L, y, { width: CW }); y += 14; for (let i = 1; i < ccLines.length; i++) { doc.text('      ' + ccLines[i], L, y, { width: CW }); y += 14; } }
     doc.end();
     stream.on('finish', () => resolve(outputPath));
     stream.on('error', reject);
@@ -407,11 +284,8 @@ function generateLetterPdf(data, outputPath) {
 // ══════════════════════════════════════════════════════════════
 function generateNCRDocx(data, outputPath) {
   return new Promise((resolve, reject) => {
-    const bs = { style: BorderStyle.SINGLE, size: 1, color: '000000' };
-    const cb = { top: bs, bottom: bs, left: bs, right: bs };
-    function mr(cells) {
-      return new TableRow({ children: cells.map(([text, bold, w]) => new TableCell({ borders: cb, width: { size: w || 25, type: WidthType.PERCENTAGE }, children: [new Paragraph({ children: [new TextRun({ text: text || '---', bold: bold || false, size: 16, font: 'Times New Roman' })] })] })) });
-    }
+    const bs = { style: BorderStyle.SINGLE, size: 1, color: '000000' }, cb = { top: bs, bottom: bs, left: bs, right: bs };
+    function mr(cells) { return new TableRow({ children: cells.map(([text, bold, w]) => new TableCell({ borders: cb, width: { size: w || 25, type: WidthType.PERCENTAGE }, children: [new Paragraph({ children: [new TextRun({ text: text || '---', bold: bold || false, size: 16, font: 'Times New Roman' })] })] })) }); }
     const doc = new Document({ sections: [{ children: [
       new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: 'NON-CONFORMITY REPORT', bold: true, size: 24, font: 'Times New Roman' })] }),
       new Paragraph({ spacing: { before: 100 }, children: [] }),
@@ -434,7 +308,7 @@ function generateNCRDocx(data, outputPath) {
       new Paragraph({ spacing: { before: 200 }, children: [new TextRun({ text: 'Correction / Corrective Action Result:', bold: true, size: 18, font: 'Times New Roman' })] }),
       new Paragraph({ spacing: { before: 100 }, children: [new TextRun({ text: data.correction || '---', size: 18, font: 'Times New Roman' })] }),
       new Paragraph({ spacing: { before: 300 }, children: [new TextRun({ text: 'Decision: ' + (data.decision || '---'), size: 18, font: 'Times New Roman' })] }),
-    ]}] });
+    ] }] });
     Packer.toBuffer(doc).then(buf => { fs.writeFileSync(outputPath, buf); resolve(outputPath); }).catch(reject);
   });
 }

@@ -928,6 +928,9 @@
                 </div>
                 <div class="form-row">
                   <div class="form-group"><label>Car / Coach</label>${createDropdown('ncr_car', ncrMasterData.cars || [], '', 'Select Car')}</div>
+                  <div class="form-group"><label>Coach No.</label><input id="ncr_coachNo" placeholder="e.g. DMC1" onchange="updateNCRPreview()"></div>
+                </div>
+                <div class="form-row">
                   <div class="form-group"><label>Location</label>${createDropdown('ncr_location', ncrMasterData.locations || [], '', 'Select Location')}</div>
                 </div>
               </div>
@@ -1090,6 +1093,7 @@
         trainSet: getField('ncr_trainSet'),
         vehicleNo: getField('ncr_vehicleNo'),
         car: getField('ncr_car'),
+        coachNo: getField('ncr_coachNo'),
         location: getField('ncr_location'),
         product: getField('ncr_product'),
         itemDesc: getField('ncr_product'),
@@ -1627,9 +1631,9 @@
 
       try {
         const formData = new FormData();
-        formData.append('file', file);
         formData.append('organization', org);
         formData.append('type', type);
+        formData.append('file', file);
 
         console.log('Fetching /api/extract...');
         const extractRes = await fetch('/api/extract', { method: 'POST', body: formData });

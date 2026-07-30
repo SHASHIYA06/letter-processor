@@ -195,7 +195,7 @@ const NCR_COLUMNS = [
   'Source', 'Investigation Report Date', 'Gate Pass No', 'Remarks',
   'Attachment Link', 'File Name',
   'Project', 'Line', 'OEM', 'Train Set', 'Coach No',
-  'NCR Category', 'NCR Type', 'Priority', 'System',
+  'NCR Category', 'NCR Type', 'Severity', 'Priority', 'System',
   'Location', 'Vendor', 'Raised By', 'Assigned To',
   'Root Cause', 'Corrective Action', 'Preventive Action', 'Disposition',
   'Closure Date', 'Closure Authority'
@@ -846,7 +846,15 @@ function parseJointNoteContent(text) {
 app.get('/api/ncr/next-number', async (req, res) => {
   try {
     const year = new Date().getFullYear();
-    const rows = allDataCache['NCR Records'] || [];
+    let rows = allDataCache['NCR Records'];
+    if (!rows && sheets) {
+      try {
+        const range = 'NCR Records!A1:B';
+        const result = await sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range });
+        rows = result.data.values || [];
+      } catch { rows = []; }
+    }
+    rows = rows || [];
     let maxNum = 0;
     const prefix = `NCR-${year}-`;
     for (let i = 1; i < rows.length; i++) {
@@ -872,7 +880,7 @@ app.post('/api/ncr/create', async (req, res) => {
 app.post('/api/ncr/update', async (req, res) => {
   try {
     const { rowIndex, data } = req.body;
-    // Build row data based on NCR_COLUMNS (42 columns)
+    // Build row data based on NCR_COLUMNS (43 columns)
     const ncrRow = [
       '', // S.No (auto-generated)
       data.ncrNo || '', data.date || '', data.detectionDate || '', data.itemDesc || '',
@@ -882,7 +890,7 @@ app.post('/api/ncr/update', async (req, res) => {
       data.dateOfRepair || '', data.source || '', data.investigationReportDate || '',
       data.gatePassNo || '', data.remarks || '', data.attachmentLink || '', data.fileName || '',
       data.project || '', data.line || '', data.oem || '', data.trainSet || '', data.coachNo || '',
-      data.ncrCategory || '', data.ncrType || '', data.priority || '', data.system || '',
+      data.ncrCategory || '', data.ncrType || '', data.severity || '', data.priority || '', data.system || '',
       data.location || '', data.vendor || '', data.raisedBy || data.issuedBy || '', data.assignedTo || '',
       data.rootCause || '', data.correctiveAction || data.correction || '', data.preventiveAction || '',
       data.disposition || '', data.closureDate || '', data.closureAuthority || ''
@@ -924,10 +932,10 @@ app.get('/api/ncr/clone/:idx', async (req, res) => {
       17: 'source', 18: 'investigationReportDate', 19: 'gatePassNo', 20: 'remarks',
       21: 'attachmentLink', 22: 'fileName',
       23: 'project', 24: 'line', 25: 'oem', 26: 'trainSet', 27: 'coachNo',
-      28: 'ncrCategory', 29: 'ncrType', 30: 'priority', 31: 'system',
-      32: 'location', 33: 'vendor', 34: 'raisedBy', 35: 'assignedTo',
-      36: 'rootCause', 37: 'correctiveAction', 38: 'preventiveAction', 39: 'disposition',
-      40: 'closureDate', 41: 'closureAuthority'
+      28: 'ncrCategory', 29: 'ncrType', 30: 'severity', 31: 'priority', 32: 'system',
+      33: 'location', 34: 'vendor', 35: 'raisedBy', 36: 'assignedTo',
+      37: 'rootCause', 38: 'correctiveAction', 39: 'preventiveAction', 40: 'disposition',
+      41: 'closureDate', 42: 'closureAuthority'
     };
     const clonedData = { ncrNo: `${prefix}${String(maxNum + 1).padStart(3, '0')}` };
     for (const [idx, field] of Object.entries(fieldMap)) {
@@ -964,7 +972,15 @@ app.get('/api/letter/next-number/:org', async (req, res) => {
     const org = req.params.org || 'BEML';
     const year = new Date().getFullYear();
     const sheetName = SHEET_NAMES[org] || `${org} Letters`;
-    const rows = allDataCache[sheetName] || [];
+    let rows = allDataCache[sheetName];
+    if (!rows && sheets) {
+      try {
+        const range = `${sheetName}!A1:B`;
+        const result = await sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range });
+        rows = result.data.values || [];
+      } catch { rows = []; }
+    }
+    rows = rows || [];
     let maxNum = 0;
     const prefix = `${org}/LTR/${year}/`;
     for (let i = 1; i < rows.length; i++) {
