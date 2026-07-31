@@ -390,7 +390,57 @@ async function getNextSerialNumber(sheetName) {
 }
 
 function clean(s, maxLen = 500) {
-  return (s || 'N/A').replace(/[\n\r]+/g, ' ').replace(/\s+/g, ' ').trim().substring(0, maxLen);
+  return (s || '').replace(/[\n\r]+/g, ' ').replace(/\s+/g, ' ').trim().substring(0, maxLen);
+}
+
+// Direct mapping: data key -> column name in sheet
+const LETTER_KEY_TO_COL = {
+  refNumber: 'Ref. Letter Number', allReferences: 'All References', date: 'Date',
+  from: 'From', to: 'To (Addressee)', kindAttn: 'Kind Attention', subject: 'Subject',
+  letterType: 'Letter Type', letterContent: 'Letter Content', enclosures: 'Enclosures',
+  remarks: 'Remarks', attachmentLink: 'Attachment Link', fileName: 'File Name', status: 'Status'
+};
+
+const NCR_KEY_TO_COL = {
+  ncrNo: 'NCR Report No', date: 'Date of NCR', detectionDate: 'Date of Detection',
+  itemDesc: 'Item Description', ncrDesc: 'NCR Description', partNo: 'Part Number',
+  modifiedFMI: 'Modified/Unmodified FMI', failureAfterFMI: 'Failure After FMI',
+  faultySl: 'Faulty Sl No', healthySl: 'Healthy Sl No', issuedBy: 'Issued By',
+  qty: 'Qty', subSystem: 'Sub-System', trainNo: 'Train No', car: 'Car',
+  responsibility: 'Responsibility', status: 'Status', itemRepaired: 'Item Repaired',
+  itemReplaced: 'Item Replaced', dateOfRepair: 'Date of Repair', source: 'Source',
+  investigationDate: 'Investigation Report Date', ncrClosedByDoc: 'NCR Closed By Doc',
+  gatePassNo: 'Gate Pass No', irPrinted: 'IR Printed', attachmentLink: 'Attachment Link',
+  fileName: 'File Name', project: 'Project', line: 'Line', oem: 'OEM',
+  trainSet: 'Train Set', coachNo: 'Coach No', ncrCategory: 'NCR Category',
+  ncrType: 'NCR Type', severity: 'Severity', priority: 'Priority', system: 'System',
+  location: 'Location', vendor: 'Vendor', raisedBy: 'Raised By', assignedTo: 'Assigned To',
+  rootCause: 'Root Cause', correctiveAction: 'Corrective Action',
+  preventiveAction: 'Preventive Action', disposition: 'Disposition',
+  closureDate: 'Closure Date', closureAuthority: 'Closure Authority',
+  // Legacy aliases from form
+  vehicleNo: 'Train No', product: 'Item Description', partNumber: 'Part Number',
+  supplier: 'Vendor', correction: 'Corrective Action', cause: 'Root Cause',
+  issuedBy: 'Issued By'
+};
+
+const JN_KEY_TO_COL = {
+  jointNoteNo: 'Joint Note No', date: 'Date', parties: 'Parties',
+  description: 'Description', items: 'Items Discussed', decisions: 'Decisions',
+  actionItems: 'Action Items', attachments: 'Attachments', remarks: 'Remarks'
+};
+
+function buildRow(data, columns, keyToCol) {
+  return columns.map((col, idx) => {
+    if (idx === 0) return ''; // S.No auto-filled
+    // Find ALL data keys that map to this column, try each
+    for (const [key, colName] of Object.entries(keyToCol)) {
+      if (colName === col && data[key] !== undefined && data[key] !== '') {
+        return clean(String(data[key]));
+      }
+    }
+    return '';
+  });
 }
 
 async function appendToSheet(sheetName, data, columns) {
@@ -401,123 +451,21 @@ async function appendToSheet(sheetName, data, columns) {
   try {
     await ensureHeaders(sheetName, columns);
     const sno = await getNextSerialNumber(sheetName);
-    const colCount = columns.length;
-    const range = `${sheetName}!A:${columnToLetter(colCount)}`;
 
-    console.log(`\n📝 appendToSheet: ${sheetName}`);
-    console.log('   Columns:', columns.join(', '));
-    console.log('   Data keys:', Object.keys(data).join(', '));
+    let keyToCol;
+    if (sheetName.includes('NCR')) keyToCol = NCR_KEY_TO_COL;
+    else if (sheetName.includes('Joint')) keyToCol = JN_KEY_TO_COL;
+    else keyToCol = LETTER_KEY_TO_COL;
 
-    // Build mapping: normalized column name -> data key
-    const keyMap = {
-      'sno': 'sno',
-      'refletternumber': 'refLetterNumber',
-      'allreferences': 'allReferences',
-      'date': 'date',
-      'from': 'from',
-      'toaddressee': 'to',
-      'kindattention': 'kindAttn',
-      'subject': 'subject',
-      'lettertype': 'letterType',
-      'lettercontent': 'letterContent',
-      'enclosures': 'enclosures',
-      'remarks': 'remarks',
-      'attachmentlink': 'attachmentLink',
-      'filename': 'fileName',
-      'status': 'status',
-      'ncrreportno': 'ncrNo',
-      'dateofncr': 'date',
-      'dateofdetection': 'detectionDate',
-      'itemdescription': 'itemDesc',
-      'ncrdescription': 'ncrDesc',
-      'partnumber': 'partNo',
-      'modifiedunmodifiedfmi': 'modifiedFMI',
-      'failureafterfmi': 'failureAfterFMI',
-      'faultyslno': 'faultySl',
-      'healthyslno': 'healthySl',
-      'issuedby': 'issuedBy',
-      'qty': 'qty',
-      'subsystem': 'subSystem',
-      'trainno': 'trainNo',
-      'car': 'car',
-      'responsibility': 'responsibility',
-      'itemrepaired': 'itemRepaired',
-      'itemreplaced': 'itemReplaced',
-      'dateofrepair': 'dateOfRepair',
-      'source': 'source',
-      'investigationreportdate': 'investigationDate',
-      'ncrclosedbydoc': 'ncrClosedByDoc',
-      'gatepassno': 'gatePassNo',
-      'irprinted': 'irPrinted',
-      'project': 'project',
-      'line': 'line',
-      'oem': 'oem',
-      'trainset': 'trainSet',
-      'coachno': 'coachNo',
-      'ncrcategory': 'ncrCategory',
-      'ncrtype': 'ncrType',
-      'severity': 'severity',
-      'priority': 'priority',
-      'system': 'system',
-      'location': 'location',
-      'vendor': 'vendor',
-      'raisedby': 'raisedBy',
-      'assignedto': 'assignedTo',
-      'rootcause': 'rootCause',
-      'correctiveaction': 'correctiveAction',
-      'preventiveaction': 'preventiveAction',
-      'disposition': 'disposition',
-      'closuredate': 'closureDate',
-      'closureauthority': 'closureAuthority',
-      'jointnoteno': 'jointNoteNo',
-      'parties': 'parties',
-      'description': 'description',
-      'itemsdiscussed': 'items',
-      'decisions': 'decisions',
-      'actionitems': 'actionItems',
-      'attachments': 'attachments'
-    };
+    const row = buildRow(data, columns, keyToCol);
+    row[0] = String(sno); // S.No
 
-    const row = columns.map((col, idx) => {
-      if (idx === 0) return sno; // S.No
-      const key = col.toLowerCase().replace(/[^a-z0-9]/g, '');
-      const dataKey = keyMap[key] || key;
-      
-      // Try exact match first
-      if (data[dataKey] !== undefined) return clean(String(data[dataKey]));
-      // Try fuzzy match - normalized key comparison
-      for (const [k, v] of Object.entries(data)) {
-        if (k.toLowerCase().replace(/[^a-z0-9]/g, '') === key) return clean(String(v));
-      }
-      // Try alternative common field names
-      const altKeys = {
-        'toaddressee': ['to', 'addressee', 'recipient'],
-        'kindattention': ['kindAttn', 'attention', 'kindattn'],
-        'lettercontent': ['letterContent', 'content', 'body', 'letterBody'],
-        'attachmentlink': ['attachmentLink', 'driveLink', 'link'],
-        'filename': ['fileName', 'file', 'originalName'],
-        'ncrreportno': ['ncrNo', 'ncrNumber', 'reportNo'],
-        'dateofncr': ['date', 'ncrDate', 'reportDate'],
-        'itemdescription': ['itemDesc', 'itemDescription', 'product', 'productName'],
-        'ncrdescription': ['ncrDesc', 'ncrDescription', 'description'],
-        'healthyslno': ['healthySl', 'healthySlNo', 'healthySerial'],
-        'faultyslno': ['faultySl', 'faultySlNo', 'faultySerial'],
-        'dateofrepair': ['dateOfRepair', 'repairDate'],
-        'investigationreportdate': ['investigationDate', 'investigationReportDate'],
-        'jointnoteno': ['jointNoteNo', 'noteNo', 'jnNo'],
-        'itemsdiscussed': ['items', 'itemsDiscussed'],
-        'actionitems': ['actionItems', 'action'],
-      };
-      if (altKeys[key]) {
-        for (const ak of altKeys[key]) {
-          if (data[ak] !== undefined) return clean(String(data[ak]));
-        }
-      }
-      return 'N/A';
-    });
+    console.log(`\n📝 appendToSheet: ${sheetName} (row ${sno})`);
+    const filled = columns.filter((c, i) => row[i] && row[i] !== '').length;
+    console.log(`   ${filled}/${columns.length} fields filled`);
 
     await sheets.spreadsheets.values.append({
-      spreadsheetId: SPREADSHEET_ID, range,
+      spreadsheetId: SPREADSHEET_ID, range: `${sheetName}!A:${columnToLetter(columns.length)}`,
       valueInputOption: 'RAW', insertDataOption: 'INSERT_ROWS', requestBody: { values: [row] }
     });
     console.log(`✅ Row ${sno} appended to ${sheetName}`);
@@ -952,18 +900,18 @@ app.post('/api/ncr/update', async (req, res) => {
     // Build row data based on NCR_COLUMNS (49 columns)
     const ncrRow = [
       rowIndex, // S.No (keep original)
-      data.ncrNo || '', data.date || '', data.detectionDate || '', data.itemDesc || '',
-      data.ncrDesc || '', data.partNo || '', data.modifiedFMI || '', data.failureAfterFMI || '',
+      data.ncrNo || '', data.date || '', data.detectionDate || '', data.itemDesc || data.product || '',
+      data.ncrDesc || '', data.partNo || data.partNumber || '', data.modifiedFMI || '', data.failureAfterFMI || '',
       data.faultySl || '', data.healthySl || '', data.issuedBy || '', data.qty || '',
-      data.subSystem || '', data.trainNo || '', data.car || '', data.responsibility || '',
+      data.subSystem || '', data.trainNo || data.vehicleNo || '', data.car || '', data.responsibility || '',
       data.status || 'Open', data.itemRepaired || '', data.itemReplaced || '',
-      data.dateOfRepair || '', data.source || '', data.investigationReportDate || '',
+      data.dateOfRepair || '', data.source || '', data.investigationDate || data.investigationReportDate || '',
       data.ncrClosedByDoc || '', data.gatePassNo || '', data.remarks || '', data.irPrinted || '',
       data.attachmentLink || '', data.fileName || '',
       data.project || '', data.line || '', data.oem || '', data.trainSet || '', data.coachNo || '',
       data.ncrCategory || '', data.ncrType || '', data.severity || '', data.priority || '', data.system || '',
-      data.location || '', data.vendor || '', data.raisedBy || data.issuedBy || '', data.assignedTo || '',
-      data.rootCause || '', data.correctiveAction || data.correction || '', data.preventiveAction || '',
+      data.location || '', data.vendor || data.supplier || '', data.raisedBy || data.issuedBy || '', data.assignedTo || '',
+      data.rootCause || data.cause || '', data.correctiveAction || data.correction || '', data.preventiveAction || '',
       data.disposition || '', data.closureDate || '', data.closureAuthority || ''
     ];
     if (sheets) {
