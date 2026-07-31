@@ -134,8 +134,7 @@ async function initGoogleAuth() {
         oauth2Client.setCredentials({
           access_token: process.env.GOOGLE_ACCESS_TOKEN,
           refresh_token: process.env.GOOGLE_REFRESH_TOKEN,
-          token_type: 'Bearer',
-          expiry_date: Date.now() + 3600000
+          token_type: 'Bearer'
         });
         auth = oauth2Client;
         sheets = google.sheets({ version: 'v4', auth });
