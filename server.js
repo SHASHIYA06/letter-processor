@@ -115,7 +115,31 @@ async function initGoogleAuth() {
     const oauthConfigPath = path.join(__dirname, 'credentials', 'oauth-config.json');
     const credentialsPath = path.join(__dirname, 'credentials', 'service-account.json');
 
-    // Try OAuth2 first (local development)
+    // On Vercel: try OAuth tokens from environment variables
+    if (process.env.VERCEL && process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_ACCESS_TOKEN) {
+      try {
+        oauth2Client = new google.auth.OAuth2(
+          process.env.GOOGLE_CLIENT_ID,
+          process.env.GOOGLE_CLIENT_SECRET,
+          process.env.GOOGLE_REDIRECT_URI || 'http://localhost:3000/auth/google/callback'
+        );
+        oauth2Client.setCredentials({
+          access_token: process.env.GOOGLE_ACCESS_TOKEN,
+          refresh_token: process.env.GOOGLE_REFRESH_TOKEN,
+          token_type: 'Bearer',
+          expiry_date: Date.now() + 3600000
+        });
+        auth = oauth2Client;
+        sheets = google.sheets({ version: 'v4', auth });
+        drive = google.drive({ version: 'v3', auth });
+        console.log('✅ Google API authenticated (OAuth2 from env vars)');
+        return;
+      } catch (e) {
+        console.log('⚠️  OAuth2 from env failed:', e.message);
+      }
+    }
+
+    // Try OAuth2 from file (local development)
     if (!process.env.VERCEL && fs.existsSync(oauthConfigPath)) {
       const { client_id, client_secret } = JSON.parse(fs.readFileSync(oauthConfigPath, 'utf8'));
       if (client_id && client_secret) {
@@ -501,7 +525,10 @@ async function refreshOAuthToken() {
   try {
     const { credentials } = await oauth2Client.refreshAccessToken();
     oauth2Client.setCredentials(credentials);
-    fs.writeFileSync(TOKEN_PATH, JSON.stringify(credentials, null, 2));
+    // Only write to file locally (Vercel has no persistent filesystem)
+    if (!process.env.VERCEL) {
+      try { fs.writeFileSync(TOKEN_PATH, JSON.stringify(credentials, null, 2)); } catch {}
+    }
     console.log('✅ OAuth token refreshed');
     return true;
   } catch (err) {
@@ -1143,10 +1170,30 @@ app.get('/auth/google/callback', async (req, res) => {
   try {
     const { tokens } = await oauth2Client.getToken(code);
     oauth2Client.setCredentials(tokens);
-    fs.writeFileSync(TOKEN_PATH, JSON.stringify(tokens, null, 2));
+    
+    if (process.env.VERCEL) {
+      // On Vercel: show tokens for env var setup
+      res.send(`
+        <h1>✅ Authentication Successful!</h1>
+        <p>Copy these values to your Vercel Environment Variables:</p>
+        <pre style="background:#f5f5f5;padding:15px;border-radius:8px;overflow-x:auto;font-size:12px">
+GOOGLE_CLIENT_ID=${oauth2Client._clientId || 'your_client_id'}
+GOOGLE_CLIENT_SECRET=${oauth2Client._clientSecret || 'your_client_secret'}
+GOOGLE_ACCESS_TOKEN=${tokens.access_token}
+GOOGLE_REFRESH_TOKEN=${tokens.refresh_token || 'N/A (run auth again with prompt=consent)'}
+GOOGLE_REDIRECT_URI=http://localhost:3000/auth/google/callback
+        </pre>
+        <p>After setting these in Vercel, redeploy your project.</p>
+        <p><strong>Important:</strong> The refresh_token is only available on first authorization. If missing, revoke access at <a href="https://myaccount.google.com/permissions">Google Account Permissions</a> and re-authorize.</p>
+      `);
+    } else {
+      // Local: save to file
+      fs.writeFileSync(TOKEN_PATH, JSON.stringify(tokens, null, 2));
+      res.send('<h1>✅ Google Drive Connected!</h1><p>You can close this tab and return to the app.</p>');
+    }
+    
     sheets = google.sheets({ version: 'v4', auth: oauth2Client });
     drive = google.drive({ version: 'v3', auth: oauth2Client });
-    res.send('<h1>✅ Google Drive Connected!</h1><p>You can close this tab and return to the app.</p>');
     console.log('✅ OAuth2 tokens saved');
   } catch (err) {
     res.status(500).send('Auth failed: ' + err.message);
@@ -1154,8 +1201,10 @@ app.get('/auth/google/callback', async (req, res) => {
 });
 
 app.get('/api/auth/status', (req, res) => {
-  const hasTokens = fs.existsSync(TOKEN_PATH);
-  res.json({ configured: !!oauth2Client, authenticated: hasTokens });
+  const hasTokens = process.env.VERCEL 
+    ? !!(process.env.GOOGLE_ACCESS_TOKEN && process.env.GOOGLE_REFRESH_TOKEN)
+    : fs.existsSync(TOKEN_PATH);
+  res.json({ configured: !!oauth2Client || !!(process.env.GOOGLE_CLIENT_ID), authenticated: hasTokens, isVercel: !!process.env.VERCEL });
 });
 
 // ══════════════════════════════════════════════════════════════
