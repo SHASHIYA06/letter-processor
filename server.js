@@ -43,6 +43,14 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 const isVercelStorage = !!process.env.VERCEL;
 
+function generateFilename(file) {
+  const ext = path.extname(file.originalname).toLowerCase() || '.bin';
+  const baseName = path.basename(file.originalname, ext)
+    .replace(/[^a-zA-Z0-9._-]/g, '_')
+    .substring(0, 80);
+  return `${Date.now()}_${baseName}${ext}`;
+}
+
 const storage = isVercelStorage ? multer.memoryStorage() : multer.diskStorage({
   destination: (req, file, cb) => {
     const dir = path.join(__dirname, 'uploads');
@@ -1213,6 +1221,7 @@ app.get('/api/auth/status', (req, res) => {
 
 function getFilePath(req) {
   if (req.file.path) return req.file.path;
+  if (!req.file.filename) req.file.filename = generateFilename(req.file);
   const tmpDir = isVercelStorage ? '/tmp' : path.join(__dirname, 'uploads');
   if (!isVercelStorage && !fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
   const tmpPath = path.join(tmpDir, req.file.filename);
@@ -1380,6 +1389,7 @@ app.post('/api/bulk-upload', (req, res) => {
 
       for (const file of files) {
         try {
+          if (!file.filename) file.filename = generateFilename(file);
           const filePath = file.path || (() => {
             const tmpDir = isVercelStorage ? '/tmp' : path.join(__dirname, 'uploads');
             if (!isVercelStorage && !fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
