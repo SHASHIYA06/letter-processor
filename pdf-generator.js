@@ -29,19 +29,42 @@ function drawCheckbox(doc, x, y, checked) {
 function drawBEMLHeader(doc, W) {
   const headerPath = path.join(__dirname, 'assets', 'beml-letterhead-header.png');
   if (fs.existsSync(headerPath)) {
-    doc.image(headerPath, 0, 0, { width: W, fit: [W, 132] });
+    try {
+      doc.image(headerPath, 0, 0, { width: W });
+      return 142;
+    } catch (e) {
+      console.log('⚠️  Header image load failed:', e.message);
+    }
   }
-  return 142;
+  // Fallback: draw text header
+  doc.font('Times-Bold').fontSize(16).fillColor('#000').text('BEML LIMITED', 0, 20, { width: W, align: 'center' });
+  doc.font('Times-Roman').fontSize(8).fillColor('#333').text('BEML Bhavan, No.1, Outer Ring Road, Bengaluru - 560068', 0, 40, { width: W, align: 'center' });
+  doc.font('Times-Roman').fontSize(7).fillColor('#666').text("Schedule 'A' Company under Ministry of Defence, Govt. of India", 0, 52, { width: W, align: 'center' });
+  doc.font('Times-Roman').fontSize(7).fillColor('#666').text('Defence & Aerospace | Mining & Construction | Rail & Metro', 0, 62, { width: W, align: 'center' });
+  doc.moveTo(55, 75).lineTo(W - 55, 75).lineWidth(1).stroke('#000');
+  return 85;
 }
 
 function drawBEMLFooter(doc, W, H) {
   const footerPath = path.join(__dirname, 'assets', 'beml-letterhead-footer.png');
   if (fs.existsSync(footerPath)) {
-    doc.save();
-    doc.opacity(0.55);
-    doc.image(footerPath, 0, H - 108, { width: W, fit: [W, 115] });
-    doc.restore();
+    try {
+      doc.save();
+      doc.opacity(0.6);
+      doc.image(footerPath, 0, H - 100, { width: W });
+      doc.restore();
+      return;
+    } catch (e) {
+      console.log('⚠️  Footer image load failed:', e.message);
+    }
   }
+  // Fallback: draw text footer
+  doc.save();
+  doc.font('Times-Roman').fontSize(7).fillColor('#666');
+  doc.text('BEML Limited, Bengaluru Complex, New Thippasandra Post, Bengaluru - 560 075', 55, H - 60, { width: W - 110, align: 'center' });
+  doc.text('Tel: +91-80-2524 1752 | E-mail: office.edr@bemlltd.in | www.beml.co.in', 55, H - 48, { width: W - 110, align: 'center' });
+  doc.moveTo(55, H - 70).lineTo(W - 55, H - 70).lineWidth(0.5).stroke('#999');
+  doc.restore();
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -54,10 +77,21 @@ function generateNCRPdf(data, outputPath) {
     doc.pipe(stream);
     const W = doc.page.width, H = doc.page.height, L = 55, R = 555, CW = R - L;
     let y = 15;
-    const ncrH = path.join(__dirname, 'assets', 'beml-header.jpg');
-    const ncrL = path.join(__dirname, 'assets', 'beml-logo.jpg');
-    if (fs.existsSync(ncrH)) doc.image(ncrH, L - 5, y, { width: 80, height: 50 });
-    if (fs.existsSync(ncrL)) doc.image(ncrL, W - 140, y, { width: 110, height: 45 });
+    
+    // Draw BEML header
+    const ncrH = path.join(__dirname, 'assets', 'ncr-header.png');
+    const bemlH = path.join(__dirname, 'assets', 'beml-header.jpg');
+    const bemlL = path.join(__dirname, 'assets', 'beml-logo.jpg');
+    
+    if (fs.existsSync(ncrH)) {
+      try { doc.image(ncrH, L - 5, y, { width: CW + 10 }); } catch (e) {}
+    } else if (fs.existsSync(bemlH)) {
+      try { doc.image(bemlH, L - 5, y, { width: 80, height: 50 }); } catch (e) {}
+    }
+    if (fs.existsSync(bemlL)) {
+      try { doc.image(bemlL, W - 140, y, { width: 110, height: 45 }); } catch (e) {}
+    }
+    
     doc.font('Times-Bold').fontSize(13).fillColor('#000').text('NON-CONFORMITY REPORT', 0, y + 58, { width: W, align: 'center' });
     y += 78;
     const c1 = L, c2 = L + 110, c3 = L + 280, c4 = L + 390, rowH = 22;

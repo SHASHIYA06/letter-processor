@@ -191,10 +191,12 @@ const LETTER_COLUMNS = [
 
 const NCR_COLUMNS = [
   'S.No', 'NCR Report No', 'Date of NCR', 'Date of Detection',
-  'Item Description', 'NCR Description', 'Faulty Sl No', 'Healthy Sl No',
+  'Item Description', 'NCR Description', 'Part Number', 'Modified/Unmodified FMI',
+  'Failure After FMI', 'Faulty Sl No', 'Healthy Sl No', 'Issued By',
   'Qty', 'Sub-System', 'Train No', 'Car', 'Responsibility',
   'Status', 'Item Repaired', 'Item Replaced', 'Date of Repair',
-  'Source', 'Investigation Report Date', 'Gate Pass No', 'Remarks',
+  'Source', 'Investigation Report Date', 'NCR Closed By Doc', 'Gate Pass No',
+  'Remarks', 'IR Printed',
   'Attachment Link', 'File Name',
   'Project', 'Line', 'OEM', 'Train Set', 'Coach No',
   'NCR Category', 'NCR Type', 'Severity', 'Priority', 'System',
@@ -396,8 +398,12 @@ async function appendToSheet(sheetName, data, columns) {
       'dateofdetection': 'detectionDate',
       'itemdescription': 'itemDesc',
       'ncrdescription': 'ncrDesc',
+      'partnumber': 'partNo',
+      'modifiedunmodifiedfmi': 'modifiedFMI',
+      'failureafterfmi': 'failureAfterFMI',
       'faultyslno': 'faultySl',
       'healthyslno': 'healthySl',
+      'issuedby': 'issuedBy',
       'qty': 'qty',
       'subsystem': 'subSystem',
       'trainno': 'trainNo',
@@ -408,7 +414,29 @@ async function appendToSheet(sheetName, data, columns) {
       'dateofrepair': 'dateOfRepair',
       'source': 'source',
       'investigationreportdate': 'investigationDate',
+      'ncrclosedbydoc': 'ncrClosedByDoc',
       'gatepassno': 'gatePassNo',
+      'irprinted': 'irPrinted',
+      'project': 'project',
+      'line': 'line',
+      'oem': 'oem',
+      'trainset': 'trainSet',
+      'coachno': 'coachNo',
+      'ncrcategory': 'ncrCategory',
+      'ncrtype': 'ncrType',
+      'severity': 'severity',
+      'priority': 'priority',
+      'system': 'system',
+      'location': 'location',
+      'vendor': 'vendor',
+      'raisedby': 'raisedBy',
+      'assignedto': 'assignedTo',
+      'rootcause': 'rootCause',
+      'correctiveaction': 'correctiveAction',
+      'preventiveaction': 'preventiveAction',
+      'disposition': 'disposition',
+      'closuredate': 'closureDate',
+      'closureauthority': 'closureAuthority',
       'jointnoteno': 'jointNoteNo',
       'parties': 'parties',
       'description': 'description',
@@ -886,15 +914,17 @@ app.post('/api/ncr/create', async (req, res) => {
 app.post('/api/ncr/update', async (req, res) => {
   try {
     const { rowIndex, data } = req.body;
-    // Build row data based on NCR_COLUMNS (43 columns)
+    // Build row data based on NCR_COLUMNS (49 columns)
     const ncrRow = [
       rowIndex, // S.No (keep original)
       data.ncrNo || '', data.date || '', data.detectionDate || '', data.itemDesc || '',
-      data.ncrDesc || '', data.faultySl || '', data.healthySl || '', data.qty || '',
+      data.ncrDesc || '', data.partNo || '', data.modifiedFMI || '', data.failureAfterFMI || '',
+      data.faultySl || '', data.healthySl || '', data.issuedBy || '', data.qty || '',
       data.subSystem || '', data.trainNo || '', data.car || '', data.responsibility || '',
       data.status || 'Open', data.itemRepaired || '', data.itemReplaced || '',
       data.dateOfRepair || '', data.source || '', data.investigationReportDate || '',
-      data.gatePassNo || '', data.remarks || '', data.attachmentLink || '', data.fileName || '',
+      data.ncrClosedByDoc || '', data.gatePassNo || '', data.remarks || '', data.irPrinted || '',
+      data.attachmentLink || '', data.fileName || '',
       data.project || '', data.line || '', data.oem || '', data.trainSet || '', data.coachNo || '',
       data.ncrCategory || '', data.ncrType || '', data.severity || '', data.priority || '', data.system || '',
       data.location || '', data.vendor || '', data.raisedBy || data.issuedBy || '', data.assignedTo || '',
@@ -932,16 +962,18 @@ app.get('/api/ncr/clone/:idx', async (req, res) => {
     // Map row indices to field names based on NCR_COLUMNS
     const fieldMap = {
       1: 'ncrNo', 2: 'date', 3: 'detectionDate', 4: 'itemDesc',
-      5: 'ncrDesc', 6: 'faultySl', 7: 'healthySl', 8: 'qty',
-      9: 'subSystem', 10: 'trainNo', 11: 'car', 12: 'responsibility',
-      13: 'status', 14: 'itemRepaired', 15: 'itemReplaced', 16: 'dateOfRepair',
-      17: 'source', 18: 'investigationReportDate', 19: 'gatePassNo', 20: 'remarks',
-      21: 'attachmentLink', 22: 'fileName',
-      23: 'project', 24: 'line', 25: 'oem', 26: 'trainSet', 27: 'coachNo',
-      28: 'ncrCategory', 29: 'ncrType', 30: 'severity', 31: 'priority', 32: 'system',
-      33: 'location', 34: 'vendor', 35: 'raisedBy', 36: 'assignedTo',
-      37: 'rootCause', 38: 'correctiveAction', 39: 'preventiveAction', 40: 'disposition',
-      41: 'closureDate', 42: 'closureAuthority'
+      5: 'ncrDesc', 6: 'partNo', 7: 'modifiedFMI', 8: 'failureAfterFMI',
+      9: 'faultySl', 10: 'healthySl', 11: 'issuedBy', 12: 'qty',
+      13: 'subSystem', 14: 'trainNo', 15: 'car', 16: 'responsibility',
+      17: 'status', 18: 'itemRepaired', 19: 'itemReplaced', 20: 'dateOfRepair',
+      21: 'source', 22: 'investigationReportDate', 23: 'ncrClosedByDoc', 24: 'gatePassNo',
+      25: 'remarks', 26: 'irPrinted',
+      27: 'attachmentLink', 28: 'fileName',
+      29: 'project', 30: 'line', 31: 'oem', 32: 'trainSet', 33: 'coachNo',
+      34: 'ncrCategory', 35: 'ncrType', 36: 'severity', 37: 'priority', 38: 'system',
+      39: 'location', 40: 'vendor', 41: 'raisedBy', 42: 'assignedTo',
+      43: 'rootCause', 44: 'correctiveAction', 45: 'preventiveAction', 46: 'disposition',
+      47: 'closureDate', 48: 'closureAuthority'
     };
     const clonedData = { ncrNo: `${prefix}${String(maxNum + 1).padStart(3, '0')}` };
     for (const [idx, field] of Object.entries(fieldMap)) {
@@ -1132,8 +1164,8 @@ app.get('/api/auth/status', (req, res) => {
 
 function getFilePath(req) {
   if (req.file.path) return req.file.path;
-  const tmpDir = path.join(__dirname, 'uploads');
-  if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
+  const tmpDir = isVercelStorage ? '/tmp' : path.join(__dirname, 'uploads');
+  if (!isVercelStorage && !fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
   const tmpPath = path.join(tmpDir, req.file.filename);
   fs.writeFileSync(tmpPath, req.file.buffer);
   return tmpPath;
@@ -1300,8 +1332,8 @@ app.post('/api/bulk-upload', (req, res) => {
       for (const file of files) {
         try {
           const filePath = file.path || (() => {
-            const tmpDir = path.join(__dirname, 'uploads');
-            if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
+            const tmpDir = isVercelStorage ? '/tmp' : path.join(__dirname, 'uploads');
+            if (!isVercelStorage && !fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
             const tmpPath = path.join(tmpDir, file.filename);
             fs.writeFileSync(tmpPath, file.buffer);
             return tmpPath;
@@ -1532,6 +1564,148 @@ app.post('/api/import/excel', upload.single('file'), async (req, res) => {
     });
   } catch (err) {
     console.error('❌ Excel import error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// CSV Import Route for NCR Master List
+app.post('/api/import/csv', upload.single('file'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ success: false, error: 'No file uploaded' });
+    const sheetName = req.body.sheetName || 'NCR Records';
+    const ext = path.extname(req.file.originalname).toLowerCase();
+    
+    if (ext !== '.csv') {
+      return res.status(400).json({ success: false, error: 'Only CSV files are supported' });
+    }
+
+    const filePath = getFilePath(req);
+    const csvContent = fs.readFileSync(filePath, 'utf8');
+    
+    // Parse CSV (handle quoted fields with commas and newlines)
+    function parseCSV(text) {
+      const rows = [];
+      let currentRow = [];
+      let currentField = '';
+      let inQuotes = false;
+      
+      for (let i = 0; i < text.length; i++) {
+        const char = text[i];
+        const nextChar = text[i + 1];
+        
+        if (inQuotes) {
+          if (char === '"' && nextChar === '"') {
+            currentField += '"';
+            i++;
+          } else if (char === '"') {
+            inQuotes = false;
+          } else {
+            currentField += char;
+          }
+        } else {
+          if (char === '"') {
+            inQuotes = true;
+          } else if (char === ',') {
+            currentRow.push(currentField.trim());
+            currentField = '';
+          } else if (char === '\n' || (char === '\r' && nextChar === '\n')) {
+            currentRow.push(currentField.trim());
+            if (currentRow.some(f => f !== '')) rows.push(currentRow);
+            currentRow = [];
+            currentField = '';
+            if (char === '\r') i++;
+          } else {
+            currentField += char;
+          }
+        }
+      }
+      currentRow.push(currentField.trim());
+      if (currentRow.some(f => f !== '')) rows.push(currentRow);
+      return rows;
+    }
+    
+    const allRows = parseCSV(csvContent);
+    if (allRows.length < 2) {
+      return res.status(400).json({ success: false, error: 'CSV file is empty or has no data rows' });
+    }
+
+    const headers = allRows[0];
+    const dataRows = allRows.slice(1);
+    
+    console.log(`📊 Importing ${dataRows.length} rows from CSV to ${sheetName}`);
+    console.log(`   CSV headers: ${headers.join(', ')}`);
+    console.log(`   Target columns: ${NCR_COLUMNS.join(', ')}`);
+
+    // Map CSV headers to NCR_COLUMNS
+    const headerMap = {};
+    headers.forEach((h, i) => {
+      const clean = h.toLowerCase().replace(/[^a-z0-9]/g, '');
+      // Map CSV headers to our column names
+      const csvToNCR = {
+        'sl': 'S.No', 'ncrreportno': 'NCR Report No', 'ncrnumber': 'NCR Report No',
+        'dateofncr': 'Date of NCR', 'dateofdetection': 'Date of Detection',
+        'itemdescription': 'Item Description', 'ncrdescription': 'NCR Description',
+        'partnumber': 'Part Number', 'modifiedunmodifiedfmi': 'Modified/Unmodified FMI',
+        'failureafterfmi': 'Failure After FMI', 'faultyslno': 'Faulty Sl No',
+        'healthyslno': 'Healthy Sl No', 'issuedby': 'Issued By',
+        'qty': 'Qty', 'subsystem': 'Sub-System', 'trainno': 'Train No',
+        'car': 'Car', 'responsibility': 'Responsibility',
+        'status': 'Status', 'itemrepaired': 'Item Repaired',
+        'itemreplaced': 'Item Replaced', 'dateofrepair': 'Date of Repair',
+        'source': 'Source', 'investigationreportdate': 'Investigation Report Date',
+        'ncrclosedbydoc': 'NCR Closed By Doc', 'gatepassno': 'Gate Pass No',
+        'remarks': 'Remarks', 'irprinted': 'IR Printed',
+        'project': 'Project', 'line': 'Line', 'oem': 'OEM',
+        'trainset': 'Train Set', 'coachno': 'Coach No',
+        'ncrcategory': 'NCR Category', 'ncrtype': 'NCR Type',
+        'severity': 'Severity', 'priority': 'Priority', 'system': 'System',
+        'location': 'Location', 'vendor': 'Vendor', 'raisedby': 'Raised By',
+        'assignedto': 'Assigned To', 'rootcause': 'Root Cause',
+        'correctiveaction': 'Corrective Action', 'preventiveaction': 'Preventive Action',
+        'disposition': 'Disposition', 'closuredate': 'Closure Date',
+        'closureauthority': 'Closure Authority'
+      };
+      if (csvToNCR[clean]) headerMap[i] = csvToNCR[clean];
+    });
+
+    let count = 0;
+    let errors = [];
+    
+    for (let i = 0; i < dataRows.length; i++) {
+      try {
+        const row = dataRows[i];
+        const record = {};
+        
+        // Map CSV data to record using headerMap
+        for (const [csvIdx, ncrCol] of Object.entries(headerMap)) {
+          const csvIndex = parseInt(csvIdx);
+          if (row[csvIndex] !== undefined && row[csvIndex] !== '') {
+            record[ncrCol] = String(row[csvIndex]);
+          }
+        }
+
+        // Add S.No if not present
+        if (!record['S.No']) record['S.No'] = String(count + 1);
+
+        await appendToSheet(sheetName, record, NCR_COLUMNS);
+        count++;
+      } catch (rowErr) {
+        errors.push(`Row ${i + 2}: ${rowErr.message}`);
+      }
+    }
+
+    // Cleanup uploaded file
+    try { fs.unlinkSync(filePath); } catch {}
+
+    res.json({ 
+      success: true, 
+      imported: count, 
+      total: dataRows.length, 
+      errors: errors.length > 0 ? errors.slice(0, 10) : [],
+      sheetName 
+    });
+  } catch (err) {
+    console.error('❌ CSV import error:', err);
     res.status(500).json({ success: false, error: err.message });
   }
 });
