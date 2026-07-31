@@ -458,9 +458,9 @@
       const rows = allData['NCR Records'] || [];
       let allNCR = [];
       for (let i = 1; i < rows.length; i++) allNCR.push({ row: rows[i], idx: i });
-      if (status) allNCR = allNCR.filter(n => (n.row[13] || n.row[n.row.length-1] || '').toLowerCase() === status.toLowerCase());
-      if (severity) allNCR = allNCR.filter(n => (n.row[30] || '').toLowerCase() === severity.toLowerCase());
-      if (project) allNCR = allNCR.filter(n => (n.row[23] || '').toLowerCase().includes(project.toLowerCase()));
+      if (status) allNCR = allNCR.filter(n => (n.row[17] || n.row[n.row.length-1] || '').toLowerCase() === status.toLowerCase());
+      if (severity) allNCR = allNCR.filter(n => (n.row[36] || '').toLowerCase() === severity.toLowerCase());
+      if (project) allNCR = allNCR.filter(n => (n.row[29] || '').toLowerCase().includes(project.toLowerCase()));
       if (search) allNCR = allNCR.filter(n => n.row.some(c => (c||'').toLowerCase().includes(search)));
       renderNCRTable(allNCR);
     }
@@ -470,13 +470,13 @@
         document.getElementById('ncrTable').innerHTML = '<div class="empty-state"><div class="icon">📋</div><p>No NCR records found</p></div>';
         return;
       }
-      let html = '<table class="table"><thead><tr><th>#</th><th>NCR No</th><th>Date</th><th>Item</th><th>Project</th><th>Train</th><th>Severity</th><th>Status</th><th>Actions</th></tr></thead><tbody>';
+      let html = '<table class="table"><thead><tr><th>#</th><th>NCR No</th><th>Date</th><th>Item</th><th>Project</th><th>Train</th><th>Car</th><th>Vendor</th><th>Severity</th><th>Status</th><th>Actions</th></tr></thead><tbody>';
       ncrs.forEach((item, i) => {
         const r = item.row;
-        const status = r[13] || r[r.length-1] || 'Open';
-        const severity = r[30] || 'Major';
-        const project = r[23] || '';
-        const trainSet = r[26] || r[10] || '';
+        const status = r[17] || r[r.length-1] || 'Open';
+        const severity = r[36] || 'Major';
+        const project = r[29] || '';
+        const trainSet = r[32] || r[14] || '';
         const statusClass = status.toLowerCase() === 'closed' ? 'closed' : status.toLowerCase() === 'in progress' ? 'open' : 'open';
         const severityClass = severity.toLowerCase() === 'critical' ? 'error' : severity.toLowerCase() === 'major' ? 'warning' : 'open';
         html += `<tr>
@@ -485,7 +485,9 @@
           <td>${r[3] || r[2] || 'N/A'}</td>
           <td title="${esc(r[4] || '')}">${esc((r[4] || 'N/A').substring(0,35))}</td>
           <td title="${esc(project)}">${esc((project || 'N/A').substring(0,25))}</td>
-          <td>${trainSet || r[10] || 'N/A'}</td>
+          <td>${trainSet || 'N/A'}</td>
+          <td>${esc(r[15] || 'N/A')}</td>
+          <td>${esc(r[40] || 'N/A')}</td>
           <td><span class="badge badge-${severityClass}">${severity}</span></td>
           <td><span class="badge badge-${statusClass}">${status}</span></td>
           <td class="actions">

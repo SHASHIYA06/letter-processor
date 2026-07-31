@@ -27,16 +27,10 @@ function drawCheckbox(doc, x, y, checked) {
 //  BEML LETTER HEADER
 // ══════════════════════════════════════════════════════════════
 function drawBEMLHeader(doc, W) {
-  const headerPath = path.join(__dirname, 'assets', 'beml-letterhead-header.png');
-  if (fs.existsSync(headerPath)) {
-    try {
-      doc.image(headerPath, 0, 0, { width: W });
-      return 142;
-    } catch (e) {
-      console.log('⚠️  Header image load failed:', e.message);
-    }
+  const logoPath = path.join(__dirname, 'assets', 'beml-logo.jpg');
+  if (fs.existsSync(logoPath)) {
+    try { doc.image(logoPath, W/2 - 70, 15, { width: 140, height: 50, fit: 'contain' }); return 75; } catch (e) {}
   }
-  // Fallback: draw text header
   doc.font('Times-Bold').fontSize(16).fillColor('#000').text('BEML LIMITED', 0, 20, { width: W, align: 'center' });
   doc.font('Times-Roman').fontSize(8).fillColor('#333').text('BEML Bhavan, No.1, Outer Ring Road, Bengaluru - 560068', 0, 40, { width: W, align: 'center' });
   doc.font('Times-Roman').fontSize(7).fillColor('#666').text("Schedule 'A' Company under Ministry of Defence, Govt. of India", 0, 52, { width: W, align: 'center' });
@@ -78,22 +72,14 @@ function generateNCRPdf(data, outputPath) {
     const W = doc.page.width, H = doc.page.height, L = 55, R = 555, CW = R - L;
     let y = 15;
     
-    // Draw BEML header
-    const ncrH = path.join(__dirname, 'assets', 'ncr-header.png');
-    const bemlH = path.join(__dirname, 'assets', 'beml-header.jpg');
-    const bemlL = path.join(__dirname, 'assets', 'beml-logo.jpg');
-    
-    if (fs.existsSync(ncrH)) {
-      try { doc.image(ncrH, L - 5, y, { width: CW + 10 }); } catch (e) {}
-    } else if (fs.existsSync(bemlH)) {
-      try { doc.image(bemlH, L - 5, y, { width: 80, height: 50 }); } catch (e) {}
+    // Draw BEML header - logo + company name centered
+    const logoPath = path.join(__dirname, 'assets', 'beml-logo.jpg');
+    if (fs.existsSync(logoPath)) {
+      try { doc.image(logoPath, W/2 - 70, y, { width: 140, height: 50, fit: 'contain' }); } catch (e) {}
+      y += 55;
     }
-    if (fs.existsSync(bemlL)) {
-      try { doc.image(bemlL, W - 140, y, { width: 110, height: 45 }); } catch (e) {}
-    }
-    
-    doc.font('Times-Bold').fontSize(13).fillColor('#000').text('NON-CONFORMITY REPORT', 0, y + 58, { width: W, align: 'center' });
-    y += 78;
+    doc.font('Times-Bold').fontSize(14).fillColor('#000').text('NON-CONFORMITY REPORT', 0, y, { width: W, align: 'center' });
+    y += 22;
     const c1 = L, c2 = L + 110, c3 = L + 280, c4 = L + 390, rowH = 22;
     doc.rect(L, y, CW, 0).lineWidth(0.5).stroke();
     function tRow(l1, v1, l2, v2, h) {
