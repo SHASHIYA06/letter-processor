@@ -486,7 +486,7 @@
           const status = (r[statusIdx] || '').toLowerCase();
           if (status !== 'closed' && status !== '' && status !== 'n/a') open++;
           else if (status === 'closed') closed++;
-          if (isNCR && r[16]) vendorSet.add(r[16]);
+          if (isNCR && r[40]) vendorSet.add(r[40]);
         }
       }
       return { total, beml, kmrcl, ncr, jn, open, closed, metro, letters, vendors: vendorSet.size };
@@ -507,11 +507,13 @@
       recent.forEach(item => {
         const r = item.row;
         const badge = item.sheet.includes('NCR') ? 'badge-ncr' : item.sheet.includes('BEML') ? 'badge-beml' : item.sheet.includes('KMRCL') ? 'badge-kmrcl' : 'badge-jn';
+        const statusIdx = item.sheet.includes('NCR') ? 17 : item.sheet.includes('Joint') ? 12 : 14;
+        const status = r[statusIdx] || 'Open';
         html += `<tr style="cursor:pointer" onclick="viewDocument('${item.sheet}',${item.idx})">
           <td><strong>${esc(r[1] || r[3] || 'N/A')}</strong></td>
           <td><span class="badge ${badge}">${item.sheet}</span></td>
-          <td>${r[3] || r[2] || 'N/A'}</td>
-          <td><span class="badge badge-${(r[r.length-1]||'open').toLowerCase() === 'closed' ? 'closed' : 'open'}">${r[r.length-1] || 'Open'}</span></td>
+          <td>${esc(r[3] || r[2] || 'N/A')}</td>
+          <td><span class="badge badge-${(status||'open').toLowerCase() === 'closed' ? 'closed' : 'open'}">${esc(status) || 'Open'}</span></td>
         </tr>`;
       });
       html += '</tbody></table>';
@@ -570,7 +572,7 @@
       letters.forEach((item, i) => {
         const r = item.row;
         const badge = item.sheet.includes('BEML') ? 'badge-beml' : item.sheet.includes('KMRCL') ? 'badge-kmrcl' : 'badge-metro';
-        const status = r[r.length-1] || 'Open';
+        const status = r[14] || 'Open';
         html += `<tr>
           <td>${i+1}</td>
           <td><span class="badge ${badge}">${item.sheet.replace(' Letters','')}</span></td>
@@ -634,23 +636,23 @@
       let html = '<table class="table"><thead><tr><th>#</th><th>NCR No</th><th>Date</th><th>Item</th><th>Project</th><th>Train</th><th>Car</th><th>Vendor</th><th>Severity</th><th>Status</th><th>Actions</th></tr></thead><tbody>';
       ncrs.forEach((item, i) => {
         const r = item.row;
-        const status = r[17] || r[r.length-1] || 'Open';
+        const status = r[17] || 'Open';
         const severity = r[36] || 'Major';
         const project = r[29] || '';
         const trainSet = r[32] || r[14] || '';
-        const statusClass = status.toLowerCase() === 'closed' ? 'closed' : status.toLowerCase() === 'in progress' ? 'open' : 'open';
+        const statusClass = status.toLowerCase() === 'closed' ? 'closed' : 'open';
         const severityClass = severity.toLowerCase() === 'critical' ? 'error' : severity.toLowerCase() === 'major' ? 'warning' : 'open';
         html += `<tr>
           <td>${i+1}</td>
           <td><strong>${esc(r[1] || 'N/A')}</strong></td>
-          <td>${r[3] || r[2] || 'N/A'}</td>
+          <td>${esc(r[2] || r[3] || 'N/A')}</td>
           <td title="${esc(r[4] || '')}">${esc((r[4] || 'N/A').substring(0,35))}</td>
           <td title="${esc(project)}">${esc((project || 'N/A').substring(0,25))}</td>
-          <td>${trainSet || 'N/A'}</td>
+          <td>${esc(trainSet || 'N/A')}</td>
           <td>${esc(r[15] || 'N/A')}</td>
           <td>${esc(r[40] || 'N/A')}</td>
-          <td><span class="badge badge-${severityClass}">${severity}</span></td>
-          <td><span class="badge badge-${statusClass}">${status}</span></td>
+          <td><span class="badge badge-${severityClass}">${esc(severity)}</span></td>
+          <td><span class="badge badge-${statusClass}">${esc(status)}</span></td>
           <td class="actions">
             <button class="btn btn-secondary btn-sm" onclick="viewDocument('NCR Records',${item.idx})" title="View">👁️</button>
             <button class="btn btn-secondary btn-sm" onclick="editRecord('NCR Records',${item.idx})" title="Edit">✏️</button>
@@ -681,7 +683,7 @@
       let html = '<table class="table"><thead><tr><th>#</th><th>Joint Note No</th><th>Date</th><th>Parties</th><th>Subject</th><th>Status</th><th>Actions</th></tr></thead><tbody>';
       allJN.forEach((item, i) => {
         const r = item.row;
-        const status = r[r.length - 1] || 'Open';
+        const status = r[12] || 'Open';
         html += `<tr>
           <td>${i+1}</td>
           <td><strong>${esc(r[1] || '')}</strong></td>
@@ -2174,23 +2176,29 @@
         const NCR_KEY_MAP = {
           'NCR Report No':'ncrNo','Date of NCR':'date','Date of Detection':'detectionDate',
           'Item Description':'itemDesc','NCR Description':'ncrDesc','Part Number':'partNo',
-          'Modified/Unmodified FMI':'fmi','Failure After FMI':'failureAfterFmi',
+          'Modified/Unmodified FMI':'modifiedFMI','Failure After FMI':'failureAfterFMI',
           'Faulty Sl No':'faultySl','Healthy Sl No':'healthySl',
           'Issued By':'issuedBy','Qty':'qty','Sub-System':'subSystem',
-          'Train No':'vehicleNo','Car':'car','Responsibility':'responsibility',
+          'Train No':'trainNo','Car':'car','Responsibility':'responsibility',
           'Status':'status','Item Repaired':'itemRepaired','Item Replaced':'itemReplaced',
           'Date of Repair':'dateOfRepair','Source':'source',
           'Investigation Report Date':'investigationDate',
-          'NCR Closed By Doc':'closedByDoc','Gate Pass No':'gatePassNo',
-          'Remarks':'remarks','Project':'project','Line':'line','OEM':'oem',
+          'NCR Closed By Doc':'ncrClosedByDoc','Gate Pass No':'gatePassNo',
+          'IR Printed':'irPrinted','Remarks':'remarks',
+          'Project':'project','Line':'line','OEM':'oem',
           'Train Set':'trainSet','Coach No':'coachNo','NCR Category':'ncrCategory',
           'NCR Type':'ncrType','Severity':'severity','Priority':'priority',
           'System':'system','Location':'location','Vendor':'vendor',
           'Raised By':'raisedBy','Assigned To':'assignedTo',
-          'Root Cause':'rootCause','Corrective Action':'correction',
+          'Root Cause':'rootCause','Corrective Action':'correctiveAction',
           'Preventive Action':'preventiveAction','Disposition':'disposition',
           'Closure Date':'closureDate','Closure Authority':'closureAuthority',
-          'Approval Scope':'approvalScope','Repair Procedure':'repairProcedure'
+          'Distribution':'distribution','Assy Dwg No':'assyDwgNo','Rev':'rev',
+          'Assy Serial No':'assySerialNo','Part Serial No':'partSerialNo',
+          'Place':'place','B/L No':'blNo','Stored At':'storedAt',
+          'Invoice No':'invoiceNo','Material Status':'materialStatus',
+          'Disassembled':'disassembled','Approval Scope':'approvalScope',
+          'Repair Procedure':'repairProcedure'
         };
         headers.forEach((h, i) => { if (NCR_KEY_MAP[h] && record[i]) data[NCR_KEY_MAP[h]] = record[i]; });
         authFetch('/api/ncr/generate-pdf', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(data) })
@@ -2198,7 +2206,15 @@
       } else if (isLetter) {
         const data = {};
         const headers = rows[0] || [];
-        const LETTER_KEY_MAP = { 'Ref. Letter Number':'refNumber','All References':'allReferences','Date':'date','From':'from','To (Addressee)':'to','Kind Attention':'kindAttn','Subject':'subject','Letter Type':'letterType','Letter Content':'letterContent','Enclosures':'enclosures','Remarks':'remarks','Signatory':'signatory','Designation':'designation','Project':'project','Cc':'cc','Status':'status' };
+        const LETTER_KEY_MAP = {
+          'Ref. Letter Number':'refNumber','All References':'allReferences','Date':'date',
+          'From':'from','To (Addressee)':'to','Kind Attention':'kindAttn',
+          'Subject':'subject','Letter Type':'letterType','Letter Content':'letterContent',
+          'Enclosures':'enclosures','Remarks':'remarks',
+          'Signatory':'signatory','Designation':'designation','Project':'project',
+          'Cc':'cc','Status':'status','Depot':'depot','Priority':'priority',
+          'Reply Type':'replyType','Tech Details':'techDetails'
+        };
         headers.forEach((h, i) => { if (LETTER_KEY_MAP[h] && record[i]) data[LETTER_KEY_MAP[h]] = record[i]; });
         authFetch('/api/letter/generate-pdf', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(data) })
           .then(r => r.json()).then(r => { if (r.pdfData) { const bin = atob(r.pdfData); const bytes = new Uint8Array(bin.length); for(let i=0;i<bin.length;i++) bytes[i]=bin.charCodeAt(i); const url = URL.createObjectURL(new Blob([bytes],{type:'application/pdf'})); const a = document.createElement('a'); a.href = url; a.download = r.fileName || 'Letter.pdf'; a.click(); } });

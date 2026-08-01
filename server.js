@@ -416,8 +416,7 @@ const LETTER_KEY_TO_COL = {
   letterType: 'Letter Type', letterContent: 'Letter Content', enclosures: 'Enclosures',
   remarks: 'Remarks', attachmentLink: 'Attachment Link', fileName: 'File Name', status: 'Status',
   signatory: 'Signatory', designation: 'Designation', project: 'Project', cc: 'Cc',
-  depot: 'Depot', priority: 'Priority', replyType: 'Reply Type', techDetails: 'Tech Details',
-  uploadDate: 'Upload Date', detectedOrg: 'Detected Org'
+  depot: 'Depot', priority: 'Priority', replyType: 'Reply Type', techDetails: 'Tech Details'
 };
 
 const NCR_KEY_TO_COL = {
@@ -437,16 +436,25 @@ const NCR_KEY_TO_COL = {
   rootCause: 'Root Cause', correctiveAction: 'Corrective Action',
   preventiveAction: 'Preventive Action', disposition: 'Disposition',
   closureDate: 'Closure Date', closureAuthority: 'Closure Authority',
+  distribution: 'Distribution', assyDwgNo: 'Assy Dwg No', rev: 'Rev',
+  assySerialNo: 'Assy Serial No', partSerialNo: 'Part Serial No',
+  place: 'Place', blNo: 'B/L No', storedAt: 'Stored At',
+  invoiceNo: 'Invoice No', materialStatus: 'Material Status',
+  disassembled: 'Disassembled', approvalScope: 'Approval Scope',
+  repairProcedure: 'Repair Procedure',
   // Legacy aliases from form
   vehicleNo: 'Train No', product: 'Item Description', partNumber: 'Part Number',
   supplier: 'Vendor', correction: 'Corrective Action', cause: 'Root Cause',
-  issuedBy: 'Issued By'
+  department: 'Issued By'
 };
 
 const JN_KEY_TO_COL = {
   jointNoteNo: 'Joint Note No', date: 'Date', parties: 'Parties',
-  description: 'Description', items: 'Items Discussed', decisions: 'Decisions',
-  actionItems: 'Action Items', attachments: 'Attachments', remarks: 'Remarks'
+  subject: 'Subject', description: 'Description',
+  items: 'Items Discussed', itemsDiscussed: 'Items Discussed',
+  decisions: 'Decisions', actionItems: 'Action Items',
+  attachments: 'Attachments', attachmentLink: 'Attachment Link',
+  fileName: 'File Name', status: 'Status'
 };
 
 function buildRow(data, columns, keyToCol) {
@@ -979,7 +987,12 @@ app.get('/api/ncr/clone/:idx', authenticateToken, async (req, res) => {
       34: 'ncrCategory', 35: 'ncrType', 36: 'severity', 37: 'priority', 38: 'system',
       39: 'location', 40: 'vendor', 41: 'raisedBy', 42: 'assignedTo',
       43: 'rootCause', 44: 'correctiveAction', 45: 'preventiveAction', 46: 'disposition',
-      47: 'closureDate', 48: 'closureAuthority'
+      47: 'closureDate', 48: 'closureAuthority',
+      49: 'distribution', 50: 'assyDwgNo', 51: 'rev',
+      52: 'assySerialNo', 53: 'partSerialNo', 54: 'place',
+      55: 'blNo', 56: 'storedAt', 57: 'invoiceNo',
+      58: 'materialStatus', 59: 'disassembled',
+      60: 'approvalScope', 61: 'repairProcedure'
     };
     const clonedData = { ncrNo: `${prefix}${String(maxNum + 1).padStart(3, '0')}` };
     for (const [idx, field] of Object.entries(fieldMap)) {
