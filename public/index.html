@@ -370,7 +370,7 @@
       const metroRows = allData['Metro Rail Letters'] || [];
       const allLetters = [];
       [['BEML Letters', rows], ['KMRCL Letters', kmrclRows], ['Metro Rail Letters', metroRows]].forEach(([name, r]) => {
-        for (let i = 1; i < r.length; i++) allLetters.push({ sheet: name, row: r[i], idx: i });
+        for (let i = r.length - 1; i >= 1; i--) allLetters.push({ sheet: name, row: r[i], idx: i });
       });
       el.innerHTML = `
         <div class="page-header">
@@ -394,7 +394,7 @@
       const search = document.getElementById('letterSearch').value.toLowerCase();
       const allLetters = [];
       [['BEML Letters', allData['BEML Letters'] || []], ['KMRCL Letters', allData['KMRCL Letters'] || []], ['Metro Rail Letters', allData['Metro Rail Letters'] || []]].forEach(([name, rows]) => {
-        for (let i = 1; i < rows.length; i++) allLetters.push({ sheet: name, row: rows[i], idx: i });
+        for (let i = rows.length - 1; i >= 1; i--) allLetters.push({ sheet: name, row: rows[i], idx: i });
       });
       let filtered = allLetters;
       if (org) filtered = filtered.filter(l => l.sheet === org);
@@ -434,7 +434,7 @@
     function renderNCR(el) {
       const rows = allData['NCR Records'] || [];
       const allNCR = [];
-      for (let i = 1; i < rows.length; i++) allNCR.push({ row: rows[i], idx: i });
+      for (let i = rows.length - 1; i >= 1; i--) allNCR.push({ row: rows[i], idx: i });
       el.innerHTML = `
         <div class="page-header">
           <div><h2>NCR Records</h2><p>${allNCR.length} Non-Conformance Reports</p></div>
@@ -457,7 +457,7 @@
       const search = document.getElementById('ncrSearch').value.toLowerCase();
       const rows = allData['NCR Records'] || [];
       let allNCR = [];
-      for (let i = 1; i < rows.length; i++) allNCR.push({ row: rows[i], idx: i });
+      for (let i = rows.length - 1; i >= 1; i--) allNCR.push({ row: rows[i], idx: i });
       if (status) allNCR = allNCR.filter(n => (n.row[17] || n.row[n.row.length-1] || '').toLowerCase() === status.toLowerCase());
       if (severity) allNCR = allNCR.filter(n => (n.row[36] || '').toLowerCase() === severity.toLowerCase());
       if (project) allNCR = allNCR.filter(n => (n.row[29] || '').toLowerCase().includes(project.toLowerCase()));
@@ -505,7 +505,7 @@
     function renderJointNotes(el) {
       const rows = allData['Joint Notes'] || [];
       const allJN = [];
-      for (let i = 1; i < rows.length; i++) allJN.push({ row: rows[i], idx: i });
+      for (let i = rows.length - 1; i >= 1; i--) allJN.push({ row: rows[i], idx: i });
       el.innerHTML = `
         <div class="page-header">
           <div><h2>Joint Notes</h2><p>${allJN.length} joint notes</p></div>
