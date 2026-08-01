@@ -217,7 +217,8 @@ const SHEET_NAMES = {
 const LETTER_COLUMNS = [
   'S.No', 'Ref. Letter Number', 'All References', 'Date', 'From',
   'To (Addressee)', 'Kind Attention', 'Subject', 'Letter Type',
-  'Letter Content', 'Enclosures', 'Remarks', 'Attachment Link', 'File Name', 'Status'
+  'Letter Content', 'Enclosures', 'Remarks', 'Attachment Link', 'File Name', 'Status',
+  'Signatory', 'Designation', 'Project', 'Cc'
 ];
 
 const NCR_COLUMNS = [
@@ -397,7 +398,8 @@ const LETTER_KEY_TO_COL = {
   refNumber: 'Ref. Letter Number', allReferences: 'All References', date: 'Date',
   from: 'From', to: 'To (Addressee)', kindAttn: 'Kind Attention', subject: 'Subject',
   letterType: 'Letter Type', letterContent: 'Letter Content', enclosures: 'Enclosures',
-  remarks: 'Remarks', attachmentLink: 'Attachment Link', fileName: 'File Name', status: 'Status'
+  remarks: 'Remarks', attachmentLink: 'Attachment Link', fileName: 'File Name', status: 'Status',
+  signatory: 'Signatory', designation: 'Designation', project: 'Project', cc: 'Cc'
 };
 
 const NCR_KEY_TO_COL = {
@@ -764,13 +766,12 @@ function parseLetterContent(text, org) {
   if (rm) remarks = rm[1].trim().replace(/\n/g, ' ').substring(0, 300);
 
   return {
-    organization: org, letterType, refLetterNumber: extracted.refNumber || 'N/A',
-    allReferences: allRefs.length > 0 ? allRefs.join(' | ') : extracted.refNumber || 'N/A',
-    date: extracted.date || new Date().toLocaleDateString('en-IN'),
-    from: extracted.from || 'N/A', to: extracted.to || 'N/A',
-    kindAttn: extracted.kindAttn || 'N/A', subject: extracted.subject || 'N/A',
-    letterContent: extracted.letterContent, enclosures: extracted.enclosures || 'N/A',
-    remarks: remarks || 'N/A', fileName: '', 
+    organization: org, letterType, refLetterNumber: extracted.refNumber || '',
+    allReferences: allRefs.length > 0 ? allRefs.join(' | ') : '',
+    date: extracted.date || '', from: extracted.from || '', to: extracted.to || '',
+    kindAttn: extracted.kindAttn || '', subject: extracted.subject || '',
+    letterContent: extracted.letterContent || '', enclosures: extracted.enclosures || '',
+    remarks: remarks || '', fileName: '',
     uploadDate: new Date().toISOString().split('T')[0],
     status: 'Open'
   };
@@ -1072,8 +1073,13 @@ app.post('/api/auto-save', async (req, res) => {
           const updates = [];
           NCR_COLUMNS.forEach((col, i) => {
             if (i > 0) {
-              const key = col.toLowerCase().replace(/[^a-z0-9]/g, '');
-              const val = data[key] || data[NCR_COLUMNS[i]] || '';
+              let val = '';
+              for (const [key, colName] of Object.entries(NCR_KEY_TO_COL)) {
+                if (colName === col && data[key] !== undefined && data[key] !== '') {
+                  val = clean(String(data[key]));
+                  break;
+                }
+              }
               updates.push({ range: `NCR Records!${columnToLetter(i+1)}${rowIndex}`, values: [[val]] });
             }
           });
@@ -1093,8 +1099,13 @@ app.post('/api/auto-save', async (req, res) => {
           const updates = [];
           LETTER_COLUMNS.forEach((col, i) => {
             if (i > 0) {
-              const key = col.toLowerCase().replace(/[^a-z0-9]/g, '');
-              const val = data[key] || data[LETTER_COLUMNS[i]] || '';
+              let val = '';
+              for (const [key, colName] of Object.entries(LETTER_KEY_TO_COL)) {
+                if (colName === col && data[key] !== undefined && data[key] !== '') {
+                  val = clean(String(data[key]));
+                  break;
+                }
+              }
               updates.push({ range: `${sheetName}!${columnToLetter(i+1)}${rowIndex}`, values: [[val]] });
             }
           });
@@ -1300,7 +1311,9 @@ app.post('/api/save', upload.single('file'), async (req, res) => {
           if (docType === 'ncr') parsed = parseNCRContent(text);
           else if (docType === 'joint_note') parsed = parseJointNoteContent(text);
           else parsed = parseLetterContent(text, org);
-          Object.assign(data, parsed);
+          for (const [k, v] of Object.entries(parsed)) {
+            if (v && !data[k]) data[k] = v;
+          }
         } catch (e) { 
           console.log('⚠️  OCR failed:', e.message); 
         }
@@ -1769,6 +1782,25 @@ app.put('/api/update', async (req, res) => {
     console.log('❌ Update failed:', err.message);
     res.status(500).json({ success: false, error: err.message });
   }
+});
+
+// Delete a single record by shifting rows up
+app.delete('/api/delete', async (req, res) => {
+  if (!sheets) return res.json({ success: true, local: true });
+  try {
+    const { sheetName, rowIndex } = req.body;
+    if (!sheetName || rowIndex === undefined) return res.status(400).json({ success: false, error: 'Missing parameters' });
+    const result = await sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range: `${sheetName}!A1:ZZ` });
+    const rows = result.data.values || [];
+    if (rowIndex >= rows.length) return res.status(400).json({ success: false, error: 'Row index out of range' });
+    rows.splice(rowIndex, 1);
+    await sheets.spreadsheets.values.clear({ spreadsheetId: SPREADSHEET_ID, range: `${sheetName}!A1:ZZ` });
+    if (rows.length > 0) {
+      await sheets.spreadsheets.values.update({ spreadsheetId: SPREADSHEET_ID, range: `${sheetName}!A1`, valueInputOption: 'RAW', requestBody: { values: rows } });
+    }
+    console.log(`🗑️ Deleted row ${rowIndex} from ${sheetName}`);
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ success: false, error: err.message }); }
 });
 
 // Clear old broken data from a sheet (keep headers, remove all data rows)
