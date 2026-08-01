@@ -21,28 +21,28 @@
       --shadow-lg:0 10px 40px rgba(0,0,0,.15);
     }
     body{font-family:'Inter',-apple-system,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;display:flex}
-    .sidebar{width:260px;background:var(--sidebar);color:white;display:flex;flex-direction:column;position:fixed;height:100vh;z-index:100}
-    .sidebar-logo{padding:20px 24px;border-bottom:1px solid var(--navy-light)}
-    .sidebar-logo h1{font-size:1.4rem;font-weight:700;background:linear-gradient(135deg,#3B82F6,#8B5CF6);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
-    .sidebar-logo p{font-size:.7rem;color:var(--text3);margin-top:2px}
+    .sidebar{width:260px;background:linear-gradient(180deg,#0F172A 0%,#1E293B 100%);color:white;display:flex;flex-direction:column;position:fixed;height:100vh;z-index:100;border-right:1px solid rgba(255,255,255,.05)}
+    .sidebar-logo{padding:20px 24px;border-bottom:1px solid rgba(255,255,255,.08)}
+    .sidebar-logo h1{font-size:1.4rem;font-weight:800;background:linear-gradient(135deg,#60A5FA,#A78BFA);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+    .sidebar-logo p{font-size:.65rem;color:var(--text3);margin-top:2px;opacity:.7}
     .sidebar-menu{flex:1;padding:12px 0;overflow-y:auto}
-    .menu-item{display:flex;align-items:center;gap:12px;padding:12px 24px;color:var(--text3);cursor:pointer;transition:all .2s;font-size:.85rem;border-left:3px solid transparent}
-    .menu-item:hover{background:var(--sidebar-hover);color:white}
-    .menu-item.active{background:rgba(37,99,235,.15);color:var(--primary);border-left-color:var(--primary)}
+    .menu-item{display:flex;align-items:center;gap:10px;padding:10px 24px;color:rgba(255,255,255,.55);cursor:pointer;transition:all .2s;font-size:.82rem;border-left:3px solid transparent;border-radius:0 8px 8px 0;margin-right:8px}
+    .menu-item:hover{background:rgba(255,255,255,.08);color:rgba(255,255,255,.9)}
+    .menu-item.active{background:rgba(59,130,246,.2);color:#60A5FA;border-left-color:#60A5FA;font-weight:600}
     .menu-item .icon{width:20px;text-align:center}
-    .menu-section{padding:8px 24px;font-size:.65rem;color:var(--text3);text-transform:uppercase;letter-spacing:1px;margin-top:12px}
+    .menu-section{padding:4px 24px;font-size:.6rem;color:var(--text3);text-transform:uppercase;letter-spacing:1px;margin-top:6px}
     .main{margin-left:260px;flex:1;min-height:100vh}
-    .topbar{background:var(--card);border-bottom:1px solid var(--border);padding:16px 24px;display:flex;align-items:center;gap:16px;position:sticky;top:0;z-index:50}
+    .topbar{background:var(--card);border-bottom:1px solid var(--border);padding:14px 24px;display:flex;align-items:center;gap:16px;position:sticky;top:0;z-index:50;box-shadow:0 1px 3px rgba(0,0,0,.05)}
     .search-box{flex:1;max-width:500px;position:relative}
     .search-box input{width:100%;padding:10px 16px 10px 40px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);font-size:.85rem;color:var(--text)}
     .search-box input:focus{outline:none;border-color:var(--primary);box-shadow:0 0 0 3px rgba(37,99,235,.1)}
     .search-box .search-icon{position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--text3)}
     .topbar-actions{display:flex;gap:8px;margin-left:auto}
-    .btn{padding:8px 16px;border:none;border-radius:var(--radius-sm);font-family:inherit;font-size:.8rem;font-weight:500;cursor:pointer;transition:all .2s;display:inline-flex;align-items:center;gap:6px}
-    .btn-primary{background:var(--primary);color:white}.btn-primary:hover{background:var(--primary-hover)}
-    .btn-success{background:var(--success);color:white}.btn-success:hover{background:#059669}
-    .btn-secondary{background:var(--bg);color:var(--text);border:1px solid var(--border)}.btn-secondary:hover{background:var(--border)}
-    .btn-danger{background:var(--error);color:white}.btn-danger:hover{background:#DC2626}
+    .btn{padding:8px 16px;border:none;border-radius:var(--radius-sm);font-family:inherit;font-size:.8rem;font-weight:600;cursor:pointer;transition:all .2s;display:inline-flex;align-items:center;gap:6px}
+    .btn-primary{background:var(--primary);color:white;box-shadow:0 2px 8px rgba(37,99,235,.25)}.btn-primary:hover{background:var(--primary-hover);box-shadow:0 4px 12px rgba(37,99,235,.35);transform:translateY(-1px)}
+    .btn-success{background:var(--success);color:white;box-shadow:0 2px 8px rgba(16,185,129,.25)}.btn-success:hover{background:#059669;transform:translateY(-1px)}
+    .btn-secondary{background:var(--bg);color:var(--text);border:1px solid var(--border)}.btn-secondary:hover{background:var(--border);transform:translateY(-1px)}
+    .btn-danger{background:var(--error);color:white;box-shadow:0 2px 8px rgba(239,68,68,.25)}.btn-danger:hover{background:#DC2626;transform:translateY(-1px)}
     .btn-sm{padding:5px 10px;font-size:.7rem}
     .btn:disabled{opacity:.5;cursor:not-allowed}
     .content{padding:24px}
@@ -50,14 +50,16 @@
     .page-header h2{font-size:1.5rem;font-weight:700;color:var(--text)}
     .page-header p{color:var(--text3);font-size:.85rem;margin-top:4px}
     .stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;margin-bottom:24px}
-    .stat-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:20px;box-shadow:var(--shadow)}
-    .stat-card .label{font-size:.75rem;color:var(--text3);text-transform:uppercase;letter-spacing:.5px}
-    .stat-card .value{font-size:1.8rem;font-weight:700;margin-top:4px}
+    .stat-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:20px;box-shadow:var(--shadow);transition:all .2s}
+    .stat-card:hover{box-shadow:var(--shadow-lg);transform:translateY(-2px)}
+    .stat-card .label{font-size:.72rem;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;font-weight:600}
+    .stat-card .value{font-size:1.8rem;font-weight:800;margin-top:4px}
     .stat-card .change{font-size:.7rem;margin-top:8px;display:flex;align-items:center;gap:4px}
     .stat-card .change.up{color:var(--success)}.stat-card .change.down{color:var(--error)}
-    .card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);overflow:hidden}
+    .card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);overflow:hidden;transition:all .2s}
+    .card:hover{box-shadow:var(--shadow-lg)}
     .card-header{padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
-    .card-header h3{font-size:.95rem;font-weight:600}
+    .card-header h3{font-size:.95rem;font-weight:700}
     .card-body{padding:20px}
     .table{width:100%;border-collapse:collapse}
     .table th{padding:12px 16px;text-align:left;font-size:.7rem;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;background:var(--bg);border-bottom:1px solid var(--border)}
@@ -90,10 +92,11 @@
     .drop-zone .icon{font-size:2.5rem;margin-bottom:8px}
     .drop-zone p{color:var(--text2);font-size:.9rem}
     .drop-zone .types{font-size:.75rem;color:var(--text3);margin-top:8px}
-    .toast{position:fixed;bottom:24px;right:24px;padding:14px 20px;border-radius:var(--radius-sm);font-size:.85rem;font-weight:500;z-index:300;transform:translateY(100px);opacity:0;transition:all .3s}
+    .toast{position:fixed;bottom:24px;right:24px;padding:14px 24px;border-radius:12px;font-size:.85rem;font-weight:600;z-index:300;transform:translateY(100px);opacity:0;transition:all .3s cubic-bezier(.4,0,.2,1);box-shadow:0 8px 30px rgba(0,0,0,.2)}
     .toast.show{transform:translateY(0);opacity:1}
-    .toast.success{background:var(--success);color:white}
-    .toast.error{background:var(--error);color:white}
+    .toast.success{background:linear-gradient(135deg,#10B981,#059669);color:white}
+    .toast.error{background:linear-gradient(135deg,#EF4444,#DC2626);color:white}
+    .toast.info{background:linear-gradient(135deg,#3B82F6,#2563EB);color:white}
     .spinner{display:inline-block;width:16px;height:16px;border:2px solid rgba(255,255,255,.3);border-top-color:white;border-radius:50%;animation:spin .8s linear infinite}
     @keyframes spin{to{transform:rotate(360deg)}}
     .empty-state{text-align:center;padding:60px 20px;color:var(--text3)}
@@ -124,16 +127,16 @@
     .ncr-dd-item:last-child{border-bottom:none;color:var(--primary);font-weight:600}
     
     /* Login Styles */
-    .login-container{position:fixed;inset:0;background:linear-gradient(135deg,#1E293B 0%,#0F172A 100%);display:flex;align-items:center;justify-content:center;z-index:1000}
-    .login-box{background:var(--card);border-radius:16px;padding:40px;width:100%;max-width:400px;box-shadow:0 20px 60px rgba(0,0,0,.3)}
-    .login-logo{text-align:center;margin-bottom:32px}
-    .login-logo h1{font-size:1.8rem;font-weight:700;background:linear-gradient(135deg,#3B82F6,#8B5CF6);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
-    .login-logo p{color:var(--text3);font-size:.85rem;margin-top:8px}
+    .login-container{position:fixed;inset:0;background:linear-gradient(135deg,#0F172A 0%,#1E293B 50%,#334155 100%);display:flex;align-items:center;justify-content:center;z-index:1000}
+    .login-box{background:var(--card);border-radius:20px;padding:44px;width:100%;max-width:420px;box-shadow:0 25px 80px rgba(0,0,0,.4);border:1px solid rgba(255,255,255,.1)}
+    .login-logo{text-align:center;margin-bottom:36px}
+    .login-logo h1{font-size:2rem;font-weight:800;background:linear-gradient(135deg,#3B82F6,#8B5CF6);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+    .login-logo p{color:var(--text3);font-size:.82rem;margin-top:6px}
     .login-form .form-group{margin-bottom:20px}
     .login-form input{width:100%;padding:14px 16px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);font-size:.9rem;color:var(--text)}
     .login-form input:focus{outline:none;border-color:var(--primary);box-shadow:0 0 0 3px rgba(37,99,235,.1)}
-    .login-btn{width:100%;padding:14px;background:var(--primary);color:white;border:none;border-radius:var(--radius-sm);font-size:1rem;font-weight:600;cursor:pointer;transition:all .2s}
-    .login-btn:hover{background:var(--primary-hover)}
+    .login-btn{width:100%;padding:14px;background:linear-gradient(135deg,#3B82F6,#2563EB);color:white;border:none;border-radius:10px;font-size:1rem;font-weight:700;cursor:pointer;transition:all .2s;box-shadow:0 4px 15px rgba(37,99,235,.35)}
+    .login-btn:hover{background:linear-gradient(135deg,#2563EB,#1D4ED8);box-shadow:0 6px 20px rgba(37,99,235,.45);transform:translateY(-1px)}
     .login-btn:disabled{opacity:.5;cursor:not-allowed}
     .login-error{color:var(--error);font-size:.8rem;margin-top:12px;text-align:center;display:none}
     .user-badge{display:flex;align-items:center;gap:8px;padding:6px 12px;background:var(--bg);border-radius:20px;font-size:.75rem;color:var(--text2)}
@@ -339,47 +342,78 @@
     function renderDashboard(el) {
       const stats = getStats();
       el.innerHTML = `
-        <div class="page-header">
-          <div><h2>BEML Document Management Dashboard</h2><p>Complete overview of letters, NCRs, and joint notes</p></div>
-          <div style="display:flex;gap:8px">
-            <button class="btn btn-primary" onclick="navigate('create-letter')">✉️ New Letter</button>
-            <button class="btn btn-primary" onclick="navigate('create-ncr')">📋 New NCR</button>
-            <button class="btn btn-primary" onclick="navigate('reply-letter')">🤖 AI Reply</button>
+        <div style="margin-bottom:24px">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <div>
+              <h2 style="font-size:1.6rem;font-weight:800;background:linear-gradient(135deg,#1E293B,#334155);-webkit-background-clip:text;-webkit-text-fill-color:transparent">Dashboard</h2>
+              <p style="color:var(--text3);font-size:.85rem;margin-top:4px">BEML Document Management System - Complete Overview</p>
+            </div>
+            <div style="display:flex;gap:10px">
+              <button class="btn btn-primary" onclick="navigate('create-letter')" style="box-shadow:0 4px 12px rgba(37,99,235,.3)">✉️ New Letter</button>
+              <button class="btn btn-primary" onclick="navigate('create-ncr')" style="box-shadow:0 4px 12px rgba(37,99,235,.3)">📋 New NCR</button>
+              <button class="btn btn-primary" onclick="navigate('create-joint')" style="box-shadow:0 4px 12px rgba(37,99,235,.3)">📝 New Joint Note</button>
+              <button class="btn btn-secondary" onclick="navigate('reply-letter')">🤖 AI Reply</button>
+            </div>
           </div>
         </div>
-        <div class="stats-grid">
-          <div class="stat-card"><div class="label">Total Documents</div><div class="value" style="color:var(--primary)">${stats.total}</div></div>
-          <div class="stat-card"><div class="label">BEML Letters</div><div class="value" style="color:var(--beml)">${stats.beml}</div></div>
-          <div class="stat-card"><div class="label">KMRCL Letters</div><div class="value" style="color:var(--kmrcl)">${stats.kmrcl}</div></div>
-          <div class="stat-card"><div class="label">NCR Records</div><div class="value" style="color:var(--ncr)">${stats.ncr}</div></div>
-          <div class="stat-card"><div class="label">Joint Notes</div><div class="value" style="color:var(--jn)">${stats.jn}</div></div>
-          <div class="stat-card"><div class="label">Open Items</div><div class="value" style="color:var(--success)">${stats.open}</div></div>
-        </div>
-        <div class="stats-grid" style="grid-template-columns:repeat(4,1fr)">
-          <div class="stat-card"><div class="label">Metro Rail Letters</div><div class="value" style="color:var(--ncr)">${stats.metro || 0}</div></div>
-          <div class="stat-card"><div class="label">Closed Items</div><div class="value" style="color:#666">${stats.total - stats.open}</div></div>
-          <div class="stat-card"><div class="label">Critical NCRs</div><div class="value" style="color:var(--error)">${stats.critical || 0}</div></div>
-          <div class="stat-card"><div class="label">Major NCRs</div><div class="value" style="color:var(--warning)">${stats.major || 0}</div></div>
-        </div>
-        <div class="grid-2">
-          <div class="card">
-            <div class="card-header"><h3>Recent Documents</h3></div>
-            <div class="card-body" id="recentDocs"></div>
+        <!-- Main Stats -->
+        <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:16px;margin-bottom:20px">
+          <div style="background:linear-gradient(135deg,#3B82F6,#2563EB);border-radius:14px;padding:20px;color:white;box-shadow:0 4px 15px rgba(37,99,235,.3)">
+            <div style="display:flex;justify-content:space-between;align-items:start">
+              <div><div style="font-size:.7rem;opacity:.85;text-transform:uppercase;letter-spacing:.5px">Total Documents</div><div style="font-size:2rem;font-weight:800;margin-top:4px">${stats.total}</div></div>
+              <div style="width:44px;height:44px;background:rgba(255,255,255,.2);border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:1.3rem">📄</div>
+            </div>
+            <div style="font-size:.7rem;opacity:.75;margin-top:8px">Across all categories</div>
           </div>
-          <div class="card">
-            <div class="card-header"><h3>Quick Actions</h3></div>
+          <div style="background:linear-gradient(135deg,#F59E0B,#D97706);border-radius:14px;padding:20px;color:white;box-shadow:0 4px 15px rgba(245,158,11,.3)">
+            <div style="display:flex;justify-content:space-between;align-items:start">
+              <div><div style="font-size:.7rem;opacity:.85;text-transform:uppercase;letter-spacing:.5px">BEML Letters</div><div style="font-size:2rem;font-weight:800;margin-top:4px">${stats.beml}</div></div>
+              <div style="width:44px;height:44px;background:rgba(255,255,255,.2);border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:1.3rem">✉️</div>
+            </div>
+            <div style="font-size:.7rem;opacity:.75;margin-top:8px">KMRCL: ${stats.kmrcl} | Metro: ${stats.metro || 0}</div>
+          </div>
+          <div style="background:linear-gradient(135deg,#EF4444,#DC2626);border-radius:14px;padding:20px;color:white;box-shadow:0 4px 15px rgba(239,68,68,.3)">
+            <div style="display:flex;justify-content:space-between;align-items:start">
+              <div><div style="font-size:.7rem;opacity:.85;text-transform:uppercase;letter-spacing:.5px">NCR Records</div><div style="font-size:2rem;font-weight:800;margin-top:4px">${stats.ncr}</div></div>
+              <div style="width:44px;height:44px;background:rgba(255,255,255,.2);border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:1.3rem">📋</div>
+            </div>
+            <div style="font-size:.7rem;opacity:.75;margin-top:8px">Critical: ${stats.critical || 0} | Major: ${stats.major || 0}</div>
+          </div>
+          <div style="background:linear-gradient(135deg,#10B981,#059669);border-radius:14px;padding:20px;color:white;box-shadow:0 4px 15px rgba(16,185,129,.3)">
+            <div style="display:flex;justify-content:space-between;align-items:start">
+              <div><div style="font-size:.7rem;opacity:.85;text-transform:uppercase;letter-spacing:.5px">Joint Notes</div><div style="font-size:2rem;font-weight:800;margin-top:4px">${stats.jn}</div></div>
+              <div style="width:44px;height:44px;background:rgba(255,255,255,.2);border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:1.3rem">📝</div>
+            </div>
+            <div style="font-size:.7rem;opacity:.75;margin-top:8px">All joint inspections</div>
+          </div>
+          <div style="background:linear-gradient(135deg,#8B5CF6,#7C3AED);border-radius:14px;padding:20px;color:white;box-shadow:0 4px 15px rgba(139,92,246,.3)">
+            <div style="display:flex;justify-content:space-between;align-items:start">
+              <div><div style="font-size:.7rem;opacity:.85;text-transform:uppercase;letter-spacing:.5px">Open Items</div><div style="font-size:2rem;font-weight:800;margin-top:4px">${stats.open}</div></div>
+              <div style="width:44px;height:44px;background:rgba(255,255,255,.2);border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:1.3rem">⏳</div>
+            </div>
+            <div style="font-size:.7rem;opacity:.75;margin-top:8px">Closed: ${stats.total - stats.open}</div>
+          </div>
+        </div>
+        <!-- Quick Actions + Recent -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+          <div class="card" style="border:none;box-shadow:0 2px 12px rgba(0,0,0,.06)">
+            <div class="card-header" style="background:linear-gradient(135deg,#F8FAFC,#F1F5F9);border-bottom:1px solid var(--border)"><h3 style="font-weight:700">Quick Actions</h3></div>
             <div class="card-body">
-              <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-                <button class="btn btn-primary" onclick="navigate('create-letter')" style="width:100%">✉️ Create Letter</button>
-                <button class="btn btn-primary" onclick="navigate('create-ncr')" style="width:100%">📋 Create NCR</button>
-                <button class="btn btn-primary" onclick="navigate('reply-letter')" style="width:100%">🤖 AI Reply Letter</button>
-                <button class="btn btn-primary" onclick="navigate('ai-letter')" style="width:100%">🤖 AI Letter Writer</button>
-                <button class="btn btn-secondary" onclick="showUploadModal()" style="width:100%">📤 Upload Document</button>
-                <button class="btn btn-secondary" onclick="navigate('bulk')" style="width:100%">📦 Bulk Import</button>
-                <button class="btn btn-secondary" onclick="navigate('ai-ncr')" style="width:100%">🤖 AI NCR Writer</button>
-                <button class="btn btn-secondary" onclick="navigate('export')" style="width:100%">📥 Export Data</button>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+                <button class="btn btn-primary" onclick="navigate('create-letter')" style="width:100%;padding:12px;border-radius:10px">✉️ Create Letter</button>
+                <button class="btn btn-primary" onclick="navigate('create-ncr')" style="width:100%;padding:12px;border-radius:10px">📋 Create NCR</button>
+                <button class="btn btn-primary" onclick="navigate('create-joint')" style="width:100%;padding:12px;border-radius:10px">📝 Create Joint Note</button>
+                <button class="btn btn-primary" onclick="navigate('reply-letter')" style="width:100%;padding:12px;border-radius:10px">🤖 AI Reply Letter</button>
+                <button class="btn btn-secondary" onclick="showUploadModal()" style="width:100%;padding:12px;border-radius:10px">📤 Upload Document</button>
+                <button class="btn btn-secondary" onclick="navigate('bulk')" style="width:100%;padding:12px;border-radius:10px">📦 Bulk Import</button>
+                <button class="btn btn-secondary" onclick="navigate('ai-letter')" style="width:100%;padding:12px;border-radius:10px">🤖 AI Letter Writer</button>
+                <button class="btn btn-secondary" onclick="navigate('export')" style="width:100%;padding:12px;border-radius:10px">📥 Export Data</button>
               </div>
             </div>
+          </div>
+          <div class="card" style="border:none;box-shadow:0 2px 12px rgba(0,0,0,.06)">
+            <div class="card-header" style="background:linear-gradient(135deg,#F8FAFC,#F1F5F9);border-bottom:1px solid var(--border)"><h3 style="font-weight:700">Recent Documents</h3></div>
+            <div class="card-body" id="recentDocs"></div>
           </div>
         </div>`;
       renderRecentDocs();
@@ -2112,7 +2146,7 @@
       const subject = document.getElementById('ai_subject').value;
       const context = document.getElementById('ai_context').value;
       if (!subject && !context) return showToast('Enter subject or context', 'error');
-      showToast('Generating with AI...', 'info');
+      showToast('Generating...', 'info');
       try {
         const res = await authFetch('/api/ai/generate-letter', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -2124,8 +2158,11 @@
           })
         });
         const r = await res.json();
-        if (r.success) { document.getElementById('aiLetterResult').textContent = r.content; showToast('AI generated!', 'success'); }
-        else showToast('AI error: ' + (r.error || ''), 'error');
+        if (r.success) {
+          document.getElementById('aiLetterResult').textContent = r.content;
+          const src = r.source === 'template' ? '📋 Template' : '🤖 AI';
+          showToast(`Generated via ${src}`, 'success');
+        } else showToast('Error: ' + (r.error || ''), 'error');
       } catch (e) { showToast('Error: ' + e.message, 'error'); }
     }
 
@@ -2191,7 +2228,7 @@
     async function generateReplyLetter() {
       const content = document.getElementById('reply_content').value;
       if (!content) return showToast('Enter original letter content', 'error');
-      showToast('Generating BEML reply with AI...', 'info');
+      showToast('Generating BEML reply...', 'info');
       try {
         const res = await authFetch('/api/ai/generate-reply', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -2204,7 +2241,11 @@
           })
         });
         const r = await res.json();
-        if (r.success) { document.getElementById('replyResult').textContent = r.content; showToast('Reply generated!', 'success'); }
+        if (r.success) {
+          document.getElementById('replyResult').textContent = r.content;
+          const src = r.source === 'template' ? '📋 Template' : '🤖 AI';
+          showToast(`Reply generated via ${src}`, 'success');
+        }
         else showToast('AI error: ' + (r.error || ''), 'error');
       } catch (e) { showToast('Error: ' + e.message, 'error'); }
     }
@@ -2277,7 +2318,7 @@
       const item = document.getElementById('aiNcr_item').value;
       const context = document.getElementById('aiNcr_context').value;
       if (!item && !context) return showToast('Enter item or issue description', 'error');
-      showToast('Generating NCR content with AI...', 'info');
+      showToast('Generating NCR content...', 'info');
       try {
         const res = await authFetch('/api/ai/generate-ncr', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -2291,8 +2332,11 @@
           })
         });
         const r = await res.json();
-        if (r.success) { document.getElementById('aiNcrResult').textContent = r.content; showToast('NCR content generated!', 'success'); }
-        else showToast('AI error: ' + (r.error || ''), 'error');
+        if (r.success) {
+          document.getElementById('aiNcrResult').textContent = r.content;
+          const src = r.source === 'template' ? '📋 Template' : '🤖 AI';
+          showToast(`NCR generated via ${src}`, 'success');
+        } else showToast('Error: ' + (r.error || ''), 'error');
       } catch (e) { showToast('Error: ' + e.message, 'error'); }
     }
 

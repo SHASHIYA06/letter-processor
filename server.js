@@ -2019,6 +2019,124 @@ app.post('/api/master-data/:category', authenticateToken, async (req, res) => {
 });
 
 // ══════════════════════════════════════════════════════════════
+//  TEMPLATE-BASED GENERATION (Fallback when AI unavailable)
+// ══════════════════════════════════════════════════════════════
+
+function generateLetterTemplate({ org, subject, recipient, context, letterType }) {
+  const orgFull = org === 'KMRCL' ? 'Kolkata Metro Rail Corporation Limited' : org === 'Metro Rail' ? 'Metro Rail Corporation' : 'BEML Limited';
+  const today = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+  return `Ref: ${org}/${letterType || 'General'}/${new Date().getFullYear()}/___
+
+Date: ${today}
+
+To,
+${recipient || 'Sir/Madam'}
+
+Subject: ${subject || 'Official Communication'}
+
+Dear Sir/Madam,
+
+${context || 'This is with reference to the above-mentioned subject.'}
+
+We wish to bring to your kind attention the matter pertaining to the subject cited above. The details of the same are as under:
+
+1. The matter has been reviewed by the undersigned and necessary action is being initiated accordingly.
+
+2. We request your good office to take note of the above and take necessary action at your end.
+
+3. Any observations or clarifications, if any, may be communicated to the undersigned within 7 working days from the date of receipt of this letter.
+
+We hope this meets with your approval.
+
+Thanking you,
+
+Yours faithfully,
+
+For ${orgFull}
+Authorized Signatory`;
+}
+
+function generateReplyTemplate({ originalRef, originalSubject, originalFrom, org }) {
+  const orgFull = org === 'KMRCL' ? 'Kolkata Metro Rail Corporation Limited' : org === 'Metro Rail' ? 'Metro Rail Corporation' : 'BEML Limited';
+  const today = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+  return `Ref: ${org}/REPLY/${new Date().getFullYear()}/___
+
+Date: ${today}
+
+To,
+${originalFrom || 'Sir/Madam'}
+
+Subject: Re: ${originalSubject || 'Your correspondence'}
+
+Reference: Your letter ${originalRef || 'Not specified'}
+
+Dear Sir/Madam,
+
+We acknowledge the receipt of your letter referenced above regarding "${originalSubject || 'the subject matter'}".
+
+After careful consideration of the points raised in your communication, we wish to convey the following:
+
+1. The matter has been examined in detail by the concerned department.
+
+2. Necessary corrective/preventive action is being initiated as appropriate.
+
+3. We request you to kindly bear with us while we complete the necessary formalities.
+
+4. We shall revert with our detailed response at the earliest, preferably within 15 working days.
+
+For any further clarification, please feel free to contact the undersigned.
+
+Thanking you,
+
+Yours faithfully,
+
+For ${orgFull}
+Authorized Signatory`;
+}
+
+function generateNCRTemplate({ project, itemDesc, severity, trainNo, car, vendor, context }) {
+  const today = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+  return `NON-CONFORMITY REPORT (NCR)
+
+NCR Report No: NCR-${new Date().getFullYear()}/___
+Date of NCR: ${today}
+Date of Detection: ${today}
+
+PROJECT: ${project || 'To be determined'}
+ITEM DESCRIPTION: ${itemDesc || 'To be determined'}
+TRAIN NO: ${trainNo || 'N/A'}
+CAR: ${car || 'N/A'}
+VENDOR/OEM: ${vendor || 'N/A'}
+SEVERITY: ${severity || 'Major'}
+
+DESCRIPTION OF NON-CONFORMITY:
+${context || 'The non-conformity observed is as follows: The item/product does not conform to the specified requirements as per the approved drawings/specifications.'}
+
+ROOT CAUSE ANALYSIS:
+The root cause of the non-conformity is under investigation. Preliminary assessment indicates the issue may be related to:
+- Material quality deviation
+- Process deviation during manufacturing
+- Non-adherence to approved specifications
+
+CORRECTIVE ACTION:
+1. Immediate containment action has been initiated.
+2. The defective items have been quarantined.
+3. Supplier/vendor has been notified for root cause analysis.
+
+PREVENTIVE ACTION:
+1. Enhanced incoming inspection protocol to be implemented.
+2. Periodic audit of supplier processes to be conducted.
+3. Training awareness for relevant personnel.
+
+DISPOSITION:
+To be determined based on engineering evaluation.
+
+RAISED BY: _______________
+ASSIGNED TO: _______________
+STATUS: Open`;
+}
+
+// ══════════════════════════════════════════════════════════════
 //  AI INTEGRATION - Letter & NCR Generation
 // ══════════════════════════════════════════════════════════════
 
@@ -2064,7 +2182,11 @@ app.post('/api/ai/generate-letter', authenticateToken, async (req, res) => {
   try {
     const { org, subject, recipient, context, tone, letterType } = req.body;
     const orgName = org || 'BEML';
-    const prompt = `Generate a professional ${orgName} official letter with the following details:
+    let content = '';
+    let source = 'ai';
+
+    try {
+      const prompt = `Generate a professional ${orgName} official letter with the following details:
 Subject: ${subject || 'To be determined'}
 Recipient: ${recipient || 'Sir/Madam'}
 Context/Purpose: ${context || 'Official correspondence'}
@@ -2072,16 +2194,25 @@ Letter Type: ${letterType || 'General'}
 Tone: ${tone || 'Professional and formal'}
 
 Generate the complete letter body in professional railway documentation style. Include proper salutation, structured body paragraphs, and formal closing. Use Indian English and official government/PSU communication style.`;
+      content = await callAI(prompt);
+    } catch (aiErr) {
+      console.log('⚠️ AI generation failed, using template:', aiErr.message);
+      source = 'template';
+      content = generateLetterTemplate({ org: orgName, subject, recipient, context, letterType });
+    }
 
-    const content = await callAI(prompt);
-    res.json({ success: true, content });
+    res.json({ success: true, content, source });
   } catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
 app.post('/api/ai/generate-reply', authenticateToken, async (req, res) => {
   try {
     const { originalLetter, originalRef, originalSubject, originalFrom, org, customInstructions } = req.body;
-    const prompt = `You are an expert BEML (Bharat Earth Movers Limited) correspondence officer. Generate a professional REPLY letter from BEML against the following incoming letter:
+    let content = '';
+    let source = 'ai';
+
+    try {
+      const prompt = `You are an expert BEML (Bharat Earth Movers Limited) correspondence officer. Generate a professional REPLY letter from BEML against the following incoming letter:
 
 Original Reference: ${originalRef || 'Not specified'}
 From: ${originalFrom || 'Not specified'}
@@ -2102,16 +2233,25 @@ Generate a complete BEML reply letter including:
 8. Proper closing with for BEML Limited
 
 Use formal Indian PSU communication style. Be technically precise and professional.`;
+      content = await callAI(prompt, 'You are an expert BEML letter drafting assistant. Generate professional reply letters in BEML official format. Use Indian English, formal PSU communication style, and railway engineering terminology.');
+    } catch (aiErr) {
+      console.log('⚠️ AI reply failed, using template:', aiErr.message);
+      source = 'template';
+      content = generateReplyTemplate({ originalRef, originalSubject, originalFrom, org });
+    }
 
-    const content = await callAI(prompt, 'You are an expert BEML letter drafting assistant. Generate professional reply letters in BEML official format. Use Indian English, formal PSU communication style, and railway engineering terminology.');
-    res.json({ success: true, content });
+    res.json({ success: true, content, source });
   } catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
 app.post('/api/ai/generate-ncr', authenticateToken, async (req, res) => {
   try {
     const { project, itemDesc, severity, context, trainNo, car, vendor } = req.body;
-    const prompt = `Generate a professional BEML Non-Conformity Report (NCR) content with the following details:
+    let content = '';
+    let source = 'ai';
+
+    try {
+      const prompt = `Generate a professional BEML Non-Conformity Report (NCR) content with the following details:
 
 Project: ${project || 'Not specified'}
 Item/Product: ${itemDesc || 'Not specified'}
@@ -2129,17 +2269,26 @@ Generate the following NCR sections:
 5. Disposition recommendation
 
 Use professional railway engineering language, BEML standards, and Indian railway terminology. Be technically precise.`;
+      content = await callAI(prompt, 'You are an expert BEML quality assurance engineer. Generate professional NCR content using railway engineering terminology, Indian railway standards, and formal quality documentation style.');
+    } catch (aiErr) {
+      console.log('⚠️ AI NCR failed, using template:', aiErr.message);
+      source = 'template';
+      content = generateNCRTemplate({ project, itemDesc, severity, trainNo, car, vendor, context });
+    }
 
-    const content = await callAI(prompt, 'You are an expert BEML quality assurance engineer. Generate professional NCR content using railway engineering terminology, Indian railway standards, and formal quality documentation style.');
-    res.json({ success: true, content });
+    res.json({ success: true, content, source });
   } catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
 app.post('/api/ai/improve-content', authenticateToken, async (req, res) => {
   try {
     const { content, type, instructions } = req.body;
-    const typeLabel = type === 'ncr' ? 'NCR' : type === 'letter' ? 'official letter' : 'document';
-    const prompt = `Improve the following ${typeLabel} content. Make it more professional, technically accurate, and well-structured:
+    let improved = '';
+    let source = 'ai';
+
+    try {
+      const typeLabel = type === 'ncr' ? 'NCR' : type === 'letter' ? 'official letter' : 'document';
+      const prompt = `Improve the following ${typeLabel} content. Make it more professional, technically accurate, and well-structured:
 
 Original Content:
 ${content}
@@ -2147,9 +2296,14 @@ ${content}
 ${instructions ? `Specific improvements requested: ${instructions}` : ''}
 
 Return the improved content maintaining the same structure and key information. Use formal Indian PSU/railway documentation style.`;
+      improved = await callAI(prompt);
+    } catch (aiErr) {
+      console.log('⚠️ AI improve failed:', aiErr.message);
+      source = 'template';
+      improved = content + '\n\n[Note: AI improvement unavailable. Enable Gemini API at https://console.developers.google.com/apis/api/generativelanguage.googleapis.com]';
+    }
 
-    const improved = await callAI(prompt);
-    res.json({ success: true, content: improved });
+    res.json({ success: true, content: improved, source });
   } catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
