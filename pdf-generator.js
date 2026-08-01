@@ -441,4 +441,222 @@ function generateLetterDocx(data, outputPath) {
   });
 }
 
-export { generateNCRPdf, generateLetterPdf, generateNCRDocx, generateLetterDocx };
+export { generateNCRPdf, generateLetterPdf, generateNCRDocx, generateLetterDocx, generateJointNotePdf, generateJointNoteDocx };
+
+// ══════════════════════════════════════════════════════════════
+//  JOINT NOTE PDF
+// ══════════════════════════════════════════════════════════════
+async function generateJointNotePdf(data) {
+  return new Promise((resolve, reject) => {
+    const doc = new PDFDocument({ size: 'A4', margin: 50 });
+    const chunks = [];
+    doc.on('data', c => chunks.push(c));
+    doc.on('end', () => resolve(Buffer.concat(chunks)));
+    doc.on('error', reject);
+
+    const W = doc.page.width;
+    const L = 50, R = W - 50;
+
+    // Header
+    drawBEMLHeader(doc, W);
+    let y = 165;
+
+    // Title
+    doc.fontSize(16).font('Helvetica-Bold').text('JOINT NOTE', L, y, { align: 'center', width: R - L });
+    y = doc.y + 5;
+    if (data.jointNoteNo) {
+      doc.fontSize(9).font('Helvetica').text(`No: ${data.jointNoteNo}`, L, y, { align: 'center', width: R - L });
+      y = doc.y + 15;
+    }
+
+    // Separator
+    doc.moveTo(L, y).lineTo(R, y).lineWidth(1).stroke();
+    y += 12;
+
+    // Date
+    if (data.date) {
+      doc.fontSize(10).font('Helvetica-Bold').text(`Date: ${data.date}`, L, y);
+      y = doc.y + 8;
+    }
+
+    // Parties
+    if (data.parties) {
+      doc.font('Helvetica-Bold').text('Parties / Participants:', L, y);
+      y = doc.y + 2;
+      doc.font('Helvetica').fontSize(10).text(data.parties, L + 5, y, { width: R - L - 10 });
+      y = doc.y + 8;
+    }
+
+    // Subject
+    if (data.subject) {
+      doc.font('Helvetica-Bold').text('Subject:', L, y);
+      y = doc.y + 2;
+      doc.font('Helvetica').fontSize(10).text(data.subject, L + 5, y, { width: R - L - 10 });
+      y = doc.y + 12;
+    }
+
+    // Description
+    if (data.description) {
+      y = checkPageBreak(doc, y, 60, L, R);
+      doc.font('Helvetica-Bold').text('Description:', L, y);
+      y = doc.y + 2;
+      doc.font('Helvetica').fontSize(10).text(data.description, L + 5, y, { width: R - L - 10 });
+      y = doc.y + 12;
+    }
+
+    // Items Discussed
+    if (data.itemsDiscussed) {
+      y = checkPageBreak(doc, y, 60, L, R);
+      doc.font('Helvetica-Bold').text('Items Discussed:', L, y);
+      y = doc.y + 2;
+      doc.font('Helvetica').fontSize(10).text(data.itemsDiscussed, L + 5, y, { width: R - L - 10 });
+      y = doc.y + 12;
+    }
+
+    // Decisions
+    if (data.decisions) {
+      y = checkPageBreak(doc, y, 60, L, R);
+      doc.font('Helvetica-Bold').text('Decisions Taken:', L, y);
+      y = doc.y + 2;
+      doc.font('Helvetica').fontSize(10).text(data.decisions, L + 5, y, { width: R - L - 10 });
+      y = doc.y + 12;
+    }
+
+    // Action Items
+    if (data.actionItems) {
+      y = checkPageBreak(doc, y, 60, L, R);
+      doc.font('Helvetica-Bold').text('Action Items:', L, y);
+      y = doc.y + 2;
+      doc.font('Helvetica').fontSize(10).text(data.actionItems, L + 5, y, { width: R - L - 10 });
+      y = doc.y + 12;
+    }
+
+    // Remarks
+    if (data.remarks) {
+      y = checkPageBreak(doc, y, 40, L, R);
+      doc.font('Helvetica-Bold').text('Remarks:', L, y);
+      y = doc.y + 2;
+      doc.font('Helvetica').fontSize(10).text(data.remarks, L + 5, y, { width: R - L - 10 });
+      y = doc.y + 12;
+    }
+
+    // Status
+    y = checkPageBreak(doc, y, 30, L, R);
+    doc.font('Helvetica-Bold').text('Status: ', L, y);
+    doc.font('Helvetica').text(data.status || 'Open', L + 50, y);
+    y = doc.y + 20;
+
+    // Signatures
+    y = checkPageBreak(doc, y, 80, L, R);
+    doc.moveTo(L, y).lineTo(R, y).lineWidth(0.5).stroke();
+    y += 15;
+    doc.fontSize(10).font('Helvetica').text('Authorized Signatory (BEML Limited)', L, y);
+    doc.text('Authorized Signatory (Other Party)', R - 200, y);
+
+    drawBEMLFooter(doc, W);
+    doc.end();
+  });
+}
+
+// ══════════════════════════════════════════════════════════════
+//  JOINT NOTE DOCX
+// ══════════════════════════════════════════════════════════════
+async function generateJointNoteDocx(data) {
+  const children = [];
+
+  // Title
+  children.push(new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 100 }, children: [
+    new TextRun({ text: 'JOINT NOTE', bold: true, size: 28, font: 'Times New Roman' })
+  ]}));
+  if (data.jointNoteNo) {
+    children.push(new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 200 }, children: [
+      new TextRun({ text: `No: ${data.jointNoteNo}`, size: 20, font: 'Times New Roman' })
+    ]}));
+  }
+
+  children.push(new Paragraph({ spacing: { after: 100 }, border: { bottom: { style: BorderStyle.SINGLE, size: 1 } }, children: [] }));
+
+  if (data.date) {
+    children.push(new Paragraph({ spacing: { after: 80 }, children: [
+      new TextRun({ text: 'Date: ', bold: true, size: 20, font: 'Times New Roman' }),
+      new TextRun({ text: data.date, size: 20, font: 'Times New Roman' })
+    ]}));
+  }
+
+  if (data.parties) {
+    children.push(new Paragraph({ spacing: { after: 40 }, children: [
+      new TextRun({ text: 'Parties / Participants:', bold: true, size: 20, font: 'Times New Roman' })
+    ]}));
+    children.push(new Paragraph({ spacing: { after: 100 }, indent: { left: 200 }, children: [
+      new TextRun({ text: data.parties, size: 20, font: 'Times New Roman' })
+    ]}));
+  }
+
+  if (data.subject) {
+    children.push(new Paragraph({ spacing: { after: 40 }, children: [
+      new TextRun({ text: 'Subject:', bold: true, size: 20, font: 'Times New Roman' })
+    ]}));
+    children.push(new Paragraph({ spacing: { after: 100 }, indent: { left: 200 }, children: [
+      new TextRun({ text: data.subject, size: 20, font: 'Times New Roman' })
+    ]}));
+  }
+
+  if (data.description) {
+    children.push(new Paragraph({ spacing: { before: 100, after: 40 }, children: [
+      new TextRun({ text: 'Description:', bold: true, size: 20, font: 'Times New Roman' })
+    ]}));
+    children.push(new Paragraph({ spacing: { after: 100 }, indent: { left: 200 }, children: [
+      new TextRun({ text: data.description, size: 20, font: 'Times New Roman' })
+    ]}));
+  }
+
+  if (data.itemsDiscussed) {
+    children.push(new Paragraph({ spacing: { before: 100, after: 40 }, children: [
+      new TextRun({ text: 'Items Discussed:', bold: true, size: 20, font: 'Times New Roman' })
+    ]}));
+    children.push(new Paragraph({ spacing: { after: 100 }, indent: { left: 200 }, children: [
+      new TextRun({ text: data.itemsDiscussed, size: 20, font: 'Times New Roman' })
+    ]}));
+  }
+
+  if (data.decisions) {
+    children.push(new Paragraph({ spacing: { before: 100, after: 40 }, children: [
+      new TextRun({ text: 'Decisions Taken:', bold: true, size: 20, font: 'Times New Roman' })
+    ]}));
+    children.push(new Paragraph({ spacing: { after: 100 }, indent: { left: 200 }, children: [
+      new TextRun({ text: data.decisions, size: 20, font: 'Times New Roman' })
+    ]}));
+  }
+
+  if (data.actionItems) {
+    children.push(new Paragraph({ spacing: { before: 100, after: 40 }, children: [
+      new TextRun({ text: 'Action Items:', bold: true, size: 20, font: 'Times New Roman' })
+    ]}));
+    children.push(new Paragraph({ spacing: { after: 100 }, indent: { left: 200 }, children: [
+      new TextRun({ text: data.actionItems, size: 20, font: 'Times New Roman' })
+    ]}));
+  }
+
+  if (data.remarks) {
+    children.push(new Paragraph({ spacing: { before: 100, after: 40 }, children: [
+      new TextRun({ text: 'Remarks:', bold: true, size: 20, font: 'Times New Roman' })
+    ]}));
+    children.push(new Paragraph({ spacing: { after: 100 }, indent: { left: 200 }, children: [
+      new TextRun({ text: data.remarks, size: 20, font: 'Times New Roman' })
+    ]}));
+  }
+
+  children.push(new Paragraph({ spacing: { after: 80 }, children: [
+    new TextRun({ text: 'Status: ', bold: true, size: 20, font: 'Times New Roman' }),
+    new TextRun({ text: data.status || 'Open', size: 20, font: 'Times New Roman' })
+  ]}));
+
+  children.push(new Paragraph({ spacing: { before: 300 }, children: [] }));
+  children.push(new Paragraph({ children: [
+    new TextRun({ text: 'Authorized Signatory (BEML Limited)', size: 20, font: 'Times New Roman' }),
+    new TextRun({ text: '                    Authorized Signatory (Other Party)', size: 20, font: 'Times New Roman' })
+  ]}));
+
+  const doc = new Document({ sections: [{ children }] });
+  return Packer.toBuffer(doc);
+}

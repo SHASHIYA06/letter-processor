@@ -1131,6 +1131,71 @@ app.post('/api/auto-save', authenticateToken, async (req, res) => {
 });
 
 // ══════════════════════════════════════════════════════════════
+//  JOINT NOTE CRUD
+// ══════════════════════════════════════════════════════════════
+
+app.get('/api/joint-note/next-number', authenticateToken, async (req, res) => {
+  try {
+    if (!sheets) return res.json({ success: true, number: `JN-${new Date().getFullYear()}-001` });
+    const result = await sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range: 'Joint Notes!A:A' });
+    const count = (result.data.values?.length || 1);
+    const year = new Date().getFullYear();
+    res.json({ success: true, number: `JN-${year}-${String(count).padStart(3, '0')}` });
+  } catch (e) { res.json({ success: true, number: `JN-${new Date().getFullYear()}-001` }); }
+});
+
+app.post('/api/joint-note/create', authenticateToken, async (req, res) => {
+  try {
+    const data = req.body;
+    const row = [
+      '', // S.No (auto)
+      data.jointNoteNo || '',
+      data.date || '',
+      data.parties || '',
+      data.subject || '',
+      data.description || '',
+      data.itemsDiscussed || '',
+      data.decisions || '',
+      data.actionItems || '',
+      '', // Attachments
+      '', // Attachment Link
+      '', // File Name
+      data.status || 'Open'
+    ];
+    if (sheets) {
+      const result = await sheets.spreadsheets.values.append({
+        spreadsheetId: SPREADSHEET_ID, range: 'Joint Notes', valueInputOption: 'RAW',
+        requestBody: { values: [row] }
+      });
+      const sno = result.data.updates?.updatedRange?.match(/(\d+)$/)?.[1] || '';
+      res.json({ success: true, sheet: { sno: parseInt(sno) - 1 } });
+    } else {
+      res.json({ success: false, error: 'Sheets not connected' });
+    }
+  } catch (e) { res.status(500).json({ success: false, error: e.message }); }
+});
+
+app.post('/api/joint-note/generate-pdf', authenticateToken, async (req, res) => {
+  try {
+    const data = req.body;
+    const pdfBuffer = await generateJointNotePdf(data);
+    const pdfBase64 = pdfBuffer.toString('base64');
+    const safeName = (data.jointNoteNo || 'JointNote').replace(/[^a-zA-Z0-9]/g, '_');
+    res.json({ success: true, pdfData: pdfBase64, fileName: `${safeName}.pdf` });
+  } catch (e) { res.status(500).json({ success: false, error: e.message }); }
+});
+
+app.post('/api/joint-note/generate-docx', authenticateToken, async (req, res) => {
+  try {
+    const data = req.body;
+    const docxBuffer = await generateJointNoteDocx(data);
+    const docxBase64 = docxBuffer.toString('base64');
+    const safeName = (data.jointNoteNo || 'JointNote').replace(/[^a-zA-Z0-9]/g, '_');
+    res.json({ success: true, docxData: docxBase64, fileName: `${safeName}.docx` });
+  } catch (e) { res.status(500).json({ success: false, error: e.message }); }
+});
+
+// ══════════════════════════════════════════════════════════════
 //  HELPER FUNCTIONS
 // ══════════════════════════════════════════════════════════════
 function detectOrganization(text) {

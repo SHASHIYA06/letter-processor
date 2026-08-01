@@ -178,6 +178,7 @@
       <div class="menu-section">Create</div>
       <div class="menu-item" onclick="navigate('create-letter')"><span class="icon">✉️</span><span class="menu-text">Create Letter</span></div>
       <div class="menu-item" onclick="navigate('create-ncr')"><span class="icon">📋</span><span class="menu-text">Create NCR</span></div>
+      <div class="menu-item" onclick="navigate('create-joint')"><span class="icon">📝</span><span class="menu-text">Create Joint Note</span></div>
       <div class="menu-item" onclick="navigate('reply-letter')"><span class="icon">↩️</span><span class="menu-text">AI Reply Letter</span></div>
       <div class="menu-section">AI Tools</div>
       <div class="menu-item" onclick="navigate('ai-letter')"><span class="icon">🤖</span><span class="menu-text">AI Letter Writer</span></div>
@@ -321,6 +322,7 @@
         case 'joint': renderJointNotes(content); break;
         case 'create-ncr': ncrCurrentRowIndex = null; renderCreateNCR(content); break;
         case 'create-letter': letterCurrentRowIndex = null; renderCreateLetter(content); break;
+        case 'create-joint': jointCurrentRowIndex = null; renderCreateJointNote(content); break;
         case 'reply-letter': renderReplyLetter(content); break;
         case 'ai-letter': renderAILetter(content); break;
         case 'ai-ncr': renderAINCR(content); break;
@@ -605,11 +607,155 @@
           <td class="actions">
             <button class="btn btn-secondary btn-sm" onclick="viewDocument('Joint Notes',${item.idx})" title="View">👁️</button>
             <button class="btn btn-secondary btn-sm" onclick="editRecord('Joint Notes',${item.idx})" title="Edit">✏️</button>
+            <button class="btn btn-success btn-sm" onclick="downloadJNFile(${item.idx})" title="Download PDF">📥</button>
           </td>
         </tr>`;
       });
       html += '</tbody></table>';
       document.getElementById('jnTable').innerHTML = html;
+    }
+
+    // === CREATE JOINT NOTE ===
+    let jointCurrentRowIndex = null;
+    let lastJNPdfUrl = null;
+    let lastJNDocxUrl = null;
+    let lastJNFileName = null;
+
+    async function renderCreateJointNote(el) {
+      const res = await authFetch('/api/joint-note/next-number');
+      const d = await res.json();
+      const jnNo = d.success ? d.number : 'JN-' + new Date().getFullYear() + '-001';
+      el.innerHTML = `
+        <div class="page-header">
+          <div><h2>Create Joint Note</h2><p>Fill form with live preview</p></div>
+          <div style="display:flex;gap:8px">
+            <button class="btn btn-secondary" onclick="navigate('joint')">← Back to Joint Notes</button>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;height:calc(100vh - 180px)">
+          <div class="card" style="overflow-y:auto;padding:20px">
+            <h3 style="margin-bottom:16px;font-size:1rem">Joint Note Form</h3>
+            <div style="font-size:.75rem;color:var(--text3);margin-bottom:12px;padding:8px;background:var(--success-bg);border-radius:6px">Auto-saves every 5 seconds</div>
+            <div class="form-row">
+              <div class="form-group"><label>Joint Note Number *</label><input id="jn_number" value="${esc(jnNo)}" onchange="updateJNPreview()"></div>
+              <div class="form-group"><label>Date *</label><input type="text" id="jn_date" value="${new Date().toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'})}" onchange="updateJNPreview()"></div>
+            </div>
+            <div class="form-group"><label>Parties / Participants *</label><textarea id="jn_parties" rows="2" placeholder="BEML Limited, M/s ABC Ltd, etc." onchange="updateJNPreview()"></textarea></div>
+            <div class="form-group"><label>Subject *</label><input id="jn_subject" placeholder="e.g. Review meeting for door spindle issue" onchange="updateJNPreview()"></div>
+            <div class="form-group"><label>Description</label><textarea id="jn_description" rows="4" placeholder="Brief description of the joint note purpose..." onchange="updateJNPreview()"></textarea></div>
+            <div class="form-group"><label>Items Discussed</label><textarea id="jn_itemsDiscussed" rows="4" placeholder="List the items discussed in the meeting..." onchange="updateJNPreview()"></textarea></div>
+            <div class="form-group"><label>Decisions Taken</label><textarea id="jn_decisions" rows="4" placeholder="Key decisions agreed upon..." onchange="updateJNPreview()"></textarea></div>
+            <div class="form-group"><label>Action Items</label><textarea id="jn_actionItems" rows="4" placeholder="List action items with owners and deadlines..." onchange="updateJNPreview()"></textarea></div>
+            <div class="form-group"><label>Remarks</label><input id="jn_remarks" onchange="updateJNPreview()"></div>
+            <div class="form-group"><label>Status</label><select id="jn_status" onchange="updateJNPreview()"><option value="Open">Open</option><option value="Closed">Closed</option><option value="Pending">Pending</option></select></div>
+            <div style="display:flex;gap:8px;margin-top:16px">
+              <button class="btn btn-primary" onclick="saveJointNote()">💾 Save</button>
+              <button class="btn btn-success" onclick="generateJNPdf()">📄 PDF</button>
+              <button class="btn btn-secondary" onclick="generateJNDocx()">📝 Word</button>
+            </div>
+            <div style="display:flex;gap:8px;margin-top:8px">
+              <a id="jnPdfDownload" class="btn btn-success btn-sm" style="display:none" download>📥 Download PDF</a>
+              <a id="jnDocxDownload" class="btn btn-secondary btn-sm" style="display:none" download>📥 Download Word</a>
+            </div>
+          </div>
+          <div class="card" style="overflow-y:auto;padding:20px">
+            <h3 style="margin-bottom:16px;font-size:1rem">Live Preview</h3>
+            <div id="jnPreview" style="font-size:.85rem;line-height:1.6;white-space:pre-wrap;color:var(--text2)">Fill the form to see preview</div>
+          </div>
+        </div>`;
+    }
+
+    function getJNData() {
+      return {
+        jointNoteNo: document.getElementById('jn_number')?.value || '',
+        date: document.getElementById('jn_date')?.value || '',
+        parties: document.getElementById('jn_parties')?.value || '',
+        subject: document.getElementById('jn_subject')?.value || '',
+        description: document.getElementById('jn_description')?.value || '',
+        itemsDiscussed: document.getElementById('jn_itemsDiscussed')?.value || '',
+        decisions: document.getElementById('jn_decisions')?.value || '',
+        actionItems: document.getElementById('jn_actionItems')?.value || '',
+        remarks: document.getElementById('jn_remarks')?.value || '',
+        status: document.getElementById('jn_status')?.value || 'Open'
+      };
+    }
+
+    function updateJNPreview() {
+      const d = getJNData();
+      const preview = document.getElementById('jnPreview');
+      if (!preview) return;
+      preview.innerHTML = `
+        <div style="text-align:center;margin-bottom:20px">
+          <div style="font-weight:700;font-size:1.1rem">JOINT NOTE</div>
+          <div style="font-size:.8rem;color:var(--text3)">No: ${esc(d.jointNoteNo)}</div>
+        </div>
+        <div style="margin-bottom:8px"><strong>Date:</strong> ${esc(d.date)}</div>
+        <div style="margin-bottom:8px"><strong>Parties:</strong> ${esc(d.parties)}</div>
+        <div style="margin-bottom:12px"><strong>Subject:</strong> ${esc(d.subject)}</div>
+        ${d.description ? `<div style="margin-bottom:12px"><strong>Description:</strong><br>${esc(d.description)}</div>` : ''}
+        ${d.itemsDiscussed ? `<div style="margin-bottom:12px"><strong>Items Discussed:</strong><br>${esc(d.itemsDiscussed)}</div>` : ''}
+        ${d.decisions ? `<div style="margin-bottom:12px"><strong>Decisions:</strong><br>${esc(d.decisions)}</div>` : ''}
+        ${d.actionItems ? `<div style="margin-bottom:12px"><strong>Action Items:</strong><br>${esc(d.actionItems)}</div>` : ''}
+        ${d.remarks ? `<div style="margin-bottom:8px"><strong>Remarks:</strong> ${esc(d.remarks)}</div>` : ''}
+        <div style="margin-top:16px"><strong>Status:</strong> ${esc(d.status)}</div>`;
+    }
+
+    async function saveJointNote() {
+      try {
+        const data = getJNData();
+        if (!data.jointNoteNo) return showToast('Joint Note Number is required', 'error');
+        if (!data.parties) return showToast('Parties are required', 'error');
+        if (!data.subject) return showToast('Subject is required', 'error');
+        const res = await authFetch('/api/joint-note/create', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data)
+        });
+        const r = await res.json();
+        if (r.success) {
+          jointCurrentRowIndex = r.sheet?.sno || null;
+          showToast('Joint Note saved to Google Sheets!', 'success');
+          loadAllData();
+        } else showToast('Save failed: ' + (r.error || ''), 'error');
+      } catch (e) { showToast('Error: ' + e.message, 'error'); }
+    }
+
+    async function generateJNPdf() {
+      try {
+        const res = await authFetch('/api/joint-note/generate-pdf', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(getJNData())
+        });
+        const r = await res.json();
+        if (r.success) {
+          if (lastJNPdfUrl) URL.revokeObjectURL(lastJNPdfUrl);
+          const binary = atob(r.pdfData); const bytes = new Uint8Array(binary.length);
+          for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+          lastJNPdfUrl = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }));
+          lastJNFileName = r.fileName || 'JointNote.pdf';
+          const dl = document.getElementById('jnPdfDownload');
+          dl.href = lastJNPdfUrl; dl.download = lastJNFileName; dl.style.display = 'inline-flex';
+          showToast('PDF generated!', 'success');
+        } else showToast('PDF failed: ' + (r.error || ''), 'error');
+      } catch (e) { showToast('Error: ' + e.message, 'error'); }
+    }
+
+    async function generateJNDocx() {
+      try {
+        const res = await authFetch('/api/joint-note/generate-docx', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(getJNData())
+        });
+        const r = await res.json();
+        if (r.success) {
+          if (lastJNDocxUrl) URL.revokeObjectURL(lastJNDocxUrl);
+          const binary = atob(r.docxData); const bytes = new Uint8Array(binary.length);
+          for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+          lastJNDocxUrl = URL.createObjectURL(new Blob([bytes], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' }));
+          const dl = document.getElementById('jnDocxDownload');
+          dl.href = lastJNDocxUrl; dl.download = lastJNFileName || 'JointNote.docx'; dl.style.display = 'inline-flex';
+          showToast('Word document generated!', 'success');
+        } else showToast('DOCX failed: ' + (r.error || ''), 'error');
+      } catch (e) { showToast('Error: ' + e.message, 'error'); }
     }
 
     // === BULK IMPORT ===
@@ -1885,6 +2031,25 @@
       } else {
         showToast('Download available for Letters and NCRs', 'info');
       }
+    }
+
+    function downloadJNFile(idx) {
+      const rows = allData['Joint Notes'] || [];
+      if (!rows[idx]) return;
+      const record = rows[idx];
+      const headers = rows[0] || [];
+      const JN_KEY_MAP = { 'Joint Note No':'jointNoteNo','Date':'date','Parties':'parties','Subject':'subject','Description':'description','Items Discussed':'itemsDiscussed','Decisions':'decisions','Action Items':'actionItems','Remarks':'remarks','Status':'status' };
+      const data = {};
+      headers.forEach((h, i) => { if (JN_KEY_MAP[h] && record[i]) data[JN_KEY_MAP[h]] = record[i]; });
+      authFetch('/api/joint-note/generate-pdf', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(data) })
+        .then(r => r.json()).then(r => {
+          if (r.pdfData) {
+            const bin = atob(r.pdfData); const bytes = new Uint8Array(bin.length);
+            for(let i=0;i<bin.length;i++) bytes[i]=bin.charCodeAt(i);
+            const url = URL.createObjectURL(new Blob([bytes],{type:'application/pdf'}));
+            const a = document.createElement('a'); a.href = url; a.download = r.fileName || 'JointNote.pdf'; a.click();
+          } else showToast('PDF generation failed', 'error');
+        }).catch(e => showToast('Error: ' + e.message, 'error'));
     }
 
     function openInDrive(sheet, idx) {
