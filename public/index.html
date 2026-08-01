@@ -1281,6 +1281,7 @@
     let ncrCurrentRowIndex = null;
     let lastNCRPdfUrl = null;
     let lastNCRDocxUrl = null;
+    let lastNCRFileName = null;
     async function generateNCRPdf() {
       try {
         const res = await fetch('/api/ncr/generate-pdf', {
@@ -1288,8 +1289,14 @@
           body: JSON.stringify(getNCRData())
         });
         const r = await res.json();
-        if (r.success) { lastNCRPdfUrl = r.filePath; showToast('PDF generated!', 'success'); }
-        else showToast('PDF failed', 'error');
+        if (r.success) {
+          if (lastNCRPdfUrl) URL.revokeObjectURL(lastNCRPdfUrl);
+          const binary = atob(r.pdfData); const bytes = new Uint8Array(binary.length);
+          for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+          lastNCRPdfUrl = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }));
+          lastNCRFileName = r.fileName || 'NCR.pdf';
+          showToast('PDF generated!', 'success');
+        } else showToast('PDF failed: ' + (r.error || ''), 'error');
       } catch (e) { showToast('Error: ' + e.message, 'error'); }
     }
     async function generateNCRDocx() {
@@ -1299,12 +1306,17 @@
           body: JSON.stringify(getNCRData())
         });
         const r = await res.json();
-        if (r.success) { lastNCRDocxUrl = r.filePath; showToast('Word document generated!', 'success'); }
-        else showToast('DOCX failed', 'error');
+        if (r.success) {
+          if (lastNCRDocxUrl) URL.revokeObjectURL(lastNCRDocxUrl);
+          const binary = atob(r.docxData); const bytes = new Uint8Array(binary.length);
+          for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+          lastNCRDocxUrl = URL.createObjectURL(new Blob([bytes], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' }));
+          showToast('Word document generated!', 'success');
+        } else showToast('DOCX failed: ' + (r.error || ''), 'error');
       } catch (e) { showToast('Error: ' + e.message, 'error'); }
     }
-    function downloadNCRPdf() { if (lastNCRPdfUrl) { const a = document.createElement('a'); a.href = lastNCRPdfUrl; a.download = ''; document.body.appendChild(a); a.click(); document.body.removeChild(a); } else showToast('Generate PDF first', 'error'); }
-    function downloadNCRDocx() { if (lastNCRDocxUrl) { const a = document.createElement('a'); a.href = lastNCRDocxUrl; a.download = ''; document.body.appendChild(a); a.click(); document.body.removeChild(a); } else showToast('Generate Word doc first', 'error'); }
+    function downloadNCRPdf() { if (lastNCRPdfUrl) { const a = document.createElement('a'); a.href = lastNCRPdfUrl; a.download = lastNCRFileName || 'NCR.pdf'; document.body.appendChild(a); a.click(); document.body.removeChild(a); } else showToast('Generate PDF first', 'error'); }
+    function downloadNCRDocx() { if (lastNCRDocxUrl) { const a = document.createElement('a'); a.href = lastNCRDocxUrl; a.download = lastNCRFileName || 'NCR.docx'; document.body.appendChild(a); a.click(); document.body.removeChild(a); } else showToast('Generate Word doc first', 'error'); }
 
     // === CREATE LETTER ===
     let letterAutoSaveTimer = null;
@@ -1444,6 +1456,7 @@
     let letterCurrentRowIndex = null;
     let lastLetterPdfUrl = null;
     let lastLetterDocxUrl = null;
+    let lastLetterFileName = null;
     async function generateLetterPdf() {
       try {
         const res = await fetch('/api/letter/generate-pdf', {
@@ -1451,8 +1464,14 @@
           body: JSON.stringify(getLetterData())
         });
         const r = await res.json();
-        if (r.success) { lastLetterPdfUrl = r.filePath; showToast('PDF generated!', 'success'); }
-        else showToast('PDF failed', 'error');
+        if (r.success) {
+          if (lastLetterPdfUrl) URL.revokeObjectURL(lastLetterPdfUrl);
+          const binary = atob(r.pdfData); const bytes = new Uint8Array(binary.length);
+          for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+          lastLetterPdfUrl = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }));
+          lastLetterFileName = r.fileName || 'Letter.pdf';
+          showToast('PDF generated!', 'success');
+        } else showToast('PDF failed: ' + (r.error || ''), 'error');
       } catch (e) { showToast('Error: ' + e.message, 'error'); }
     }
     async function generateLetterDocx() {
@@ -1462,12 +1481,17 @@
           body: JSON.stringify(getLetterData())
         });
         const r = await res.json();
-        if (r.success) { lastLetterDocxUrl = r.filePath; showToast('Word document generated!', 'success'); }
-        else showToast('DOCX failed', 'error');
+        if (r.success) {
+          if (lastLetterDocxUrl) URL.revokeObjectURL(lastLetterDocxUrl);
+          const binary = atob(r.docxData); const bytes = new Uint8Array(binary.length);
+          for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+          lastLetterDocxUrl = URL.createObjectURL(new Blob([bytes], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' }));
+          showToast('Word document generated!', 'success');
+        } else showToast('DOCX failed: ' + (r.error || ''), 'error');
       } catch (e) { showToast('Error: ' + e.message, 'error'); }
     }
-    function downloadLetterPdf() { if (lastLetterPdfUrl) { const a = document.createElement('a'); a.href = lastLetterPdfUrl; a.download = ''; document.body.appendChild(a); a.click(); document.body.removeChild(a); } else showToast('Generate PDF first', 'error'); }
-    function downloadLetterDocx() { if (lastLetterDocxUrl) { const a = document.createElement('a'); a.href = lastLetterDocxUrl; a.download = ''; document.body.appendChild(a); a.click(); document.body.removeChild(a); } else showToast('Generate Word doc first', 'error'); }
+    function downloadLetterPdf() { if (lastLetterPdfUrl) { const a = document.createElement('a'); a.href = lastLetterPdfUrl; a.download = lastLetterFileName || 'Letter.pdf'; document.body.appendChild(a); a.click(); document.body.removeChild(a); } else showToast('Generate PDF first', 'error'); }
+    function downloadLetterDocx() { if (lastLetterDocxUrl) { const a = document.createElement('a'); a.href = lastLetterDocxUrl; a.download = lastLetterFileName || 'Letter.docx'; document.body.appendChild(a); a.click(); document.body.removeChild(a); } else showToast('Generate Word doc first', 'error'); }
 
     // === VIEW DOCUMENT ===
     function viewDocument(sheet, idx) {

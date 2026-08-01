@@ -971,9 +971,13 @@ app.post('/api/ncr/generate-pdf', async (req, res) => {
   try {
     const data = req.body;
     const fileName = `NCR_${(data.ncrNo || 'draft').replace(/[^a-zA-Z0-9]/g, '_')}_${Date.now()}.pdf`;
-    const outputPath = path.join(__dirname, 'uploads', fileName);
+    const tmpDir = isVercelStorage ? '/tmp' : path.join(__dirname, 'uploads');
+    const outputPath = path.join(tmpDir, fileName);
     await generateNCRPdf(data, outputPath);
-    res.json({ success: true, filePath: `/uploads/${fileName}`, fileName });
+    const fileBuffer = fs.readFileSync(outputPath);
+    const base64 = fileBuffer.toString('base64');
+    if (!isVercelStorage) { try { fs.unlinkSync(outputPath); } catch {} }
+    res.json({ success: true, pdfData: base64, fileName });
   } catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
@@ -981,9 +985,13 @@ app.post('/api/ncr/generate-docx', async (req, res) => {
   try {
     const data = req.body;
     const fileName = `NCR_${(data.ncrNo || 'draft').replace(/[^a-zA-Z0-9]/g, '_')}_${Date.now()}.docx`;
-    const outputPath = path.join(__dirname, 'uploads', fileName);
+    const tmpDir = isVercelStorage ? '/tmp' : path.join(__dirname, 'uploads');
+    const outputPath = path.join(tmpDir, fileName);
     await generateNCRDocx(data, outputPath);
-    res.json({ success: true, filePath: `/uploads/${fileName}`, fileName });
+    const fileBuffer = fs.readFileSync(outputPath);
+    const base64 = fileBuffer.toString('base64');
+    if (!isVercelStorage) { try { fs.unlinkSync(outputPath); } catch {} }
+    res.json({ success: true, docxData: base64, fileName });
   } catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
@@ -1029,9 +1037,13 @@ app.post('/api/letter/generate-pdf', async (req, res) => {
   try {
     const data = req.body;
     const fileName = `Letter_${(data.refNumber || 'draft').replace(/[^a-zA-Z0-9]/g, '_')}_${Date.now()}.pdf`;
-    const outputPath = path.join(__dirname, 'uploads', fileName);
+    const tmpDir = isVercelStorage ? '/tmp' : path.join(__dirname, 'uploads');
+    const outputPath = path.join(tmpDir, fileName);
     await generateLetterPdf(data, outputPath);
-    res.json({ success: true, filePath: `/uploads/${fileName}`, fileName });
+    const fileBuffer = fs.readFileSync(outputPath);
+    const base64 = fileBuffer.toString('base64');
+    if (!isVercelStorage) { try { fs.unlinkSync(outputPath); } catch {} }
+    res.json({ success: true, pdfData: base64, fileName });
   } catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
@@ -1039,9 +1051,13 @@ app.post('/api/letter/generate-docx', async (req, res) => {
   try {
     const data = req.body;
     const fileName = `Letter_${(data.refNumber || 'draft').replace(/[^a-zA-Z0-9]/g, '_')}_${Date.now()}.docx`;
-    const outputPath = path.join(__dirname, 'uploads', fileName);
+    const tmpDir = isVercelStorage ? '/tmp' : path.join(__dirname, 'uploads');
+    const outputPath = path.join(tmpDir, fileName);
     await generateLetterDocx(data, outputPath);
-    res.json({ success: true, filePath: `/uploads/${fileName}`, fileName });
+    const fileBuffer = fs.readFileSync(outputPath);
+    const base64 = fileBuffer.toString('base64');
+    if (!isVercelStorage) { try { fs.unlinkSync(outputPath); } catch {} }
+    res.json({ success: true, docxData: base64, fileName });
   } catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
