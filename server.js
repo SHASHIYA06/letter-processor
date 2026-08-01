@@ -1950,20 +1950,25 @@ app.post('/api/master-data/:category', authenticateToken, async (req, res) => {
 // ══════════════════════════════════════════════════════════════
 
 async function callAI(prompt, systemPrompt) {
-  const apiKey = process.env.AI_API_KEY || process.env.OPENAI_API_KEY || '';
-  const provider = (process.env.AI_PROVIDER || 'openai').toLowerCase();
+  const apiKey = process.env.AI_API_KEY || process.env.OPENAI_API_KEY || process.env.GEMINI_API_KEY || '';
+  const provider = (process.env.AI_PROVIDER || (process.env.GEMINI_API_KEY ? 'gemini' : 'openai')).toLowerCase();
   const model = process.env.AI_MODEL || 'gpt-4o-mini';
 
   if (!apiKey) throw new Error('AI API key not configured. Set AI_API_KEY in environment.');
 
   if (provider === 'gemini') {
     const geminiModel = process.env.AI_MODEL || 'gemini-2.0-flash';
-    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent?key=${apiKey}`, {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent?key=${apiKey}`;
+    const res = await fetch(url, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ contents: [{ parts: [{ text: (systemPrompt || '') + '\n\n' + prompt }] }] })
     });
     const data = await res.json();
-    if (data.error) throw new Error(data.error.message || 'Gemini API error');
+    if (data.error) {
+      console.error('❌ Gemini API error:', data.error.message || JSON.stringify(data.error));
+      throw new Error(data.error.message || 'Gemini API error');
+    }
+    console.log('✅ Gemini response received');
     return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
   }
 
@@ -2076,8 +2081,9 @@ Return the improved content maintaining the same structure and key information. 
 });
 
 app.get('/api/ai/status', (req, res) => {
-  const hasKey = !!(process.env.AI_API_KEY || process.env.OPENAI_API_KEY);
-  res.json({ configured: hasKey, provider: process.env.AI_PROVIDER || 'openai', model: process.env.AI_MODEL || 'gpt-4o-mini' });
+  const hasKey = !!(process.env.AI_API_KEY || process.env.OPENAI_API_KEY || process.env.GEMINI_API_KEY);
+  const provider = process.env.AI_PROVIDER || (process.env.GEMINI_API_KEY ? 'gemini' : 'openai');
+  res.json({ configured: hasKey, provider, model: process.env.AI_MODEL || (provider === 'gemini' ? 'gemini-2.0-flash' : 'gpt-4o-mini') });
 });
 
 // ══════════════════════════════════════════════════════════════
