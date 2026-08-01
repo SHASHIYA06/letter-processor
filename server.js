@@ -226,7 +226,8 @@ const LETTER_COLUMNS = [
   'S.No', 'Ref. Letter Number', 'All References', 'Date', 'From',
   'To (Addressee)', 'Kind Attention', 'Subject', 'Letter Type',
   'Letter Content', 'Enclosures', 'Remarks', 'Attachment Link', 'File Name', 'Status',
-  'Signatory', 'Designation', 'Project', 'Cc'
+  'Signatory', 'Designation', 'Project', 'Cc',
+  'Depot', 'Priority', 'Reply Type', 'Tech Details'
 ];
 
 const NCR_COLUMNS = [
@@ -415,6 +416,7 @@ const LETTER_KEY_TO_COL = {
   letterType: 'Letter Type', letterContent: 'Letter Content', enclosures: 'Enclosures',
   remarks: 'Remarks', attachmentLink: 'Attachment Link', fileName: 'File Name', status: 'Status',
   signatory: 'Signatory', designation: 'Designation', project: 'Project', cc: 'Cc',
+  depot: 'Depot', priority: 'Priority', replyType: 'Reply Type', techDetails: 'Tech Details',
   uploadDate: 'Upload Date', detectedOrg: 'Detected Org'
 };
 
@@ -1525,6 +1527,45 @@ app.post('/api/save', authenticateToken, upload.single('file'), async (req, res)
   }
 });
 
+// Save Reply Letter - directly saves a reply as a letter record
+app.post('/api/save-reply', authenticateToken, async (req, res) => {
+  try {
+    const data = req.body;
+    const org = data.organization || 'BEML';
+    
+    // Build letter data matching LETTER_COLUMNS
+    const letterData = {
+      organization: org,
+      refNumber: data.refNumber || '',
+      date: data.date || new Date().toISOString().split('T')[0],
+      to: data.to || '',
+      kindAttn: '',
+      subject: data.subject || '',
+      allReferences: data.allReferences || '',
+      letterContent: data.letterContent || '',
+      signatory: '',
+      designation: '',
+      project: '',
+      enclosures: '',
+      cc: '',
+      attachmentLink: '',
+      status: data.status || 'Open',
+      depot: data.depot || '',
+      priority: data.priority || 'normal',
+      replyType: data.replyType || 'response',
+      techDetails: data.techDetails || ''
+    };
+
+    const sheetName = SHEET_NAMES[org] || `${org} Letters`;
+    const sheetResult = await appendToSheet(sheetName, letterData, LETTER_COLUMNS);
+
+    res.json({ success: true, sheet: sheetResult, message: 'Reply saved as letter' });
+  } catch (err) {
+    console.error('❌ Save reply error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 app.post('/api/bulk-upload', authenticateToken, (req, res) => {
   upload.array('files', 50)(req, res, async (err) => {
     if (err) return res.status(500).json({ success: false, error: err.message });
@@ -2097,23 +2138,56 @@ For ${orgFull}
 Authorized Signatory`;
 }
 
-function generateReplyTemplate({ originalRef, originalSubject, originalFrom, org }) {
+function generateReplyTemplate({ originalRef, originalSubject, originalFrom, org, replyType, depot, priority, techDetails }) {
   const orgFull = org === 'KMRCL' ? 'Kolkata Metro Rail Corporation Limited' : org === 'Metro Rail' ? 'Metro Rail Corporation' : 'BEML Limited';
   const today = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
-  return `Ref: ${org}/REPLY/${new Date().getFullYear()}/___
+  const priorityNote = priority === 'urgent' ? '\n\nNote: This reply is marked as URGENT and requires immediate attention.' : priority === 'immediate' ? '\n\nNote: This reply requires IMMEDIATE action.' : '';
+  const techNote = techDetails ? `\n\nReference: ${techDetails}` : '';
+  const depotNote = depot ? `\n\nDepot: ${depot}` : '';
+  
+  let replyBody = '';
+  if (replyType === 'clarification') {
+    replyBody = `We have received your letter referenced above and have examined the points raised in detail.
 
-Date: ${today}
+After thorough review, we wish to clarify the following:
 
-To,
-${originalFrom || 'Sir/Madam'}
+1. The matter has been carefully examined by the concerned department.
 
-Subject: Re: ${originalSubject || 'Your correspondence'}
+2. Based on our analysis, we would like to state the following clarification:
 
-Reference: Your letter ${originalRef || 'Not specified'}
+   [Please provide specific clarification here]
 
-Dear Sir/Madam,
+3. We request you to kindly review the above and provide your observations, if any, within 15 working days.
 
-We acknowledge the receipt of your letter referenced above regarding "${originalSubject || 'the subject matter'}".
+For any further clarification, please contact the undersigned.`;
+  } else if (replyType === 'action_taken') {
+    replyBody = `We acknowledge receipt of your letter referenced above regarding "${originalSubject || 'the subject matter'}".
+
+We are pleased to inform you that the following actions have been taken:
+
+1. [Describe action taken]
+
+2. [Describe action taken]
+
+3. The corrective measures have been implemented and are being monitored for effectiveness.
+
+We request you to kindly acknowledge the above actions and provide your further instructions, if any.`;
+  } else if (replyType === 'technical') {
+    replyBody = `We have received your letter referenced above and have examined the technical aspects raised therein.
+
+After detailed technical analysis, we wish to submit the following:
+
+1. Technical Assessment: [Provide technical details]
+
+2. Findings: [Describe findings]
+
+3. Recommendations: [Provide recommendations]
+
+4. Implementation Plan: [Describe plan]
+
+We request your approval to proceed with the recommended actions.`;
+  } else {
+    replyBody = `We acknowledge the receipt of your letter referenced above regarding "${originalSubject || 'the subject matter'}".
 
 After careful consideration of the points raised in your communication, we wish to convey the following:
 
@@ -2125,7 +2199,23 @@ After careful consideration of the points raised in your communication, we wish 
 
 4. We shall revert with our detailed response at the earliest, preferably within 15 working days.
 
-For any further clarification, please feel free to contact the undersigned.
+For any further clarification, please feel free to contact the undersigned.`;
+  }
+
+  return `Ref: ${org}/REPLY/${new Date().getFullYear()}/___
+
+Date: ${today}
+
+To,
+${originalFrom || 'Sir/Madam'}
+
+Subject: Re: ${originalSubject || 'Your correspondence'}
+
+Reference: Your letter ${originalRef || 'Not specified'}${techNote}${depotNote}
+
+Dear Sir/Madam,${priorityNote}
+
+${replyBody}
 
 Thanking you,
 
@@ -2248,37 +2338,41 @@ Generate the complete letter body in professional railway documentation style. I
 
 app.post('/api/ai/generate-reply', authenticateToken, async (req, res) => {
   try {
-    const { originalLetter, originalRef, originalSubject, originalFrom, org, customInstructions } = req.body;
+    const { originalLetter, originalRef, originalSubject, originalFrom, org, customInstructions, replyType, depot, priority, techDetails } = req.body;
     let content = '';
     let source = 'ai';
 
     try {
-      const prompt = `You are an expert BEML (Bharat Earth Movers Limited) correspondence officer. Generate a professional REPLY letter from BEML against the following incoming letter:
+      const prompt = `You are an expert correspondence officer for ${org || 'BEML'}. Generate a professional REPLY letter against the following incoming letter:
 
 Original Reference: ${originalRef || 'Not specified'}
 From: ${originalFrom || 'Not specified'}
 Subject: ${originalSubject || 'Not specified'}
+Reply Type: ${replyType || 'response'}
+Depot: ${depot || 'Not specified'}
+Priority: ${priority || 'normal'}
+Technical Details: ${techDetails || 'Not specified'}
 Original Letter Content:
 ${originalLetter || 'Not provided'}
 
 ${customInstructions ? `Additional Instructions: ${customInstructions}` : ''}
 
-Generate a complete BEML reply letter including:
-1. BEML Reference Number format: BEML/PROJECT/DEPT/NUMBER/YEAR
+Generate a complete reply letter including:
+1. Reference Number format: ${org || 'BEML'}/PROJECT/DEPT/NUMBER/YEAR
 2. Date
 3. To address (respond to the original sender)
 4. Subject line with "Re:" prefix and original reference
 5. Proper reference to original letter
 6. Professional response addressing all points
 7. Technical commitments if applicable
-8. Proper closing with for BEML Limited
+8. Proper closing with for ${org || 'BEML'} Limited
 
 Use formal Indian PSU communication style. Be technically precise and professional.`;
-      content = await callAI(prompt, 'You are an expert BEML letter drafting assistant. Generate professional reply letters in BEML official format. Use Indian English, formal PSU communication style, and railway engineering terminology.');
+      content = await callAI(prompt, `You are an expert ${org || 'BEML'} letter drafting assistant. Generate professional reply letters in official format. Use Indian English, formal PSU communication style, and railway engineering terminology.`);
     } catch (aiErr) {
       console.log('⚠️ AI reply failed, using template:', aiErr.message);
       source = 'template';
-      content = generateReplyTemplate({ originalRef, originalSubject, originalFrom, org });
+      content = generateReplyTemplate({ originalRef, originalSubject, originalFrom, org, replyType, depot, priority, techDetails });
     }
 
     res.json({ success: true, content, source });

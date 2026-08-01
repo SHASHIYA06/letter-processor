@@ -449,21 +449,27 @@
     function getStats() {
       let total = 0, beml = 0, kmrcl = 0, ncr = 0, jn = 0, open = 0, closed = 0, metro = 0, letters = 0;
       const vendorSet = new Set();
+      const depotFilter = currentDepot || '';
       for (const [key, rows] of Object.entries(allData)) {
-        const count = Math.max(0, rows.length - 1);
-        total += count;
-        if (key.includes('BEML')) { beml += count; letters += count; }
-        else if (key.includes('KMRCL')) { kmrcl += count; letters += count; }
-        else if (key.includes('Metro')) { metro += count; letters += count; }
-        else if (key.includes('NCR')) ncr += count;
-        else if (key.includes('Joint')) jn += count;
         for (let i = 1; i < rows.length; i++) {
+          const r = rows[i];
+          // Depot filtering for letters (col 19 = Depot)
+          if (depotFilter && (key.includes('Letters') || key.includes('BEML') || key.includes('KMRCL') || key.includes('Metro'))) {
+            const rowDepot = (r[19] || '').toLowerCase();
+            if (rowDepot && rowDepot !== depotFilter.toLowerCase()) continue;
+          }
+          total++;
+          if (key.includes('BEML')) { beml++; letters++; }
+          else if (key.includes('KMRCL')) { kmrcl++; letters++; }
+          else if (key.includes('Metro')) { metro++; letters++; }
+          else if (key.includes('NCR')) ncr++;
+          else if (key.includes('Joint')) jn++;
           const isNCR = key.includes('NCR');
-          const statusIdx = isNCR ? 17 : rows[i].length - 1;
-          const status = (rows[i][statusIdx] || '').toLowerCase();
+          const statusIdx = isNCR ? 17 : 14;
+          const status = (r[statusIdx] || '').toLowerCase();
           if (status !== 'closed' && status !== '' && status !== 'n/a') open++;
           else if (status === 'closed') closed++;
-          if (isNCR && rows[i][16]) vendorSet.add(rows[i][16]);
+          if (isNCR && r[16]) vendorSet.add(r[16]);
         }
       }
       return { total, beml, kmrcl, ncr, jn, open, closed, metro, letters, vendors: vendorSet.size };
@@ -511,7 +517,8 @@
         </div>
         <div class="filter-bar">
           <select id="letterOrgFilter" onchange="filterLetters()"><option value="">All Organizations</option><option value="BEML Letters">BEML</option><option value="KMRCL Letters">KMRCL</option><option value="Metro Rail Letters">Metro Rail</option></select>
-          <select id="letterStatusFilter" onchange="filterLetters()"><option value="">All Status</option><option value="Open">Open</option><option value="Closed">Closed</option></select>
+          <select id="letterDepotFilter" onchange="filterLetters()"><option value="">All Depots</option><option value="KMRCL">KMRCL</option><option value="BMRCL">BMRCL</option><option value="DMCRL">DMCRL</option><option value="MMRCL">MMRCL</option><option value="CMRCL">CMRCL</option></select>
+          <select id="letterStatusFilter" onchange="filterLetters()"><option value="">All Status</option><option value="Open">Open</option><option value="Closed">Closed</option><option value="Draft">Draft</option></select>
           <input type="text" id="letterSearch" placeholder="Search..." onkeyup="filterLetters()">
         </div>
         <div class="card"><div class="card-body" style="padding:0">
@@ -522,6 +529,7 @@
 
     function filterLetters() {
       const org = document.getElementById('letterOrgFilter').value;
+      const depot = document.getElementById('letterDepotFilter').value;
       const status = document.getElementById('letterStatusFilter').value;
       const search = document.getElementById('letterSearch').value.toLowerCase();
       const allLetters = [];
@@ -530,7 +538,8 @@
       });
       let filtered = allLetters;
       if (org) filtered = filtered.filter(l => l.sheet === org);
-      if (status) filtered = filtered.filter(l => (l.row[l.row.length-1] || '').toLowerCase() === status.toLowerCase());
+      if (depot) filtered = filtered.filter(l => (l.row[19] || '').toLowerCase() === depot.toLowerCase());
+      if (status) filtered = filtered.filter(l => (l.row[14] || '').toLowerCase() === status.toLowerCase());
       if (search) filtered = filtered.filter(l => l.row.some(c => (c||'').toLowerCase().includes(search)));
       renderLettersTable(filtered);
     }
@@ -1667,6 +1676,10 @@
             </div>
             <div class="form-row">
               <div class="form-group"><label>Project</label><input id="letter_project" placeholder="e.g. KMRCL RS(3) Project" onchange="updateLetterPreview()"></div>
+              <div class="form-group"><label>Depot</label><select id="letter_depot"><option value="">Select Depot</option><option value="KMRCL">KMRCL</option><option value="BMRCL">BMRCL</option><option value="DMCRL">DMCRL</option><option value="MMRCL">MMRCL</option><option value="CMRCL">CMRCL</option></select></div>
+            </div>
+            <div class="form-row">
+              <div class="form-group"><label>Priority</label><select id="letter_priority"><option value="normal">Normal</option><option value="urgent">Urgent</option><option value="immediate">Immediate</option></select></div>
               <div class="form-group"><label>Cc</label><textarea id="letter_cc" rows="2" placeholder="CC recipients..." onchange="updateLetterPreview()"></textarea></div>
             </div>
             <div class="form-group"><label>Remarks</label><input id="letter_remarks" onchange="updateLetterPreview()"></div>
@@ -1714,7 +1727,9 @@
         cc: document.getElementById('letter_cc')?.value || '',
         remarks: document.getElementById('letter_remarks')?.value || '',
         letterType: 'General', status: 'Open',
-        organization: document.getElementById('letter_org')?.value || 'BEML'
+        organization: document.getElementById('letter_org')?.value || 'BEML',
+        depot: document.getElementById('letter_depot')?.value || '',
+        priority: document.getElementById('letter_priority')?.value || 'normal'
       };
     }
 
@@ -2289,19 +2304,27 @@
     function renderReplyLetter(el) {
       el.innerHTML = `
         <div class="page-header">
-          <div><h2>AI Reply Letter Generator</h2><p>Generate BEML reply against incoming KMRCL/MR/OEM letters</p></div>
+          <div><h2>Reply Letter Generator</h2><p>Generate BEML/KMRCL reply against incoming letters with reference linking</p></div>
           <button class="btn btn-secondary" onclick="navigate('letters')">Back</button>
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;height:calc(100vh - 180px)">
           <div class="card" style="overflow-y:auto;padding:20px">
             <h3 style="margin-bottom:16px;font-size:1rem">Incoming Letter Details</h3>
-            <div class="form-group"><label>Reply Organization</label><select id="reply_org"><option value="BEML">BEML (Default)</option></select></div>
-            <div class="form-group"><label>Original Reference No.</label><input id="reply_ref" placeholder="e.g. KMRCL/RS3R/T&C/0456/2025"></div>
+            <div class="form-row">
+              <div class="form-group"><label>Reply Organization</label><select id="reply_org"><option value="BEML">BEML</option><option value="KMRCL">KMRCL</option><option value="Metro Rail">Metro Rail</option></select></div>
+              <div class="form-group"><label>Reply Type</label><select id="replyType"><option value="response">Response</option><option value="clarification">Clarification</option><option value="action_taken">Action Taken</option><option value="technical">Technical Reply</option></select></div>
+            </div>
+            <div class="form-row">
+              <div class="form-group"><label>Depot</label><select id="reply_depot"><option value="">Select Depot</option><option value="KMRCL">KMRCL</option><option value="BMRCL">BMRCL</option><option value="DMCRL">DMCRL</option><option value="MMRCL">MMRCL</option><option value="CMRCL">CMRCL</option></select></div>
+              <div class="form-group"><label>Priority</label><select id="reply_priority"><option value="normal">Normal</option><option value="urgent">Urgent</option><option value="immediate">Immediate</option></select></div>
+            </div>
+            <div class="form-group"><label>Original Reference No. *</label><input id="reply_ref" placeholder="e.g. KMRCL/RS3R/T&C/0456/2025"></div>
             <div class="form-group"><label>Original Date</label><input id="reply_date" placeholder="e.g. 30 Dec 2025"></div>
-            <div class="form-group"><label>From (Sender)</label><input id="reply_from" placeholder="e.g. The Chief Project Manager, KMRCL"></div>
-            <div class="form-group"><label>Subject</label><input id="reply_subject" placeholder="Original letter subject"></div>
-            <div class="form-group"><label>Original Letter Content / Key Points *</label><textarea id="reply_content" rows="8" placeholder="Paste the original letter content or key points that need response..."></textarea></div>
-            <div class="form-group"><label>Custom Instructions</label><textarea id="reply_instructions" rows="3" placeholder="Any specific points to address in the reply..."></textarea></div>
+            <div class="form-group"><label>From (Sender) *</label><input id="reply_from" placeholder="e.g. The Chief Project Manager, KMRCL"></div>
+            <div class="form-group"><label>Subject *</label><input id="reply_subject" placeholder="Original letter subject"></div>
+            <div class="form-group"><label>Technical Details</label><input id="reply_techDetails" placeholder="e.g. Train No. TC-01, Car No. C3, LHB Coach"></div>
+            <div class="form-group"><label>Original Letter Content / Key Points *</label><textarea id="reply_content" rows="6" placeholder="Paste the original letter content or key points that need response..."></textarea></div>
+            <div class="form-group"><label>Custom Instructions</label><textarea id="reply_instructions" rows="2" placeholder="Any specific points to address in the reply..."></textarea></div>
             <div style="display:flex;gap:8px;margin-top:16px">
               <button class="btn btn-primary" onclick="generateReplyLetter()">🤖 Generate Reply</button>
               <button class="btn btn-success" onclick="useReplyAsDraft()">📝 Use as Draft Letter</button>
@@ -2309,33 +2332,44 @@
           </div>
           <div class="card" style="overflow-y:auto;padding:20px">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-              <h3 style="font-size:1rem;margin:0">Generated BEML Reply</h3>
-              <button class="btn btn-secondary btn-sm" onclick="improveReply()">✨ Improve</button>
+              <h3 style="font-size:1rem;margin:0">Generated Reply</h3>
+              <div style="display:flex;gap:6px">
+                <button class="btn btn-secondary btn-sm" onclick="improveReply()">✨ Improve</button>
+                <button class="btn btn-success btn-sm" onclick="saveReplyAsLetter()">💾 Save as Letter</button>
+              </div>
             </div>
-            <div id="replyResult" style="white-space:pre-wrap;font-size:.85rem;line-height:1.6;min-height:200px;padding:16px;background:var(--bg);border-radius:8px">AI will generate a professional BEML reply letter here...</div>
+            <div id="replyResult" style="white-space:pre-wrap;font-size:.85rem;line-height:1.6;min-height:200px;padding:16px;background:var(--bg);border-radius:8px">AI will generate a professional reply letter here...</div>
+            <div id="replyPreview" style="margin-top:16px"></div>
           </div>
         </div>`;
     }
 
     async function generateReplyLetter() {
       const content = document.getElementById('reply_content').value;
+      const ref = document.getElementById('reply_ref').value;
       if (!content) return showToast('Enter original letter content', 'error');
-      showToast('Generating BEML reply...', 'info');
+      if (!ref) return showToast('Enter original reference number', 'error');
+      showToast('Generating reply...', 'info');
       try {
         const res = await authFetch('/api/ai/generate-reply', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             letterContent: content, org: document.getElementById('reply_org').value,
-            originalRef: document.getElementById('reply_ref').value,
+            replyType: document.getElementById('replyType').value,
+            depot: document.getElementById('reply_depot').value,
+            priority: document.getElementById('reply_priority').value,
+            originalRef: ref,
+            originalDate: document.getElementById('reply_date').value,
             originalSubject: document.getElementById('reply_subject').value,
             originalFrom: document.getElementById('reply_from').value,
+            techDetails: document.getElementById('reply_techDetails').value,
             customInstructions: document.getElementById('reply_instructions').value
           })
         });
         const r = await res.json();
         if (r.success) {
           document.getElementById('replyResult').textContent = r.content;
-          const src = r.source === 'template' ? '📋 Template' : '🤖 AI';
+          const src = r.source === 'template' ? 'Template' : 'AI';
           showToast(`Reply generated via ${src}`, 'success');
         }
         else showToast('AI error: ' + (r.error || ''), 'error');
@@ -2349,11 +2383,43 @@
       try {
         const res = await authFetch('/api/ai/improve-content', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ content, type: 'letter', instructions: 'Make it a more complete BEML reply with proper references, technical commitments, and formal closing' })
+          body: JSON.stringify({ content, type: 'letter', instructions: 'Make it a more complete formal reply with proper references, technical commitments, and formal closing' })
         });
         const r = await res.json();
         if (r.success) { document.getElementById('replyResult').textContent = r.content; showToast('Improved!', 'success'); }
         else showToast('Error: ' + (r.error || ''), 'error');
+      } catch (e) { showToast('Error: ' + e.message, 'error'); }
+    }
+
+    async function saveReplyAsLetter() {
+      const content = document.getElementById('replyResult').textContent;
+      if (!content || content.startsWith('AI will generate')) return showToast('Generate reply first', 'error');
+      const ref = document.getElementById('reply_ref').value;
+      const org = document.getElementById('reply_org').value;
+      showToast('Saving reply as letter...', 'info');
+      try {
+        const res = await authFetch('/api/save-reply', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            organization: org, refNumber: ref,
+            date: document.getElementById('reply_date').value || new Date().toISOString().split('T')[0],
+            to: document.getElementById('reply_from').value,
+            subject: document.getElementById('reply_subject').value,
+            letterContent: content,
+            allReferences: 'Ref: ' + ref,
+            depot: document.getElementById('reply_depot').value,
+            priority: document.getElementById('reply_priority').value,
+            replyType: document.getElementById('replyType').value,
+            techDetails: document.getElementById('reply_techDetails').value,
+            status: 'Open'
+          })
+        });
+        const r = await res.json();
+        if (r.success) {
+          showToast('Reply saved as letter!', 'success');
+          loadAllData();
+          navigate('letters');
+        } else showToast('Save failed: ' + (r.error || ''), 'error');
       } catch (e) { showToast('Error: ' + e.message, 'error'); }
     }
 
@@ -2365,9 +2431,11 @@
         const el = document.getElementById('letter_letterContent');
         const subjEl = document.getElementById('letter_subject');
         const refEl = document.getElementById('letter_allReferences');
+        const orgEl = document.getElementById('letter_organization');
         if (el) { el.value = content; }
         if (subjEl) { subjEl.value = document.getElementById('reply_subject')?.value || ''; }
         if (refEl) { refEl.value = 'Ref: ' + (document.getElementById('reply_ref')?.value || ''); }
+        if (orgEl) { orgEl.value = document.getElementById('reply_org')?.value || 'BEML'; }
         updateLetterPreview();
       }, 500);
     }
