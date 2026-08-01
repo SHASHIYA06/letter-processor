@@ -4,7 +4,8 @@
   "builds": [
     {
       "src": "server.js",
-      "use": "@vercel/node"
+      "use": "@vercel/node",
+      "config": { "includeFiles": ["assets/**", "ncr-parser.js", "pdf-generator.js"] }
     },
     {
       "src": "public/**",
@@ -18,14 +19,6 @@
     },
     {
       "src": "/uploads/(.*)",
-      "dest": "server.js"
-    },
-    {
-      "src": "/auth/(.*)",
-      "dest": "server.js"
-    },
-    {
-      "src": "/assets/(.*)",
       "dest": "server.js"
     },
     {

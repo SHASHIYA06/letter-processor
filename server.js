@@ -44,8 +44,8 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // JWT Configuration
 const JWT_SECRET = process.env.JWT_SECRET || 'beml-docvault-secret-key-2024';
-const ADMIN_USERNAME = 'admin';
-const ADMIN_PASSWORD = '9799494321';
+const ADMIN_USERNAME = process.env.ADMIN_USERNAME || 'admin';
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || '9799494321';
 
 const isVercelStorage = !!process.env.VERCEL;
 
@@ -1083,6 +1083,18 @@ app.post('/api/letter/generate-docx', authenticateToken, async (req, res) => {
 app.post('/api/auto-save', authenticateToken, async (req, res) => {
   try {
     const { docType, data, rowIndex, organization } = req.body;
+    
+    // Skip auto-save if data is empty/meaningless
+    if (docType === 'ncr' && (!data.ncrNo || data.ncrNo.trim() === '')) {
+      return res.json({ success: true, skipped: true });
+    }
+    if (docType === 'letter' && (!data.refNumber || data.refNumber.trim() === '')) {
+      return res.json({ success: true, skipped: true });
+    }
+    if (docType === 'joint_note' && (!data.jointNoteNo || data.jointNoteNo.trim() === '')) {
+      return res.json({ success: true, skipped: true });
+    }
+    
     let sheetName;
     if (docType === 'ncr') {
       sheetName = 'NCR Records';
@@ -1925,7 +1937,7 @@ app.put('/api/update', authenticateToken, async (req, res) => {
       return res.status(400).json({ success: false, error: `Field '${field}' not found` });
     }
 
-    const colLetter = String.fromCharCode(65 + colIndex);
+    const colLetter = columnToLetter(colIndex + 1);
     const range = `${sheetName}!${colLetter}${rowIndex + 1}`;
 
     await sheets.spreadsheets.values.update({

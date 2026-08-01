@@ -106,7 +106,7 @@
     .filter-bar{display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap}
     .filter-bar select,.filter-bar input{padding:8px 12px;background:var(--card);border:1px solid var(--border);border-radius:var(--radius-sm);font-size:.8rem}
     @media(max-width:1024px){.sidebar{width:60px}.sidebar .menu-text,.sidebar-logo p,.menu-section{display:none}.sidebar-logo h1{font-size:1rem}.menu-item{padding:12px;justify-content:center}.main{margin-left:60px}}
-    @media(max-width:768px){.sidebar{display:none}.main{margin-left:0}.form-row{grid-template-columns:1fr}.grid-2,.grid-3{grid-template-columns:1fr}.stats-grid{grid-template-columns:repeat(2,1fr)}}
+    @media(max-width:768px){.sidebar{display:none}.main{margin-left:0}.form-row{grid-template-columns:1fr}.grid-2,.grid-3{grid-template-columns:1fr}.stats-grid{grid-template-columns:repeat(2,1fr)}.dash-stats-4{grid-template-columns:repeat(2,1fr)!important}.dash-stats-3{grid-template-columns:1fr!important}.dash-grid-2{grid-template-columns:1fr!important}}
     
     /* NCR Form Styles */
     .ncr-section{margin-bottom:20px;border:1px solid var(--border);border-radius:var(--radius);overflow:hidden}
@@ -174,25 +174,25 @@
     </div>
     <nav class="sidebar-menu">
       <div class="menu-section">Main</div>
-      <div class="menu-item active" onclick="navigate('dashboard')"><span class="icon">📊</span><span class="menu-text">Dashboard</span></div>
-      <div class="menu-item" onclick="navigate('letters')"><span class="icon">📄</span><span class="menu-text">Letters</span></div>
-      <div class="menu-item" onclick="navigate('ncr')"><span class="icon">📋</span><span class="menu-text">NCR Records</span></div>
-      <div class="menu-item" onclick="navigate('joint')"><span class="icon">📝</span><span class="menu-text">Joint Notes</span></div>
-      <div class="menu-section">Create</div>
-      <div class="menu-item" onclick="navigate('create-letter')"><span class="icon">✉️</span><span class="menu-text">Create Letter</span></div>
-      <div class="menu-item" onclick="navigate('create-ncr')"><span class="icon">📋</span><span class="menu-text">Create NCR</span></div>
-      <div class="menu-item" onclick="navigate('create-joint')"><span class="icon">📝</span><span class="menu-text">Create Joint Note</span></div>
-      <div class="menu-item" onclick="navigate('reply-letter')"><span class="icon">↩️</span><span class="menu-text">AI Reply Letter</span></div>
-      <div class="menu-section">AI Tools</div>
-      <div class="menu-item" onclick="navigate('ai-letter')"><span class="icon">🤖</span><span class="menu-text">AI Letter Writer</span></div>
-      <div class="menu-item" onclick="navigate('ai-ncr')"><span class="icon">🤖</span><span class="menu-text">AI NCR Writer</span></div>
-      <div class="menu-section">Tools</div>
-      <div class="menu-item" onclick="navigate('upload')"><span class="icon">📤</span><span class="menu-text">Upload</span></div>
-      <div class="menu-item" onclick="navigate('bulk')"><span class="icon">📦</span><span class="menu-text">Bulk Import</span></div>
-      <div class="menu-item" onclick="navigate('search')"><span class="icon">🔍</span><span class="menu-text">Search</span></div>
-      <div class="menu-section">Data</div>
-      <div class="menu-item" onclick="navigate('drive')"><span class="icon">☁️</span><span class="menu-text">Google Drive</span></div>
-      <div class="menu-item" onclick="navigate('export')"><span class="icon">📥</span><span class="menu-text">Export</span></div>
+      <div class="menu-item active" onclick="navigate('dashboard',event)"><span class="icon">📊</span><span class="menu-text">Dashboard</span></div>
+      <div class="menu-item" onclick="navigate('letters',event)"><span class="icon">📄</span><span class="menu-text">Letters</span></div>
+      <div class="menu-item" onclick="navigate('ncr',event)"><span class="icon">📋</span><span class="menu-text">NCR Records</span></div>
+      <div class="menu-item" onclick="navigate('joint',event)"><span class="icon">📝</span><span class="menu-text">Joint Notes</span></div>
+
+      <div class="menu-item" onclick="navigate('create-letter',event)"><span class="icon">✉️</span><span class="menu-text">Create Letter</span></div>
+      <div class="menu-item" onclick="navigate('create-ncr',event)"><span class="icon">📋</span><span class="menu-text">Create NCR</span></div>
+      <div class="menu-item" onclick="navigate('create-joint',event)"><span class="icon">📝</span><span class="menu-text">Create Joint Note</span></div>
+      <div class="menu-item" onclick="navigate('reply-letter',event)"><span class="icon">↩️</span><span class="menu-text">AI Reply Letter</span></div>
+
+      <div class="menu-item" onclick="navigate('ai-letter',event)"><span class="icon">🤖</span><span class="menu-text">AI Letter Writer</span></div>
+      <div class="menu-item" onclick="navigate('ai-ncr',event)"><span class="icon">🤖</span><span class="menu-text">AI NCR Writer</span></div>
+
+      <div class="menu-item" onclick="navigate('upload',event)"><span class="icon">📤</span><span class="menu-text">Upload</span></div>
+      <div class="menu-item" onclick="navigate('bulk',event)"><span class="icon">📦</span><span class="menu-text">Bulk Import</span></div>
+      <div class="menu-item" onclick="navigate('search',event)"><span class="icon">🔍</span><span class="menu-text">Search</span></div>
+
+      <div class="menu-item" onclick="navigate('drive',event)"><span class="icon">☁️</span><span class="menu-text">Google Drive</span></div>
+      <div class="menu-item" onclick="navigate('export',event)"><span class="icon">📥</span><span class="menu-text">Export</span></div>
     </nav>
   </aside>
 
@@ -309,12 +309,12 @@
     let currentUploadFile = null;
 
     // === NAVIGATION ===
-    function navigate(page) {
+    function navigate(page, evt) {
       currentPage = page;
       if (ncrAutoSaveTimer) { clearInterval(ncrAutoSaveTimer); ncrAutoSaveTimer = null; }
       if (letterAutoSaveTimer) { clearInterval(letterAutoSaveTimer); letterAutoSaveTimer = null; }
       document.querySelectorAll('.menu-item').forEach(m => m.classList.remove('active'));
-      if (typeof event !== 'undefined' && event.currentTarget) event.currentTarget.classList.add('active');
+      if (evt && evt.currentTarget) evt.currentTarget.classList.add('active');
       renderPage(page);
     }
 
@@ -359,7 +359,7 @@
               </div>
             </div>
           </div>
-          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:20px">
+          <div class="dash-stats-4" style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:20px">
             <div style="background:linear-gradient(135deg,#3B82F6,#1D4ED8);border-radius:12px;padding:18px;color:white;box-shadow:0 4px 15px rgba(37,99,235,.3)">
               <div style="display:flex;justify-content:space-between;align-items:start">
                 <div><div style="font-size:.68rem;opacity:.85;text-transform:uppercase;letter-spacing:.5px">Total Documents</div><div style="font-size:2rem;font-weight:800;margin-top:4px">${stats.total}</div></div>
@@ -389,7 +389,7 @@
               <div style="font-size:.68rem;opacity:.7;margin-top:6px">All joint inspections</div>
             </div>
           </div>
-          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:20px">
+          <div class="dash-stats-3" style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:20px">
             <div style="background:linear-gradient(135deg,#8B5CF6,#6D28D9);border-radius:12px;padding:18px;color:white;box-shadow:0 4px 15px rgba(139,92,246,.3)">
               <div style="display:flex;justify-content:space-between;align-items:start">
                 <div><div style="font-size:.68rem;opacity:.85;text-transform:uppercase;letter-spacing:.5px">Open Items</div><div style="font-size:2rem;font-weight:800;margin-top:4px">${stats.open}</div></div>
@@ -412,7 +412,7 @@
               <div style="font-size:.68rem;opacity:.7;margin-top:6px">Unique vendors (NCR)</div>
             </div>
           </div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px">
+          <div class="dash-grid-2" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px">
             <div class="card">
               <div class="card-header"><h3>Quick Actions</h3></div>
               <div class="card-body">
@@ -1080,8 +1080,26 @@
         </div>`;
     }
 
-    function exportCSV(sheet) { window.open(`/api/export/csv?sheet=${encodeURIComponent(sheet)}`, '_blank'); showToast('Download started', 'success'); }
-    function exportJSON(sheet) { window.open(`/api/export/json?sheet=${encodeURIComponent(sheet || 'BEML Letters')}`, '_blank'); showToast('Download started', 'success'); }
+    async function exportCSV(sheet) {
+      try {
+        const res = await authFetch(`/api/export/csv?sheet=${encodeURIComponent(sheet)}`);
+        if (!res.ok) { showToast('Export failed', 'error'); return; }
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a'); a.href = url; a.download = `${sheet}.csv`; document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+        showToast('CSV downloaded', 'success');
+      } catch (e) { showToast('Export error: ' + e.message, 'error'); }
+    }
+    async function exportJSON(sheet) {
+      try {
+        const res = await authFetch(`/api/export/json?sheet=${encodeURIComponent(sheet || 'BEML Letters')}`);
+        if (!res.ok) { showToast('Export failed', 'error'); return; }
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a'); a.href = url; a.download = `${sheet}.json`; document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+        showToast('JSON downloaded', 'success');
+      } catch (e) { showToast('Export error: ' + e.message, 'error'); }
+    }
 
     // === CREATE NCR ===
     let ncrAutoSaveTimer = null;
@@ -1298,7 +1316,7 @@
               <!-- Section 6: Root Cause & Investigation -->
               <div class="ncr-section">
                 <div class="ncr-section-header">6. Root Cause & Investigation</div>
-                <div class="form-group"><label>Root Cause</label>${createDropdown('ncr_rootCause', ncrMasterData.rootCauses || [], '', 'Select Root Cause')}</div>
+                <div class="form-group"><label>Root Cause</label><input id="ncr_rootCause" placeholder="Describe the root cause..." onchange="updateNCRPreview()"></div>
                 <div class="form-group"><label>Cause of Non-Conformity</label><textarea id="ncr_cause" rows="3" placeholder="Describe the root cause..." onchange="updateNCRPreview()"></textarea></div>
                 <div class="form-group"><label>Investigation Report Date</label><input type="date" id="ncr_investigationDate" onchange="updateNCRPreview()"></div>
               </div>
