@@ -205,6 +205,8 @@
         <input type="text" id="globalSearch" placeholder="Search documents, NCR numbers, letters..." onkeyup="globalSearchFn()">
       </div>
       <div class="topbar-actions">
+        <select id="depotSelector" onchange="changeDepot(this.value)" style="padding:8px 12px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);font-size:.8rem;font-weight:600;color:var(--primary);display:none">
+        </select>
         <button class="btn btn-primary" onclick="showUploadModal()">📤 Upload</button>
         <button class="btn btn-secondary" onclick="loadAllData()">🔄 Refresh</button>
         <div class="user-badge" id="userBadge" style="display:none">
@@ -343,12 +345,12 @@
       const stats = getStats();
       el.innerHTML = `
         <div style="margin-bottom:24px">
-          <div style="display:flex;justify-content:space-between;align-items:center">
+          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px">
             <div>
               <h2 style="font-size:1.6rem;font-weight:800;background:linear-gradient(135deg,#1E293B,#334155);-webkit-background-clip:text;-webkit-text-fill-color:transparent">Dashboard</h2>
               <p style="color:var(--text3);font-size:.85rem;margin-top:4px">BEML Document Management System - Complete Overview</p>
             </div>
-            <div style="display:flex;gap:10px">
+            <div style="display:flex;gap:10px;flex-wrap:wrap">
               <button class="btn btn-primary" onclick="navigate('create-letter')" style="box-shadow:0 4px 12px rgba(37,99,235,.3)">✉️ New Letter</button>
               <button class="btn btn-primary" onclick="navigate('create-ncr')" style="box-shadow:0 4px 12px rgba(37,99,235,.3)">📋 New NCR</button>
               <button class="btn btn-primary" onclick="navigate('create-joint')" style="box-shadow:0 4px 12px rgba(37,99,235,.3)">📝 New Joint Note</button>
@@ -356,8 +358,8 @@
             </div>
           </div>
         </div>
-        <!-- Main Stats -->
-        <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:16px;margin-bottom:20px">
+        <!-- Main Stats Row 1 -->
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;margin-bottom:16px">
           <div style="background:linear-gradient(135deg,#3B82F6,#2563EB);border-radius:14px;padding:20px;color:white;box-shadow:0 4px 15px rgba(37,99,235,.3)">
             <div style="display:flex;justify-content:space-between;align-items:start">
               <div><div style="font-size:.7rem;opacity:.85;text-transform:uppercase;letter-spacing:.5px">Total Documents</div><div style="font-size:2rem;font-weight:800;margin-top:4px">${stats.total}</div></div>
@@ -367,17 +369,17 @@
           </div>
           <div style="background:linear-gradient(135deg,#F59E0B,#D97706);border-radius:14px;padding:20px;color:white;box-shadow:0 4px 15px rgba(245,158,11,.3)">
             <div style="display:flex;justify-content:space-between;align-items:start">
-              <div><div style="font-size:.7rem;opacity:.85;text-transform:uppercase;letter-spacing:.5px">BEML Letters</div><div style="font-size:2rem;font-weight:800;margin-top:4px">${stats.beml}</div></div>
+              <div><div style="font-size:.7rem;opacity:.85;text-transform:uppercase;letter-spacing:.5px">Letters</div><div style="font-size:2rem;font-weight:800;margin-top:4px">${stats.letters}</div></div>
               <div style="width:44px;height:44px;background:rgba(255,255,255,.2);border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:1.3rem">✉️</div>
             </div>
-            <div style="font-size:.7rem;opacity:.75;margin-top:8px">KMRCL: ${stats.kmrcl} | Metro: ${stats.metro || 0}</div>
+            <div style="font-size:.7rem;opacity:.75;margin-top:8px">BEML: ${stats.beml} | KMRCL: ${stats.kmrcl} | Metro: ${stats.metro}</div>
           </div>
           <div style="background:linear-gradient(135deg,#EF4444,#DC2626);border-radius:14px;padding:20px;color:white;box-shadow:0 4px 15px rgba(239,68,68,.3)">
             <div style="display:flex;justify-content:space-between;align-items:start">
               <div><div style="font-size:.7rem;opacity:.85;text-transform:uppercase;letter-spacing:.5px">NCR Records</div><div style="font-size:2rem;font-weight:800;margin-top:4px">${stats.ncr}</div></div>
               <div style="width:44px;height:44px;background:rgba(255,255,255,.2);border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:1.3rem">📋</div>
             </div>
-            <div style="font-size:.7rem;opacity:.75;margin-top:8px">Critical: ${stats.critical || 0} | Major: ${stats.major || 0}</div>
+            <div style="font-size:.7rem;opacity:.75;margin-top:8px">Non-Conformance Reports</div>
           </div>
           <div style="background:linear-gradient(135deg,#10B981,#059669);border-radius:14px;padding:20px;color:white;box-shadow:0 4px 15px rgba(16,185,129,.3)">
             <div style="display:flex;justify-content:space-between;align-items:start">
@@ -386,12 +388,29 @@
             </div>
             <div style="font-size:.7rem;opacity:.75;margin-top:8px">All joint inspections</div>
           </div>
+        </div>
+        <!-- Stats Row 2 -->
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;margin-bottom:24px">
           <div style="background:linear-gradient(135deg,#8B5CF6,#7C3AED);border-radius:14px;padding:20px;color:white;box-shadow:0 4px 15px rgba(139,92,246,.3)">
             <div style="display:flex;justify-content:space-between;align-items:start">
               <div><div style="font-size:.7rem;opacity:.85;text-transform:uppercase;letter-spacing:.5px">Open Items</div><div style="font-size:2rem;font-weight:800;margin-top:4px">${stats.open}</div></div>
               <div style="width:44px;height:44px;background:rgba(255,255,255,.2);border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:1.3rem">⏳</div>
             </div>
-            <div style="font-size:.7rem;opacity:.75;margin-top:8px">Closed: ${stats.total - stats.open}</div>
+            <div style="font-size:.7rem;opacity:.75;margin-top:8px">Pending action items</div>
+          </div>
+          <div style="background:linear-gradient(135deg,#6366F1,#4F46E5);border-radius:14px;padding:20px;color:white;box-shadow:0 4px 15px rgba(99,102,241,.3)">
+            <div style="display:flex;justify-content:space-between;align-items:start">
+              <div><div style="font-size:.7rem;opacity:.85;text-transform:uppercase;letter-spacing:.5px">Closed Items</div><div style="font-size:2rem;font-weight:800;margin-top:4px">${stats.closed}</div></div>
+              <div style="width:44px;height:44px;background:rgba(255,255,255,.2);border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:1.3rem">✅</div>
+            </div>
+            <div style="font-size:.7rem;opacity:.75;margin-top:8px">Completed items</div>
+          </div>
+          <div style="background:linear-gradient(135deg,#EC4899,#DB2777);border-radius:14px;padding:20px;color:white;box-shadow:0 4px 15px rgba(236,72,153,.3)">
+            <div style="display:flex;justify-content:space-between;align-items:start">
+              <div><div style="font-size:.7rem;opacity:.85;text-transform:uppercase;letter-spacing:.5px">Vendors</div><div style="font-size:2rem;font-weight:800;margin-top:4px">${stats.vendors}</div></div>
+              <div style="width:44px;height:44px;background:rgba(255,255,255,.2);border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:1.3rem">🏭</div>
+            </div>
+            <div style="font-size:.7rem;opacity:.75;margin-top:8px">Unique vendors (NCR)</div>
           </div>
         </div>
         <!-- Quick Actions + Recent -->
@@ -420,13 +439,14 @@
     }
 
     function getStats() {
-      let total = 0, beml = 0, kmrcl = 0, ncr = 0, jn = 0, open = 0, metro = 0, critical = 0, major = 0;
+      let total = 0, beml = 0, kmrcl = 0, ncr = 0, jn = 0, open = 0, closed = 0, metro = 0, letters = 0;
+      const vendorSet = new Set();
       for (const [key, rows] of Object.entries(allData)) {
         const count = Math.max(0, rows.length - 1);
         total += count;
-        if (key.includes('BEML')) beml += count;
-        else if (key.includes('KMRCL')) kmrcl += count;
-        else if (key.includes('Metro')) metro += count;
+        if (key.includes('BEML')) { beml += count; letters += count; }
+        else if (key.includes('KMRCL')) { kmrcl += count; letters += count; }
+        else if (key.includes('Metro')) { metro += count; letters += count; }
         else if (key.includes('NCR')) ncr += count;
         else if (key.includes('Joint')) jn += count;
         for (let i = 1; i < rows.length; i++) {
@@ -434,14 +454,11 @@
           const statusIdx = isNCR ? 17 : rows[i].length - 1;
           const status = (rows[i][statusIdx] || '').toLowerCase();
           if (status !== 'closed' && status !== '' && status !== 'n/a') open++;
-          if (isNCR) {
-            const sev = (rows[i][36] || '').toLowerCase();
-            if (sev === 'critical') critical++;
-            else if (sev === 'major') major++;
-          }
+          else if (status === 'closed') closed++;
+          if (isNCR && rows[i][16]) vendorSet.add(rows[i][16]);
         }
       }
-      return { total, beml, kmrcl, ncr, jn, open, metro, critical, major };
+      return { total, beml, kmrcl, ncr, jn, open, closed, metro, letters, vendors: vendorSet.size };
     }
 
     function renderRecentDocs() {
@@ -1324,7 +1341,7 @@
                 </div>
                 <div class="form-row">
                   <div class="form-group"><label>Assigned To</label><input id="ncr_assignedTo" placeholder="Person responsible for action" onchange="updateNCRPreview()"></div>
-                  <div class="form-group"><label>Responsible Party</label>${createDropdown('ncr_responsibility', ncrMasterData.oem || [], '', 'Select Responsible')}</div>
+                  <div class="form-group"><label>Responsible Party</label>${createVendorDropdown('ncr_responsibility', '')}</div>
                 </div>
                 <div class="form-row">
                   <div class="form-group"><label>Reviewed & Approved By</label><input id="ncr_reviewedBy" onchange="updateNCRPreview()"></div>
@@ -2106,6 +2123,7 @@
         const res = await authFetch('/api/records');
         const data = await res.json();
         if (data.success) { allData = data.data; renderPage(currentPage); }
+        loadVendorList();
       } catch (e) { console.error('Load error:', e); }
     }
 
@@ -2415,6 +2433,9 @@
       document.querySelector('.main').style.display = 'flex';
       document.getElementById('userBadge').style.display = 'flex';
       document.getElementById('logoutBtn').style.display = 'inline-flex';
+      const savedDepots = localStorage.getItem('docvault_depots');
+      if (savedDepots) depotList = JSON.parse(savedDepots);
+      populateDepotSelector(depotList);
     }
     
     async function handleLogin(e) {
@@ -2439,6 +2460,10 @@
         if (data.success) {
           authToken = data.token;
           localStorage.setItem('docvault_token', authToken);
+          if (data.depots) {
+            depotList = data.depots;
+            localStorage.setItem('docvault_depots', JSON.stringify(data.depots));
+          }
           hideLogin();
           loadAllData();
           showToast('Login successful!', 'success');
@@ -2475,6 +2500,75 @@
         options.headers['Authorization'] = `Bearer ${authToken}`;
       }
       return fetch(url, options);
+    }
+
+    // === DEPOT MANAGEMENT ===
+    let currentDepot = localStorage.getItem('docvault_depot') || 'KMRCL';
+    let depotList = [];
+
+    function populateDepotSelector(depots) {
+      depotList = depots || [];
+      const sel = document.getElementById('depotSelector');
+      if (!sel) return;
+      sel.innerHTML = '';
+      depotList.forEach(d => {
+        const opt = document.createElement('option');
+        opt.value = d; opt.textContent = d;
+        if (d === currentDepot) opt.selected = true;
+        sel.appendChild(opt);
+      });
+      sel.style.display = depotList.length > 0 ? 'inline-block' : 'none';
+    }
+
+    function changeDepot(depot) {
+      currentDepot = depot;
+      localStorage.setItem('docvault_depot', depot);
+      loadAllData();
+      showToast('Switched to depot: ' + depot, 'info');
+    }
+
+    // === VENDOR LIST ===
+    let vendorListCache = [];
+
+    async function loadVendorList() {
+      try {
+        const res = await authFetch('/api/vendor-list');
+        const data = await res.json();
+        if (data.success) vendorListCache = data.vendors || [];
+      } catch (e) { vendorListCache = []; }
+    }
+
+    function createVendorDropdown(id, value) {
+      const opts = vendorListCache.map(o => `<option value="${esc(o)}" ${o === value ? 'selected' : ''}>${esc(o)}</option>`).join('');
+      return `<select id="${id}" onchange="if(this.value==='__custom__'){handleCustomVendor('${id}')}else{updateNCRPreview()}" class="ncr-select">
+        <option value="">-- Select Vendor --</option>
+        ${opts}
+        <option value="__custom__">+ Add New Vendor...</option>
+      </select>`;
+    }
+
+    function handleCustomVendor(selectId) {
+      const select = document.getElementById(selectId);
+      if (select && select.value === '__custom__') {
+        const custom = prompt('Enter new vendor name:');
+        if (custom && custom.trim()) {
+          vendorListCache.push(custom.trim());
+          vendorListCache.sort();
+          select.innerHTML = '';
+          vendorListCache.forEach(o => {
+            const opt = document.createElement('option');
+            opt.value = o; opt.textContent = o;
+            if (o === custom.trim()) opt.selected = true;
+            select.appendChild(opt);
+          });
+          const addOpt = document.createElement('option');
+          addOpt.value = '__custom__'; addOpt.textContent = '+ Add New Vendor...';
+          select.appendChild(addOpt);
+          updateNCRPreview();
+        } else {
+          select.value = vendorListCache[0] || '';
+        }
+      }
     }
 
     // === INIT ===

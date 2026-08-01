@@ -211,6 +211,8 @@ async function initGoogleAuth() {
 const SPREADSHEET_ID = process.env.GOOGLE_SPREADSHEET_ID || '1qx5FAkOE959ng8eOGb_NC_DuF381x-NYRwKED0hgRIk';
 const DRIVE_FOLDER_ID = process.env.GOOGLE_DRIVE_FOLDER_ID || '1M3k66ROJSNVUe-TB5rcF4bJ0O6obBGRp';
 
+const DEPOTS = ['KMRCL', 'BMRCL', 'DMCRL', 'MMRCL', 'CMRCL'];
+
 // Sheet names for each organization
 const SHEET_NAMES = {
   'BEML': 'BEML Letters',
@@ -1290,7 +1292,7 @@ app.post('/api/login', (req, res) => {
     );
     
     console.log(`✅ Admin login successful: ${username}`);
-    res.json({ success: true, token, username: ADMIN_USERNAME });
+    res.json({ success: true, token, username: ADMIN_USERNAME, depots: DEPOTS });
   } else {
     console.log(`❌ Failed login attempt: ${username}`);
     res.status(401).json({ success: false, error: 'Invalid credentials' });
@@ -2016,6 +2018,22 @@ app.post('/api/master-data/:category', authenticateToken, async (req, res) => {
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
+});
+
+// ══════════════════════════════════════════════════════════════
+//  DEPOTS & VENDOR LIST
+// ══════════════════════════════════════════════════════════════
+app.get('/api/depots', (req, res) => {
+  res.json({ success: true, depots: DEPOTS });
+});
+
+app.get('/api/vendor-list', authenticateToken, async (req, res) => {
+  try {
+    if (!sheets) return res.json({ success: true, vendors: [] });
+    const result = await sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range: 'NCR Records!Q:Q' });
+    const vendors = [...new Set((result.data.values || []).slice(1).map(r => r[0]).filter(Boolean))].sort();
+    res.json({ success: true, vendors });
+  } catch (e) { res.json({ success: true, vendors: [] }); }
 });
 
 // ══════════════════════════════════════════════════════════════
