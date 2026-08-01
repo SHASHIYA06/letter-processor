@@ -25,10 +25,21 @@ function drawCheckbox(doc, x, y, checked) {
 }
 
 // ══════════════════════════════════════════════════════════════
-//  BEML LETTER HEADER - Official Format
+//  BEML LETTER HEADER - Official Format (uses letterhead image)
 // ══════════════════════════════════════════════════════════════
 function drawBEMLHeader(doc, W) {
+  const headerPath = path.join(__dirname, 'assets', 'beml-letterhead-header.png');
   const logoPath = path.join(__dirname, 'assets', 'beml-logo.jpg');
+  
+  // Try to use the official letterhead header image
+  if (fs.existsSync(headerPath)) {
+    try {
+      doc.image(headerPath, 0, 0, { width: W, fit: [W, 120] });
+      return 115; // Return Y position after the header image
+    } catch (e) {}
+  }
+  
+  // Fallback: Draw header manually
   let y = 15;
   if (fs.existsSync(logoPath)) {
     try { doc.image(logoPath, 15, y, { width: 70, height: 35, fit: 'contain' }); } catch (e) {}
@@ -50,15 +61,18 @@ function drawBEMLHeader(doc, W) {
 
 function drawBEMLFooter(doc, W, H) {
   const footerPath = path.join(__dirname, 'assets', 'beml-letterhead-footer.png');
+  
+  // Try to use the official letterhead footer image
   if (fs.existsSync(footerPath)) {
     try {
       doc.save();
-      doc.opacity(0.6);
-      doc.image(footerPath, 0, H - 100, { width: W });
+      doc.image(footerPath, 0, H - 85, { width: W, fit: [W, 85] });
       doc.restore();
       return;
     } catch (e) {}
   }
+  
+  // Fallback: Draw footer manually
   doc.save();
   doc.moveTo(40, H - 75).lineTo(W - 40, H - 75).lineWidth(0.5).stroke('#999');
   doc.font('Times-Roman').fontSize(6.5).fillColor('#555');
@@ -167,17 +181,33 @@ function generateNCRPdf(data, outputPath) {
     const W = A4_W, H = A4_H, L = 40, R = W - 40, CW = R - L;
     let y = 12;
 
-    // Header: Logo + Company
+    // Try to use official NCR header image
+    const ncrHeaderPath = path.join(__dirname, 'assets', 'ncr-header.png');
+    const headerPath = path.join(__dirname, 'assets', 'beml-letterhead-header.png');
     const logoPath = path.join(__dirname, 'assets', 'beml-logo.jpg');
-    if (fs.existsSync(logoPath)) {
-      try { doc.image(logoPath, 12, y, { width: 60, height: 30, fit: 'contain' }); } catch (e) {}
+    
+    if (fs.existsSync(ncrHeaderPath)) {
+      try {
+        doc.image(ncrHeaderPath, 0, 0, { width: W, fit: [W, 100] });
+        y = 105;
+      } catch (e) {}
+    } else if (fs.existsSync(headerPath)) {
+      try {
+        doc.image(headerPath, 0, 0, { width: W, fit: [W, 120] });
+        y = 115;
+      } catch (e) {}
+    } else {
+      // Fallback: Draw header manually
+      if (fs.existsSync(logoPath)) {
+        try { doc.image(logoPath, 12, y, { width: 60, height: 30, fit: 'contain' }); } catch (e) {}
+      }
+      doc.font('Times-Bold').fontSize(14).fillColor('#000').text('BEML LIMITED', 0, y + 2, { width: W, align: 'center' });
+      y += 18;
+      doc.font('Times-Roman').fontSize(7).fillColor('#333').text('A Government of India Enterprise | Ministry of Defence', 0, y, { width: W, align: 'center' });
+      y += 12;
+      doc.moveTo(L, y).lineTo(R, y).lineWidth(1).stroke('#000');
+      y += 8;
     }
-    doc.font('Times-Bold').fontSize(14).fillColor('#000').text('BEML LIMITED', 0, y + 2, { width: W, align: 'center' });
-    y += 18;
-    doc.font('Times-Roman').fontSize(7).fillColor('#333').text('A Government of India Enterprise | Ministry of Defence', 0, y, { width: W, align: 'center' });
-    y += 12;
-    doc.moveTo(L, y).lineTo(R, y).lineWidth(1).stroke('#000');
-    y += 8;
 
     // Title
     doc.font('Times-Bold').fontSize(13).fillColor('#000').text('NON-CONFORMITY REPORT', 0, y, { width: W, align: 'center' });
