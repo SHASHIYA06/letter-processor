@@ -30,7 +30,7 @@ if (!isVercel) {
 
 // Import NCR parser
 import { parseNCRContent } from './ncr-parser.js';
-import { generateNCRPdf, generateLetterPdf, generateNCRDocx, generateLetterDocx } from './pdf-generator.js';
+import { generateNCRPdf, generateLetterPdf, generateNCRDocx, generateLetterDocx, generateJointNotePdf, generateJointNoteDocx } from './pdf-generator.js';
 import jwt from 'jsonwebtoken';
 
 const __filename = fileURLToPath(import.meta.url);
