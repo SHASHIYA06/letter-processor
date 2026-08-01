@@ -446,123 +446,119 @@ export { generateNCRPdf, generateLetterPdf, generateNCRDocx, generateLetterDocx,
 // ══════════════════════════════════════════════════════════════
 //  JOINT NOTE PDF
 // ══════════════════════════════════════════════════════════════
-async function generateJointNotePdf(data) {
+async function generateJointNotePdf(data, outputPath) {
   return new Promise((resolve, reject) => {
-    const doc = new PDFDocument({ size: 'A4', margin: 50 });
-    const chunks = [];
-    doc.on('data', c => chunks.push(c));
-    doc.on('end', () => resolve(Buffer.concat(chunks)));
-    doc.on('error', reject);
-
-    const W = doc.page.width;
-    const L = 50, R = W - 50;
-
-    // Header
-    drawBEMLHeader(doc, W);
-    let y = 165;
+    const doc = new PDFDocument({ size: 'A4', margins: { top: 0, bottom: 0, left: 0, right: 0 } });
+    const stream = fs.createWriteStream(outputPath);
+    doc.pipe(stream);
+    const W = A4_W, H = A4_H, L = 55, R = W - 55, CW = R - L;
+    let y = drawBEMLHeader(doc, W);
+    drawBEMLFooter(doc, W, H);
 
     // Title
-    doc.fontSize(16).font('Helvetica-Bold').text('JOINT NOTE', L, y, { align: 'center', width: R - L });
+    doc.font('Times-Bold').fontSize(16).fillColor('#000').text('JOINT NOTE', L, y, { width: CW, align: 'center' });
     y = doc.y + 5;
     if (data.jointNoteNo) {
-      doc.fontSize(9).font('Helvetica').text(`No: ${data.jointNoteNo}`, L, y, { align: 'center', width: R - L });
+      doc.font('Times-Roman').fontSize(9).fillColor('#333').text(`No: ${data.jointNoteNo}`, L, y, { width: CW, align: 'center' });
       y = doc.y + 15;
     }
 
     // Separator
-    doc.moveTo(L, y).lineTo(R, y).lineWidth(1).stroke();
+    doc.moveTo(L, y).lineTo(R, y).lineWidth(1).stroke('#000');
     y += 12;
 
     // Date
     if (data.date) {
-      doc.fontSize(10).font('Helvetica-Bold').text(`Date: ${data.date}`, L, y);
+      doc.font('Times-Bold').fontSize(10).fillColor('#000').text(`Date: ${data.date}`, L, y, { width: CW });
       y = doc.y + 8;
     }
 
     // Parties
     if (data.parties) {
-      doc.font('Helvetica-Bold').text('Parties / Participants:', L, y);
+      doc.font('Times-Bold').fillColor('#000').text('Parties / Participants:', L, y, { width: CW });
       y = doc.y + 2;
-      doc.font('Helvetica').fontSize(10).text(data.parties, L + 5, y, { width: R - L - 10 });
+      doc.font('Times-Roman').fontSize(10).fillColor('#333').text(data.parties, L + 5, y, { width: CW - 10 });
       y = doc.y + 8;
     }
 
     // Subject
     if (data.subject) {
-      doc.font('Helvetica-Bold').text('Subject:', L, y);
+      doc.font('Times-Bold').fillColor('#000').text('Subject:', L, y, { width: CW });
       y = doc.y + 2;
-      doc.font('Helvetica').fontSize(10).text(data.subject, L + 5, y, { width: R - L - 10 });
+      doc.font('Times-Roman').fontSize(10).fillColor('#333').text(data.subject, L + 5, y, { width: CW - 10 });
       y = doc.y + 12;
     }
 
     // Description
     if (data.description) {
       y = checkPageBreak(doc, y, 60, L, R);
-      doc.font('Helvetica-Bold').text('Description:', L, y);
+      doc.font('Times-Bold').fillColor('#000').text('Description:', L, y, { width: CW });
       y = doc.y + 2;
-      doc.font('Helvetica').fontSize(10).text(data.description, L + 5, y, { width: R - L - 10 });
+      doc.font('Times-Roman').fontSize(10).fillColor('#333').text(data.description, L + 5, y, { width: CW - 10 });
       y = doc.y + 12;
     }
 
     // Items Discussed
     if (data.itemsDiscussed) {
       y = checkPageBreak(doc, y, 60, L, R);
-      doc.font('Helvetica-Bold').text('Items Discussed:', L, y);
+      doc.font('Times-Bold').fillColor('#000').text('Items Discussed:', L, y, { width: CW });
       y = doc.y + 2;
-      doc.font('Helvetica').fontSize(10).text(data.itemsDiscussed, L + 5, y, { width: R - L - 10 });
+      doc.font('Times-Roman').fontSize(10).fillColor('#333').text(data.itemsDiscussed, L + 5, y, { width: CW - 10 });
       y = doc.y + 12;
     }
 
     // Decisions
     if (data.decisions) {
       y = checkPageBreak(doc, y, 60, L, R);
-      doc.font('Helvetica-Bold').text('Decisions Taken:', L, y);
+      doc.font('Times-Bold').fillColor('#000').text('Decisions Taken:', L, y, { width: CW });
       y = doc.y + 2;
-      doc.font('Helvetica').fontSize(10).text(data.decisions, L + 5, y, { width: R - L - 10 });
+      doc.font('Times-Roman').fontSize(10).fillColor('#333').text(data.decisions, L + 5, y, { width: CW - 10 });
       y = doc.y + 12;
     }
 
     // Action Items
     if (data.actionItems) {
       y = checkPageBreak(doc, y, 60, L, R);
-      doc.font('Helvetica-Bold').text('Action Items:', L, y);
+      doc.font('Times-Bold').fillColor('#000').text('Action Items:', L, y, { width: CW });
       y = doc.y + 2;
-      doc.font('Helvetica').fontSize(10).text(data.actionItems, L + 5, y, { width: R - L - 10 });
+      doc.font('Times-Roman').fontSize(10).fillColor('#333').text(data.actionItems, L + 5, y, { width: CW - 10 });
       y = doc.y + 12;
     }
 
     // Remarks
     if (data.remarks) {
       y = checkPageBreak(doc, y, 40, L, R);
-      doc.font('Helvetica-Bold').text('Remarks:', L, y);
+      doc.font('Times-Bold').fillColor('#000').text('Remarks:', L, y, { width: CW });
       y = doc.y + 2;
-      doc.font('Helvetica').fontSize(10).text(data.remarks, L + 5, y, { width: R - L - 10 });
+      doc.font('Times-Roman').fontSize(10).fillColor('#333').text(data.remarks, L + 5, y, { width: CW - 10 });
       y = doc.y + 12;
     }
 
     // Status
     y = checkPageBreak(doc, y, 30, L, R);
-    doc.font('Helvetica-Bold').text('Status: ', L, y);
-    doc.font('Helvetica').text(data.status || 'Open', L + 50, y);
+    doc.font('Times-Bold').fontSize(10).fillColor('#000').text('Status: ', L, y, { continued: true });
+    doc.font('Times-Roman').text(data.status || 'Open');
     y = doc.y + 20;
 
     // Signatures
     y = checkPageBreak(doc, y, 80, L, R);
-    doc.moveTo(L, y).lineTo(R, y).lineWidth(0.5).stroke();
+    doc.moveTo(L, y).lineTo(R, y).lineWidth(0.5).stroke('#000');
     y += 15;
-    doc.fontSize(10).font('Helvetica').text('Authorized Signatory (BEML Limited)', L, y);
+    doc.font('Times-Roman').fontSize(10).fillColor('#000').text('Authorized Signatory (BEML Limited)', L, y);
     doc.text('Authorized Signatory (Other Party)', R - 200, y);
 
-    drawBEMLFooter(doc, W);
     doc.end();
+    stream.on('finish', () => resolve());
+    stream.on('error', reject);
   });
 }
 
 // ══════════════════════════════════════════════════════════════
 //  JOINT NOTE DOCX
 // ══════════════════════════════════════════════════════════════
-async function generateJointNoteDocx(data) {
-  const children = [];
+async function generateJointNoteDocx(data, outputPath) {
+  return new Promise((resolve, reject) => {
+    const children = [];
 
   // Title
   children.push(new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 100 }, children: [
@@ -658,5 +654,6 @@ async function generateJointNoteDocx(data) {
   ]}));
 
   const doc = new Document({ sections: [{ children }] });
-  return Packer.toBuffer(doc);
+  Packer.toBuffer(doc).then(buffer => { fs.writeFileSync(outputPath, buffer); resolve(outputPath); }).catch(reject);
+  });
 }

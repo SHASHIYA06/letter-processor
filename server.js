@@ -1178,20 +1178,28 @@ app.post('/api/joint-note/create', authenticateToken, async (req, res) => {
 app.post('/api/joint-note/generate-pdf', authenticateToken, async (req, res) => {
   try {
     const data = req.body;
-    const pdfBuffer = await generateJointNotePdf(data);
-    const pdfBase64 = pdfBuffer.toString('base64');
-    const safeName = (data.jointNoteNo || 'JointNote').replace(/[^a-zA-Z0-9]/g, '_');
-    res.json({ success: true, pdfData: pdfBase64, fileName: `${safeName}.pdf` });
+    const fileName = `JointNote_${(data.jointNoteNo || 'draft').replace(/[^a-zA-Z0-9]/g, '_')}_${Date.now()}.pdf`;
+    const tmpDir = isVercelStorage ? '/tmp' : path.join(__dirname, 'uploads');
+    const outputPath = path.join(tmpDir, fileName);
+    await generateJointNotePdf(data, outputPath);
+    const fileBuffer = fs.readFileSync(outputPath);
+    const pdfBase64 = fileBuffer.toString('base64');
+    if (!isVercelStorage) { try { fs.unlinkSync(outputPath); } catch {} }
+    res.json({ success: true, pdfData: pdfBase64, fileName });
   } catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
 app.post('/api/joint-note/generate-docx', authenticateToken, async (req, res) => {
   try {
     const data = req.body;
-    const docxBuffer = await generateJointNoteDocx(data);
-    const docxBase64 = docxBuffer.toString('base64');
-    const safeName = (data.jointNoteNo || 'JointNote').replace(/[^a-zA-Z0-9]/g, '_');
-    res.json({ success: true, docxData: docxBase64, fileName: `${safeName}.docx` });
+    const fileName = `JointNote_${(data.jointNoteNo || 'draft').replace(/[^a-zA-Z0-9]/g, '_')}_${Date.now()}.docx`;
+    const tmpDir = isVercelStorage ? '/tmp' : path.join(__dirname, 'uploads');
+    const outputPath = path.join(tmpDir, fileName);
+    await generateJointNoteDocx(data, outputPath);
+    const fileBuffer = fs.readFileSync(outputPath);
+    const docxBase64 = fileBuffer.toString('base64');
+    if (!isVercelStorage) { try { fs.unlinkSync(outputPath); } catch {} }
+    res.json({ success: true, docxData: docxBase64, fileName });
   } catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
