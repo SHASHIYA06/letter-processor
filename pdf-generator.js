@@ -33,7 +33,7 @@ function checkPageBreak(doc, y, neededHeight, L, R) {
 function drawCheckbox(doc, x, y, checked) {
   doc.rect(x, y, 8, 8).lineWidth(0.5).stroke();
   if (checked) {
-    doc.save().fontSize(9).font('Helvetica-Bold').text('\u2588', x + 0.5, y - 0.5, { width: 8, align: 'center' }).restore();
+    doc.save().fontSize(9).font('Times-Bold').text('\u2588', x + 0.5, y - 0.5, { width: 8, align: 'center' }).restore();
   }
 }
 
@@ -223,8 +223,8 @@ function generateNCRPdf(data, outputPath) {
     }
 
     // Title
-    doc.font('Times-Bold').fontSize(13).fillColor('#000').text('NON-CONFORMITY REPORT', 0, y, { width: W, align: 'center' });
-    y += 20;
+    doc.font('Times-Bold').fontSize(14).fillColor('#000').text('NON-CONFORMITY REPORT', 0, y, { width: W, align: 'center' });
+    y += 22;
 
     // NCR Number and Date row
     const c1 = L, c2 = L + 130, c3 = L + 300, c4 = R, rowH = 20;
@@ -236,7 +236,7 @@ function generateNCRPdf(data, outputPath) {
       doc.font('Times-Bold').fontSize(7.5).fillColor('#000');
       if (l1) doc.text(l1, c1 + 3, y + 4, { width: c2 - c1 - 6 });
       if (l2) doc.text(l2, c3 + 3, y + 4, { width: c4 - c3 - 6 });
-      doc.font('Helvetica').fontSize(8);
+      doc.font('Times-Roman').fontSize(8);
       if (v1 !== undefined) doc.text(v1 || '---', c2 + 3, y + 4, { width: c3 - c2 - 6 });
       if (v2 !== undefined) doc.text(v2 || '---', c4 + 3, y + 4, { width: R - c4 - 6 });
       y += rh;
@@ -251,7 +251,7 @@ function generateNCRPdf(data, outputPath) {
     // Row 4: Product/Item
     doc.moveTo(c1, y + rowH).lineTo(c4, y + rowH).lineWidth(0.4).stroke();
     doc.font('Times-Bold').fontSize(7.5).fillColor('#000').text('Item Description:', c1 + 3, y + 4, { width: c2 - c1 - 6 });
-    doc.font('Helvetica').fontSize(8).text(data.itemDesc || data.product || '---', c2 + 3, y + 4, { width: c4 - c2 - 6 });
+    doc.font('Times-Roman').fontSize(8).text(data.itemDesc || data.product || '---', c2 + 3, y + 4, { width: c4 - c2 - 6 });
     y += rowH;
     // Row 5: Part No + Qty
     drawRow('Part Number:', data.partNo, 'Quantity:', data.qty);
@@ -270,13 +270,13 @@ function generateNCRPdf(data, outputPath) {
     doc.font('Times-Bold').fontSize(7.5).fillColor('#000').text('Severity:', c1 + 3, y + 4, { width: c2 - c1 - 6 });
     const sv = y + 6;
     drawCheckbox(doc, c2 + 8, sv, data.severity === 'Critical');
-    doc.font('Helvetica').fontSize(7.5).text(' Critical', c2 + 18, sv, { width: 55 });
+    doc.font('Times-Roman').fontSize(7.5).text(' Critical', c2 + 18, sv, { width: 55 });
     drawCheckbox(doc, c2 + 70, sv, data.severity === 'Major');
     doc.text(' Major', c2 + 80, sv, { width: 50 });
     drawCheckbox(doc, c2 + 120, sv, data.severity === 'Minor');
     doc.text(' Minor', c2 + 130, sv, { width: 50 });
     doc.font('Times-Bold').fontSize(7.5).text('NCR Category:', c3 + 3, y + 4, { width: c4 - c3 - 6 });
-    doc.font('Helvetica').fontSize(8).text(data.ncrCategory || '---', c4 + 3, y + 4, { width: R - c4 - 6 });
+    doc.font('Times-Roman').fontSize(8).text(data.ncrCategory || '---', c4 + 3, y + 4, { width: R - c4 - 6 });
     y += rowH;
 
     // Description of Non-Conformity
@@ -284,7 +284,7 @@ function generateNCRPdf(data, outputPath) {
     doc.moveTo(c1, y).lineTo(c4, y).lineWidth(0.4).stroke();
     doc.font('Times-Bold').fontSize(8).fillColor('#000').text('Description of Non-Conformity:', c1 + 3, y + 4);
     y += 14;
-    doc.font('Helvetica').fontSize(8).fillColor('#000').text(data.ncrDesc || '---', c1 + 6, y, { width: CW - 12, lineGap: 3 });
+    doc.font('Times-Roman').fontSize(8).fillColor('#000').text(data.ncrDesc || '---', c1 + 6, y, { width: CW - 12, lineGap: 3 });
     const descLines = Math.ceil((data.ncrDesc || '').length / 90);
     y += Math.max(25, descLines * 11 + 15);
     doc.moveTo(c1, y).lineTo(c4, y).lineWidth(0.4).stroke();
@@ -305,7 +305,7 @@ function generateNCRPdf(data, outputPath) {
     doc.text('Issued By', tC[2] + 2, y + 3, { width: 116 });
     doc.text('Reviewed & Approved By', tC[3] + 2, y + 3, { width: R - tC[3] - 2 });
     y += tH;
-    doc.font('Helvetica').fontSize(7);
+    doc.font('Times-Roman').fontSize(7);
     doc.text(data.detectionDate || '---', tC[0] + 2, y + 3, { width: 76 });
     doc.text(data.team || '---', tC[1] + 2, y + 3, { width: 116 });
     doc.text(data.issuedBy || '---', tC[2] + 2, y + 3, { width: 116 });
@@ -317,7 +317,7 @@ function generateNCRPdf(data, outputPath) {
     doc.moveTo(c1, y).lineTo(c4, y).lineWidth(0.4).stroke();
     doc.font('Times-Bold').fontSize(8).fillColor('#000').text('Cause of Non-Conformity:', c1 + 3, y + 4);
     y += 14;
-    doc.font('Helvetica').fontSize(8).text(data.cause || data.rootCause || '---', c1 + 6, y, { width: CW - 12, lineGap: 3 });
+    doc.font('Times-Roman').fontSize(8).text(data.cause || data.rootCause || '---', c1 + 6, y, { width: CW - 12, lineGap: 3 });
     const causeLines = Math.ceil((data.cause || data.rootCause || '').length / 90);
     y += Math.max(20, causeLines * 11 + 10);
     doc.moveTo(c1, y).lineTo(c4, y).lineWidth(0.4).stroke();
@@ -328,11 +328,11 @@ function generateNCRPdf(data, outputPath) {
     doc.moveTo(c1, y).lineTo(c4, y).lineWidth(0.4).stroke();
     doc.font('Times-Bold').fontSize(8).fillColor('#000').text('Correction / Corrective Action Result:', c1 + 3, y + 4);
     y += 14;
-    doc.font('Helvetica').fontSize(8).text(data.correction || data.correctiveAction || '---', c1 + 6, y, { width: CW - 12, lineGap: 3 });
+    doc.font('Times-Roman').fontSize(8).text(data.correction || data.correctiveAction || '---', c1 + 6, y, { width: CW - 12, lineGap: 3 });
     const corrLines = Math.ceil((data.correction || data.correctiveAction || '').length / 90);
     y += Math.max(20, corrLines * 11 + 10);
     if (data.healthySl || data.faultySl) {
-      doc.font('Helvetica').fontSize(8);
+      doc.font('Times-Roman').fontSize(8);
       if (data.healthySl) { doc.text('Healthy Sl. No: ' + data.healthySl, c1 + 20, y); y += 11; }
       if (data.faultySl) { doc.text('Faulty Sl. No: ' + data.faultySl, c1 + 20, y); y += 11; }
     }
@@ -344,7 +344,7 @@ function generateNCRPdf(data, outputPath) {
     doc.moveTo(c1, y).lineTo(c4, y).lineWidth(0.4).stroke();
     doc.font('Times-Bold').fontSize(8).fillColor('#000').text('Preventive Action:', c1 + 3, y + 4);
     y += 14;
-    doc.font('Helvetica').fontSize(8).text(data.preventiveAction || '---', c1 + 6, y, { width: CW - 12, lineGap: 3 });
+    doc.font('Times-Roman').fontSize(8).text(data.preventiveAction || '---', c1 + 6, y, { width: CW - 12, lineGap: 3 });
     const prevLines = Math.ceil((data.preventiveAction || '').length / 90);
     y += Math.max(18, prevLines * 11 + 8);
     doc.moveTo(c1, y).lineTo(c4, y).lineWidth(0.4).stroke();
@@ -359,7 +359,7 @@ function generateNCRPdf(data, outputPath) {
     let dx = c1 + 10;
     decisions.forEach(d => {
       drawCheckbox(doc, dx, y, data.decision === d);
-      doc.font('Helvetica').fontSize(7).text(' ' + d, dx + 10, y, { width: 55 });
+      doc.font('Times-Roman').fontSize(7).text(' ' + d, dx + 10, y, { width: 55 });
       dx += 65;
       if (dx > c4 - 60) { dx = c1 + 10; y += 12; }
     });
@@ -372,7 +372,7 @@ function generateNCRPdf(data, outputPath) {
     doc.moveTo(c1, y).lineTo(c4, y).lineWidth(0.4).stroke();
     doc.font('Times-Bold').fontSize(8).fillColor('#000').text('Status & Closure:', c1 + 3, y + 4);
     y += 14;
-    doc.font('Helvetica').fontSize(8);
+    doc.font('Times-Roman').fontSize(8);
     doc.text('Status: ' + (data.status || 'Open'), c1 + 6, y, { width: 200 });
     doc.text('Closure Date: ' + (data.closureDate || '---'), c1 + 220, y, { width: 150 });
     doc.text('Closure Authority: ' + (data.closureAuthority || '---'), c1 + 6, y + 12, { width: CW - 12 });
@@ -393,7 +393,7 @@ function generateNCRPdf(data, outputPath) {
     doc.text('Position', aC[2] + 2, y + 3, { width: 116 });
     doc.text('Name', aC[3] + 2, y + 3, { width: R - aC[3] - 2 });
     y += 16;
-    doc.font('Helvetica').fontSize(7);
+    doc.font('Times-Roman').fontSize(7);
     doc.text(data.approvedBy || '---', aC[0] + 2, y + 3, { width: 76 });
     doc.text(data.approvedEntity || '---', aC[1] + 2, y + 3, { width: 116 });
     doc.text(data.approvedPosition || '---', aC[2] + 2, y + 3, { width: 116 });
@@ -405,8 +405,11 @@ function generateNCRPdf(data, outputPath) {
       y = checkPageBreak(doc, y, 30, L, R);
       doc.font('Times-Bold').fontSize(8).fillColor('#000').text('Remarks:', c1 + 3, y);
       y += 12;
-      doc.font('Helvetica').fontSize(8).text(data.remarks, c1 + 6, y, { width: CW - 12 });
+      doc.font('Times-Roman').fontSize(8).text(data.remarks, c1 + 6, y, { width: CW - 12 });
     }
+
+    // Add BEML footer
+    drawBEMLFooter(doc, W, H);
 
     doc.end();
     stream.on('finish', () => resolve(outputPath));

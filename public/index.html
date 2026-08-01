@@ -2067,7 +2067,26 @@
       if (isNCR) {
         const data = {};
         const headers = rows[0] || [];
-        const NCR_KEY_MAP = { 'NCR Report No':'ncrNo','Date of NCR':'date','Date of Detection':'detectionDate','Item Description':'itemDesc','NCR Description':'ncrDesc','Part Number':'partNo','Sub-System':'subSystem','Train No':'vehicleNo','Car':'car','Qty':'qty','Severity':'severity','Project':'project','Line':'line','OEM':'oem','Train Set':'trainSet','Vendor':'vendor','Responsibility':'responsibility','Status':'status','Root Cause':'rootCause','Corrective Action':'correction','Preventive Action':'preventiveAction','Disposition':'disposition','Remarks':'remarks','Raised By':'raisedBy','Assigned To':'assignedTo' };
+        const NCR_KEY_MAP = {
+          'NCR Report No':'ncrNo','Date of NCR':'date','Date of Detection':'detectionDate',
+          'Item Description':'itemDesc','NCR Description':'ncrDesc','Part Number':'partNo',
+          'Modified/Unmodified FMI':'fmi','Failure After FMI':'failureAfterFmi',
+          'Faulty Sl No':'faultySl','Healthy Sl No':'healthySl',
+          'Issued By':'issuedBy','Qty':'qty','Sub-System':'subSystem',
+          'Train No':'vehicleNo','Car':'car','Responsibility':'responsibility',
+          'Status':'status','Item Repaired':'itemRepaired','Item Replaced':'itemReplaced',
+          'Date of Repair':'dateOfRepair','Source':'source',
+          'Investigation Report Date':'investigationDate',
+          'NCR Closed By Doc':'closedByDoc','Gate Pass No':'gatePassNo',
+          'Remarks':'remarks','Project':'project','Line':'line','OEM':'oem',
+          'Train Set':'trainSet','Coach No':'coachNo','NCR Category':'ncrCategory',
+          'NCR Type':'ncrType','Severity':'severity','Priority':'priority',
+          'System':'system','Location':'location','Vendor':'vendor',
+          'Raised By':'raisedBy','Assigned To':'assignedTo',
+          'Root Cause':'rootCause','Corrective Action':'correction',
+          'Preventive Action':'preventiveAction','Disposition':'disposition',
+          'Closure Date':'closureDate','Closure Authority':'closureAuthority'
+        };
         headers.forEach((h, i) => { if (NCR_KEY_MAP[h] && record[i]) data[NCR_KEY_MAP[h]] = record[i]; });
         authFetch('/api/ncr/generate-pdf', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(data) })
           .then(r => r.json()).then(r => { if (r.pdfData) { const bin = atob(r.pdfData); const bytes = new Uint8Array(bin.length); for(let i=0;i<bin.length;i++) bytes[i]=bin.charCodeAt(i); const url = URL.createObjectURL(new Blob([bytes],{type:'application/pdf'})); const a = document.createElement('a'); a.href = url; a.download = r.fileName || 'NCR.pdf'; a.click(); } });
