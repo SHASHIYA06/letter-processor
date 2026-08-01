@@ -136,8 +136,13 @@ function generateLetterPdf(data, outputPath) {
     const W = A4_W, H = A4_H, L = 55, R = W - 55, CW = R - L;
     const org = data.organization || 'BEML';
     
-    // Use organization-specific header
-    let y = drawOrgHeader(doc, W, org);
+    // Use official letterhead for BEML, manual header for others
+    let y;
+    if (org === 'BEML') {
+      y = drawBEMLHeader(doc, W);
+    } else {
+      y = drawOrgHeader(doc, W, org);
+    }
     drawBEMLFooter(doc, W, H);
 
     // Ref number left, Date right
@@ -220,7 +225,6 @@ function generateLetterPdf(data, outputPath) {
 
 // ══════════════════════════════════════════════════════════════
 //  NCR PDF - Official BEML Non-Conformity Report Format
-//  Matches reference: NCR_894_TS#14_TC1_L3_TFT
 // ══════════════════════════════════════════════════════════════
 function generateNCRPdf(data, outputPath) {
   return new Promise((resolve, reject) => {
@@ -230,13 +234,29 @@ function generateNCRPdf(data, outputPath) {
     const W = A4_W, H = A4_H, L = 40, R = W - 40, CW = R - L;
     let y = 12;
 
-    // ── HEADER ──
-    const logoPath = getAssetPath('beml-logo.jpg');
-    if (fs.existsSync(logoPath)) {
-      try { doc.image(logoPath, 12, y, { width: 55, height: 25, fit: 'contain' }); } catch (e) {}
+    // ── HEADER - Use official NCR header image ──
+    const ncrHeaderPath = getAssetPath('ncr-header.png');
+    if (fs.existsSync(ncrHeaderPath)) {
+      try {
+        doc.image(ncrHeaderPath, 0, 0, { width: W, fit: [W, 60] });
+        y = 65;
+      } catch (e) {
+        // Fallback to manual header
+        const logoPath = getAssetPath('beml-logo.jpg');
+        if (fs.existsSync(logoPath)) {
+          try { doc.image(logoPath, 12, y, { width: 55, height: 25, fit: 'contain' }); } catch (e2) {}
+        }
+        doc.font('Times-Bold').fontSize(12).fillColor('#000').text('NON-CONFORMITY REPORT', 0, y, { width: W, align: 'center' });
+        y += 18;
+      }
+    } else {
+      const logoPath = getAssetPath('beml-logo.jpg');
+      if (fs.existsSync(logoPath)) {
+        try { doc.image(logoPath, 12, y, { width: 55, height: 25, fit: 'contain' }); } catch (e) {}
+      }
+      doc.font('Times-Bold').fontSize(12).fillColor('#000').text('NON-CONFORMITY REPORT', 0, y, { width: W, align: 'center' });
+      y += 18;
     }
-    doc.font('Times-Bold').fontSize(12).fillColor('#000').text('NON-CONFORMITY REPORT', 0, y, { width: W, align: 'center' });
-    y += 18;
 
     // ── TOP INFO BAR (OEM/SBU info + Report no) ──
     const barH = 28;
