@@ -95,6 +95,37 @@ function drawBEMLFooter(doc, W, H) {
 }
 
 // ══════════════════════════════════════════════════════════════
+//  ORGANIZATION HEADERS
+// ══════════════════════════════════════════════════════════════
+const ORG_HEADERS = {
+  'BEML': { name: 'BEML LIMITED', sub: 'A Government of India Enterprise under Ministry of Defence', addr: 'BEML Bhavan, No.1, Outer Ring Road, Bengaluru - 560068' },
+  'KMRCL': { name: 'KOLKATA METRA RAIL CORPORATION LTD.', sub: 'A Government of India Enterprise', addr: 'KMRCL Bhavan, Salt Lake City, Kolkata - 700064' },
+  'Metro Rail': { name: 'METRO RAIL CORPORATION LTD.', sub: 'A Government of India Enterprise', addr: 'Metro Rail Bhavan, Kolkata' }
+};
+
+function drawOrgHeader(doc, W, org) {
+  const orgInfo = ORG_HEADERS[org] || ORG_HEADERS['BEML'];
+  const logoPath = getAssetPath('beml-logo.jpg');
+  let y = 15;
+  if (fs.existsSync(logoPath)) {
+    try { doc.image(logoPath, 15, y, { width: 60, height: 30, fit: 'contain' }); } catch (e) {}
+  }
+  doc.font('Times-Bold').fontSize(16).fillColor('#000').text(orgInfo.name, 0, y, { width: W, align: 'center' });
+  y += 20;
+  doc.font('Times-Roman').fontSize(7).fillColor('#333');
+  doc.text(orgInfo.sub, 0, y, { width: W, align: 'center' });
+  y += 11;
+  doc.text(orgInfo.addr, 0, y, { width: W, align: 'center' });
+  y += 11;
+  doc.text('Ph: +91-80-2524 1752 | Fax: +91-80-2524 1746 | www.beml.co.in', 0, y, { width: W, align: 'center' });
+  y += 14;
+  doc.moveTo(40, y).lineTo(W - 40, y).lineWidth(1.5).stroke('#000');
+  y += 4;
+  doc.moveTo(40, y).lineTo(W - 40, y).lineWidth(0.5).stroke('#000');
+  return y + 12;
+}
+
+// ══════════════════════════════════════════════════════════════
 //  BEML LETTER PDF - Official Format
 // ══════════════════════════════════════════════════════════════
 function generateLetterPdf(data, outputPath) {
@@ -103,7 +134,10 @@ function generateLetterPdf(data, outputPath) {
     const stream = fs.createWriteStream(outputPath);
     doc.pipe(stream);
     const W = A4_W, H = A4_H, L = 55, R = W - 55, CW = R - L;
-    let y = drawBEMLHeader(doc, W);
+    const org = data.organization || 'BEML';
+    
+    // Use organization-specific header
+    let y = drawOrgHeader(doc, W, org);
     drawBEMLFooter(doc, W, H);
 
     // Ref number left, Date right
@@ -151,10 +185,11 @@ function generateLetterPdf(data, outputPath) {
 
     // Closing
     y = checkPageBreak(doc, y, 120, L, R);
+    const orgInfo = ORG_HEADERS[org] || ORG_HEADERS['BEML'];
     doc.font('Times-Roman').fontSize(10).fillColor('#000');
     doc.text('Thanking you,', L, y); y += 16;
     doc.text('Yours faithfully,', L, y); y += 20;
-    doc.text('For BEML Limited', L, y); y += 30;
+    doc.text(`For ${orgInfo.name}`, L, y); y += 30;
 
     // Signature block
     doc.font('Times-Bold').fontSize(10).text(data.signatory || '', L, y); y += 14;

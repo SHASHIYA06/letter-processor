@@ -376,12 +376,15 @@ async function ensureHeaders(sheetName, columns) {
     await ensureSheetExists(sheetName);
     const range = `${sheetName}!A1:${columnToLetter(columns.length)}1`;
     const res = await sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range });
-    if (!res.data.values || res.data.values.length === 0) {
+    const existingHeaders = res.data.values ? res.data.values[0] : [];
+    
+    // Update if empty OR if column count doesn't match
+    if (!existingHeaders || existingHeaders.length === 0 || existingHeaders.length !== columns.length) {
       await sheets.spreadsheets.values.update({
         spreadsheetId: SPREADSHEET_ID, range,
         valueInputOption: 'RAW', requestBody: { values: [columns] }
       });
-      console.log(`✅ Headers set for: ${sheetName}`);
+      console.log(`✅ Headers updated for: ${sheetName} (${existingHeaders.length || 0} → ${columns.length} columns)`);
     }
   } catch (err) {
     console.log(`⚠️  Headers failed for ${sheetName}: ${err.message}`);
