@@ -31,6 +31,7 @@ if (!isVercel) {
 // Import NCR parser
 import { parseNCRContent } from './ncr-parser.js';
 import { generateNCRPdf, generateLetterPdf, generateNCRDocx, generateLetterDocx } from './pdf-generator.js';
+import jwt from 'jsonwebtoken';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -40,6 +41,11 @@ app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
+// JWT Configuration
+const JWT_SECRET = process.env.JWT_SECRET || 'beml-docvault-secret-key-2024';
+const ADMIN_USERNAME = 'admin';
+const ADMIN_PASSWORD = '9799494321';
 
 const isVercelStorage = !!process.env.VERCEL;
 
@@ -395,11 +401,13 @@ function clean(s, maxLen = 500) {
 
 // Direct mapping: data key -> column name in sheet
 const LETTER_KEY_TO_COL = {
-  refNumber: 'Ref. Letter Number', allReferences: 'All References', date: 'Date',
+  refNumber: 'Ref. Letter Number', refLetterNumber: 'Ref. Letter Number',
+  allReferences: 'All References', date: 'Date',
   from: 'From', to: 'To (Addressee)', kindAttn: 'Kind Attention', subject: 'Subject',
   letterType: 'Letter Type', letterContent: 'Letter Content', enclosures: 'Enclosures',
   remarks: 'Remarks', attachmentLink: 'Attachment Link', fileName: 'File Name', status: 'Status',
-  signatory: 'Signatory', designation: 'Designation', project: 'Project', cc: 'Cc'
+  signatory: 'Signatory', designation: 'Designation', project: 'Project', cc: 'Cc',
+  uploadDate: 'Upload Date', detectedOrg: 'Detected Org'
 };
 
 const NCR_KEY_TO_COL = {
@@ -860,7 +868,7 @@ function parseJointNoteContent(text) {
 //  NCR / LETTER CREATION ROUTES
 // ══════════════════════════════════════════════════════════════
 
-app.get('/api/ncr/next-number', async (req, res) => {
+app.get('/api/ncr/next-number', authenticateToken, async (req, res) => {
   try {
     const year = new Date().getFullYear();
     let rows = allDataCache['NCR Records'];
@@ -886,7 +894,7 @@ app.get('/api/ncr/next-number', async (req, res) => {
   } catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
-app.post('/api/ncr/create', async (req, res) => {
+app.post('/api/ncr/create', authenticateToken, async (req, res) => {
   try {
     const data = req.body;
     const result = await appendToSheet('NCR Records', data, NCR_COLUMNS);
@@ -894,7 +902,7 @@ app.post('/api/ncr/create', async (req, res) => {
   } catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
-app.post('/api/ncr/update', async (req, res) => {
+app.post('/api/ncr/update', authenticateToken, async (req, res) => {
   try {
     const { rowIndex, data } = req.body;
     // Build row data based on NCR_COLUMNS (49 columns)
@@ -929,7 +937,7 @@ app.post('/api/ncr/update', async (req, res) => {
   } catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
-app.get('/api/ncr/clone/:idx', async (req, res) => {
+app.get('/api/ncr/clone/:idx', authenticateToken, async (req, res) => {
   try {
     const rows = allDataCache['NCR Records'] || [];
     const idx = parseInt(req.params.idx, 10);
@@ -968,7 +976,7 @@ app.get('/api/ncr/clone/:idx', async (req, res) => {
   } catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
-app.post('/api/ncr/generate-pdf', async (req, res) => {
+app.post('/api/ncr/generate-pdf', authenticateToken, async (req, res) => {
   try {
     const data = req.body;
     const fileName = `NCR_${(data.ncrNo || 'draft').replace(/[^a-zA-Z0-9]/g, '_')}_${Date.now()}.pdf`;
@@ -982,7 +990,7 @@ app.post('/api/ncr/generate-pdf', async (req, res) => {
   } catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
-app.post('/api/ncr/generate-docx', async (req, res) => {
+app.post('/api/ncr/generate-docx', authenticateToken, async (req, res) => {
   try {
     const data = req.body;
     const fileName = `NCR_${(data.ncrNo || 'draft').replace(/[^a-zA-Z0-9]/g, '_')}_${Date.now()}.docx`;
@@ -996,7 +1004,7 @@ app.post('/api/ncr/generate-docx', async (req, res) => {
   } catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
-app.get('/api/letter/next-number/:org', async (req, res) => {
+app.get('/api/letter/next-number/:org', authenticateToken, async (req, res) => {
   try {
     const org = req.params.org || 'BEML';
     const year = new Date().getFullYear();
@@ -1024,7 +1032,7 @@ app.get('/api/letter/next-number/:org', async (req, res) => {
   } catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
-app.post('/api/letter/create', async (req, res) => {
+app.post('/api/letter/create', authenticateToken, async (req, res) => {
   try {
     const { organization, ...data } = req.body;
     const org = organization || 'BEML';
@@ -1034,7 +1042,7 @@ app.post('/api/letter/create', async (req, res) => {
   } catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
-app.post('/api/letter/generate-pdf', async (req, res) => {
+app.post('/api/letter/generate-pdf', authenticateToken, async (req, res) => {
   try {
     const data = req.body;
     const fileName = `Letter_${(data.refNumber || 'draft').replace(/[^a-zA-Z0-9]/g, '_')}_${Date.now()}.pdf`;
@@ -1048,7 +1056,7 @@ app.post('/api/letter/generate-pdf', async (req, res) => {
   } catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
-app.post('/api/letter/generate-docx', async (req, res) => {
+app.post('/api/letter/generate-docx', authenticateToken, async (req, res) => {
   try {
     const data = req.body;
     const fileName = `Letter_${(data.refNumber || 'draft').replace(/[^a-zA-Z0-9]/g, '_')}_${Date.now()}.docx`;
@@ -1062,7 +1070,7 @@ app.post('/api/letter/generate-docx', async (req, res) => {
   } catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
-app.post('/api/auto-save', async (req, res) => {
+app.post('/api/auto-save', authenticateToken, async (req, res) => {
   try {
     const { docType, data, rowIndex, organization } = req.body;
     let sheetName;
@@ -1190,7 +1198,75 @@ app.get('/api/auth/status', (req, res) => {
 });
 
 // ══════════════════════════════════════════════════════════════
-//  API ROUTES
+//  LOGIN AUTHENTICATION
+// ══════════════════════════════════════════════════════════════
+
+// Login endpoint
+app.post('/api/login', (req, res) => {
+  const { username, password } = req.body;
+  
+  if (!username || !password) {
+    return res.status(400).json({ success: false, error: 'Username and password required' });
+  }
+  
+  if (username === ADMIN_USERNAME && password === ADMIN_PASSWORD) {
+    const token = jwt.sign(
+      { username: ADMIN_USERNAME, role: 'admin' },
+      JWT_SECRET,
+      { expiresIn: '24h' }
+    );
+    
+    console.log(`✅ Admin login successful: ${username}`);
+    res.json({ success: true, token, username: ADMIN_USERNAME });
+  } else {
+    console.log(`❌ Failed login attempt: ${username}`);
+    res.status(401).json({ success: false, error: 'Invalid credentials' });
+  }
+});
+
+// Verify token endpoint
+app.get('/api/auth/verify', (req, res) => {
+  const authHeader = req.headers.authorization;
+  const token = authHeader && authHeader.split(' ')[1];
+  
+  if (!token) {
+    return res.json({ valid: false });
+  }
+  
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET);
+    res.json({ valid: true, username: decoded.username });
+  } catch (err) {
+    res.json({ valid: false });
+  }
+});
+
+// Logout endpoint (client-side token removal, but we can log it)
+app.post('/api/logout', (req, res) => {
+  console.log('ℹ️  User logged out');
+  res.json({ success: true });
+});
+
+// Auth middleware for protected routes
+function authenticateToken(req, res, next) {
+  const authHeader = req.headers.authorization;
+  const token = authHeader && authHeader.split(' ')[1];
+  
+  if (!token) {
+    return res.status(401).json({ error: 'Access denied. No token provided.' });
+  }
+  
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET);
+    req.user = decoded;
+    next();
+  } catch (err) {
+    res.status(403).json({ error: 'Invalid or expired token.' });
+  }
+}
+
+// ══════════════════════════════════════════════════════════════
+//  API ROUTES (Protected)
 // ══════════════════════════════════════════════════════════════
 
 function getFilePath(req) {
@@ -1203,7 +1279,7 @@ function getFilePath(req) {
   return tmpPath;
 }
 
-app.post('/api/extract', upload.single('file'), async (req, res) => {
+app.post('/api/extract', authenticateToken, upload.single('file'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ success: false, error: 'No file uploaded' });
     
@@ -1284,7 +1360,7 @@ app.post('/api/extract', upload.single('file'), async (req, res) => {
   }
 });
 
-app.post('/api/save', upload.single('file'), async (req, res) => {
+app.post('/api/save', authenticateToken, upload.single('file'), async (req, res) => {
   try {
     let data;
     try {
@@ -1351,7 +1427,7 @@ app.post('/api/save', upload.single('file'), async (req, res) => {
   }
 });
 
-app.post('/api/bulk-upload', (req, res) => {
+app.post('/api/bulk-upload', authenticateToken, (req, res) => {
   upload.array('files', 50)(req, res, async (err) => {
     if (err) return res.status(500).json({ success: false, error: err.message });
     try {
@@ -1401,7 +1477,7 @@ app.post('/api/bulk-upload', (req, res) => {
   });
 });
 
-app.get('/api/records', async (req, res) => {
+app.get('/api/records', authenticateToken, async (req, res) => {
   if (!sheets) return res.json({ success: true, data: {} });
   try {
     const allData = {};
@@ -1417,7 +1493,7 @@ app.get('/api/records', async (req, res) => {
   } catch (err) { res.status(500).json({ success: false, error: err.message }); }
 });
 
-app.get('/api/records/:sheetName', async (req, res) => {
+app.get('/api/records/:sheetName', authenticateToken, async (req, res) => {
   if (!sheets) return res.json({ success: true, data: [] });
   try {
     const sheetName = decodeURIComponent(req.params.sheetName);
@@ -1427,7 +1503,7 @@ app.get('/api/records/:sheetName', async (req, res) => {
   } catch (err) { res.status(500).json({ success: false, error: err.message }); }
 });
 
-app.get('/api/search', async (req, res) => {
+app.get('/api/search', authenticateToken, async (req, res) => {
   if (!sheets) return res.json({ success: true, data: [] });
   try {
     const q = (req.query.q || '').toLowerCase();
@@ -1454,7 +1530,7 @@ app.get('/api/search', async (req, res) => {
   } catch (err) { res.status(500).json({ success: false, error: err.message }); }
 });
 
-app.get('/api/export/csv', async (req, res) => {
+app.get('/api/export/csv', authenticateToken, async (req, res) => {
   try {
     if (!sheets) return res.status(503).json({ error: 'Google Sheets not connected. Visit /auth/google to authenticate.' });
     const sheetName = req.query.sheet || 'BEML Letters';
@@ -1469,7 +1545,7 @@ app.get('/api/export/csv', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-app.get('/api/export/json', async (req, res) => {
+app.get('/api/export/json', authenticateToken, async (req, res) => {
   try {
     if (!sheets) return res.status(503).json({ error: 'Google Sheets not connected. Visit /auth/google to authenticate.' });
     const sheetName = req.query.sheet || 'BEML Letters';
@@ -1483,7 +1559,7 @@ app.get('/api/export/json', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-app.post('/api/import/json', async (req, res) => {
+app.post('/api/import/json', authenticateToken, async (req, res) => {
   try {
     const records = req.body.records || req.body;
     const sheetName = req.body.sheetName || 'BEML Letters';
@@ -1501,7 +1577,7 @@ app.post('/api/import/json', async (req, res) => {
 });
 
 // Excel Import Route
-app.post('/api/import/excel', upload.single('file'), async (req, res) => {
+app.post('/api/import/excel', authenticateToken, upload.single('file'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ success: false, error: 'No file uploaded' });
     const sheetName = req.body.sheetName || 'BEML Letters';
@@ -1604,7 +1680,7 @@ app.post('/api/import/excel', upload.single('file'), async (req, res) => {
 });
 
 // CSV Import Route for NCR Master List
-app.post('/api/import/csv', upload.single('file'), async (req, res) => {
+app.post('/api/import/csv', authenticateToken, upload.single('file'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ success: false, error: 'No file uploaded' });
     const sheetName = req.body.sheetName || 'NCR Records';
@@ -1746,7 +1822,7 @@ app.post('/api/import/csv', upload.single('file'), async (req, res) => {
 });
 
 // Update record status or fields
-app.put('/api/update', async (req, res) => {
+app.put('/api/update', authenticateToken, async (req, res) => {
   if (!sheets) return res.json({ success: true, local: true });
   try {
     const { sheetName, rowIndex, field, value } = req.body;
@@ -1785,7 +1861,7 @@ app.put('/api/update', async (req, res) => {
 });
 
 // Delete a single record by shifting rows up
-app.delete('/api/delete', async (req, res) => {
+app.delete('/api/delete', authenticateToken, async (req, res) => {
   if (!sheets) return res.json({ success: true, local: true });
   try {
     const { sheetName, rowIndex } = req.body;
@@ -1804,7 +1880,7 @@ app.delete('/api/delete', async (req, res) => {
 });
 
 // Clear old broken data from a sheet (keep headers, remove all data rows)
-app.delete('/api/clear/:sheetName', async (req, res) => {
+app.delete('/api/clear/:sheetName', authenticateToken, async (req, res) => {
   if (!sheets) return res.json({ success: true, local: true });
   try {
     const sheetName = decodeURIComponent(req.params.sheetName);
@@ -1850,7 +1926,7 @@ app.get('/api/master-data/:category', (req, res) => {
 });
 
 // Add custom master data item
-app.post('/api/master-data/:category', async (req, res) => {
+app.post('/api/master-data/:category', authenticateToken, async (req, res) => {
   try {
     const category = req.params.category;
     const { value } = req.body;
@@ -1906,7 +1982,7 @@ async function callAI(prompt, systemPrompt) {
   return data.choices?.[0]?.message?.content || '';
 }
 
-app.post('/api/ai/generate-letter', async (req, res) => {
+app.post('/api/ai/generate-letter', authenticateToken, async (req, res) => {
   try {
     const { org, subject, recipient, context, tone, letterType } = req.body;
     const orgName = org || 'BEML';
@@ -1924,7 +2000,7 @@ Generate the complete letter body in professional railway documentation style. I
   } catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
-app.post('/api/ai/generate-reply', async (req, res) => {
+app.post('/api/ai/generate-reply', authenticateToken, async (req, res) => {
   try {
     const { originalLetter, originalRef, originalSubject, originalFrom, org, customInstructions } = req.body;
     const prompt = `You are an expert BEML (Bharat Earth Movers Limited) correspondence officer. Generate a professional REPLY letter from BEML against the following incoming letter:
@@ -1954,7 +2030,7 @@ Use formal Indian PSU communication style. Be technically precise and profession
   } catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
-app.post('/api/ai/generate-ncr', async (req, res) => {
+app.post('/api/ai/generate-ncr', authenticateToken, async (req, res) => {
   try {
     const { project, itemDesc, severity, context, trainNo, car, vendor } = req.body;
     const prompt = `Generate a professional BEML Non-Conformity Report (NCR) content with the following details:
@@ -1981,7 +2057,7 @@ Use professional railway engineering language, BEML standards, and Indian railwa
   } catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
-app.post('/api/ai/improve-content', async (req, res) => {
+app.post('/api/ai/improve-content', authenticateToken, async (req, res) => {
   try {
     const { content, type, instructions } = req.body;
     const typeLabel = type === 'ncr' ? 'NCR' : type === 'letter' ? 'official letter' : 'document';
@@ -2008,7 +2084,7 @@ app.get('/api/ai/status', (req, res) => {
 //  REPLY LETTER GENERATION - Parse incoming & generate BEML reply
 // ══════════════════════════════════════════════════════════════
 
-app.post('/api/letter/generate-reply', async (req, res) => {
+app.post('/api/letter/generate-reply', authenticateToken, async (req, res) => {
   try {
     const { letterContent, refNumber, subject, from, to, org } = req.body;
     const incomingText = letterContent || req.body.text || '';
