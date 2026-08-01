@@ -145,7 +145,7 @@
 </head>
 <body>
   <!-- LOGIN SCREEN -->
-  <div class="login-container" id="loginContainer" style="display:none">
+  <div class="login-container" id="loginContainer">
     <div class="login-box">
       <div class="login-logo">
         <h1>DocVault</h1>
@@ -167,7 +167,7 @@
   </div>
 
   <!-- SIDEBAR -->
-  <aside class="sidebar">
+  <aside class="sidebar" style="display:none">
     <div class="sidebar-logo">
       <h1>DocVault</h1>
       <p>BEML Document Management System</p>
@@ -197,7 +197,7 @@
   </aside>
 
   <!-- MAIN CONTENT -->
-  <main class="main">
+  <main class="main" style="display:none">
     <!-- TOP BAR -->
     <header class="topbar">
       <div class="search-box">
@@ -218,7 +218,12 @@
     </header>
 
     <!-- CONTENT AREA -->
-    <div class="content" id="contentArea"></div>
+    <div class="content" id="contentArea">
+      <div style="text-align:center;padding:60px 20px;color:var(--text3)">
+        <div style="font-size:2rem;margin-bottom:12px">Loading...</div>
+        <p>Loading DocVault...</p>
+      </div>
+    </div>
   </main>
 
   <!-- UPLOAD MODAL -->
@@ -275,7 +280,7 @@
         <div id="uploadProgress" style="display:none;margin-top:16px">
           <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
             <span class="spinner"></span>
-            <span id="uploadStatus">Processing...</span>
+            <span id="uploadProgressText">Processing...</span>
           </div>
           <div style="height:6px;background:var(--bg);border-radius:3px;overflow:hidden">
             <div id="uploadProgressBar" style="height:100%;background:linear-gradient(90deg,var(--primary),#8B5CF6);width:0%;transition:width .3s"></div>
@@ -313,6 +318,19 @@
   <div class="toast" id="toast"></div>
 
   <script>
+    // Global error handler - prevents blank screens
+    window.onerror = function(msg, url, line, col, error) {
+      console.error('Global error:', msg, 'at', url, ':', line);
+      const content = document.getElementById('contentArea');
+      if (content) {
+        content.innerHTML = '<div style="padding:40px;text-align:center"><h2 style="color:#EF4444">Something went wrong</h2><p style="color:#666;margin-top:8px">' + msg + '</p><button class="btn btn-primary" onclick="navigate(\'dashboard\')" style="margin-top:16px">Go to Dashboard</button></div>';
+      }
+      return false;
+    };
+    window.addEventListener('unhandledrejection', function(e) {
+      console.error('Unhandled promise rejection:', e.reason);
+    });
+
     let allData = {};
     let currentPage = 'dashboard';
     let currentUploadFile = null;
@@ -353,21 +371,20 @@
     function renderDashboard(el) {
       const stats = getStats();
       el.innerHTML = `
-        <div class="content" style="padding:0">
-          <div style="margin-bottom:20px">
-            <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px">
-              <div>
-                <h2 style="font-size:1.5rem;font-weight:800;color:var(--text)">Dashboard</h2>
-                <p style="color:var(--text3);font-size:.82rem;margin-top:2px">BEML Document Management System - Complete Overview</p>
-              </div>
-              <div style="display:flex;gap:8px;flex-wrap:wrap">
-                <button class="btn btn-primary" onclick="navigate('create-letter')">✉️ New Letter</button>
-                <button class="btn btn-primary" onclick="navigate('create-ncr')">📋 New NCR</button>
-                <button class="btn btn-primary" onclick="navigate('create-joint')">📝 New Joint Note</button>
-                <button class="btn btn-secondary" onclick="navigate('reply-letter')">🤖 AI Reply</button>
-              </div>
+        <div style="margin-bottom:20px">
+          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px">
+            <div>
+              <h2 style="font-size:1.5rem;font-weight:800;color:var(--text)">Dashboard</h2>
+              <p style="color:var(--text3);font-size:.82rem;margin-top:2px">BEML Document Management System - Complete Overview</p>
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <button class="btn btn-primary" onclick="navigate('create-letter')">New Letter</button>
+              <button class="btn btn-primary" onclick="navigate('create-ncr')">New NCR</button>
+              <button class="btn btn-primary" onclick="navigate('create-joint')">New Joint Note</button>
+              <button class="btn btn-secondary" onclick="navigate('reply-letter')">AI Reply</button>
             </div>
           </div>
+        </div>
           <div class="dash-stats-4" style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:20px">
             <div style="background:linear-gradient(135deg,#3B82F6,#1D4ED8);border-radius:12px;padding:18px;color:white;box-shadow:0 4px 15px rgba(37,99,235,.3)">
               <div style="display:flex;justify-content:space-between;align-items:start">
@@ -442,7 +459,7 @@
               <div class="card-body" id="recentDocs"></div>
             </div>
           </div>
-        </div>`;
+      `;
       renderRecentDocs();
     }
 
@@ -1135,11 +1152,28 @@
     function createDropdown(id, options, value, placeholder, searchable) {
       const opts = (options || []).map(o => `<option value="${esc(o)}" ${o === value ? 'selected' : ''}>${esc(o)}</option>`).join('');
       const searchAttr = searchable !== false ? 'data-searchable="true"' : '';
-      return `<select id="${id}" ${searchAttr} onchange="updateNCRPreview()" class="ncr-select">
+      return `<select id="${id}" ${searchAttr} onchange="handleDropdownChange('${id}', this.value)" class="ncr-select">
         <option value="">-- ${placeholder || 'Select'} --</option>
         ${opts}
         <option value="__custom__">+ Add New...</option>
       </select>`;
+    }
+
+    function handleDropdownChange(id, value) {
+      if (value === '__custom__') {
+        const custom = prompt('Enter new value:');
+        if (custom && custom.trim()) {
+          const select = document.getElementById(id);
+          const opt = document.createElement('option');
+          opt.value = custom.trim();
+          opt.textContent = custom.trim();
+          select.insertBefore(opt, select.querySelector('[value="__custom__"]'));
+          select.value = custom.trim();
+        } else {
+          document.getElementById(id).value = '';
+        }
+      }
+      updateNCRPreview();
     }
 
     function createSearchableDropdown(id, options, value, placeholder) {
@@ -2038,7 +2072,7 @@
       const btn = document.getElementById('uploadBtn');
       btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Processing...';
       document.getElementById('uploadProgress').style.display = 'block';
-      document.getElementById('uploadStatus').textContent = 'Uploading and extracting...';
+      document.getElementById('uploadProgressText').textContent = 'Uploading and extracting...';
 
       let progress = 0;
       const iv = setInterval(() => { progress = Math.min(progress + 10, 90); document.getElementById('uploadProgressBar').style.width = progress + '%'; }, 500);
@@ -2062,7 +2096,7 @@
 
         clearInterval(iv);
         document.getElementById('uploadProgressBar').style.width = '100%';
-        document.getElementById('uploadStatus').textContent = 'Saving to Google Sheets...';
+          document.getElementById('uploadProgressText').textContent = 'Saving to Google Sheets...';
 
         if (extractData.success) {
           const uploadStatus = document.getElementById('uploadStatus').value || 'Draft';
@@ -2211,9 +2245,10 @@
       try {
         const res = await authFetch('/api/records');
         const data = await res.json();
-        if (data.success) { allData = data.data; renderPage(currentPage); }
-        loadVendorList();
+        if (data.success) { allData = data.data; }
       } catch (e) { console.error('Load error:', e); }
+      try { renderPage(currentPage); } catch (e) { console.error('Render error:', e); }
+      loadVendorList();
     }
 
     // ══════════════════════════════════════════════════════════════
@@ -2431,7 +2466,7 @@
         const el = document.getElementById('letter_letterContent');
         const subjEl = document.getElementById('letter_subject');
         const refEl = document.getElementById('letter_allReferences');
-        const orgEl = document.getElementById('letter_organization');
+        const orgEl = document.getElementById('letter_org');
         if (el) { el.value = content; }
         if (subjEl) { subjEl.value = document.getElementById('reply_subject')?.value || ''; }
         if (refEl) { refEl.value = 'Ref: ' + (document.getElementById('reply_ref')?.value || ''); }
@@ -2571,8 +2606,8 @@
     
     function hideLogin() {
       document.getElementById('loginContainer').style.display = 'none';
-      document.querySelector('.sidebar').style.display = 'flex';
-      document.querySelector('.main').style.display = 'flex';
+      document.querySelector('.sidebar').style.display = '';
+      document.querySelector('.main').style.display = '';
       document.getElementById('userBadge').style.display = 'flex';
       document.getElementById('logoutBtn').style.display = 'inline-flex';
       const savedDepots = localStorage.getItem('docvault_depots');
