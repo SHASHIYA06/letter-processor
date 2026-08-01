@@ -185,6 +185,7 @@ function generateLetterPdf(data, outputPath) {
 
 // ══════════════════════════════════════════════════════════════
 //  NCR PDF - Official BEML Non-Conformity Report Format
+//  Matches reference: NCR_894_TS#14_TC1_L3_TFT
 // ══════════════════════════════════════════════════════════════
 function generateNCRPdf(data, outputPath) {
   return new Promise((resolve, reject) => {
@@ -194,221 +195,270 @@ function generateNCRPdf(data, outputPath) {
     const W = A4_W, H = A4_H, L = 40, R = W - 40, CW = R - L;
     let y = 12;
 
-    // Try to use official NCR header image
-    const ncrHeaderPath = getAssetPath('ncr-header.png');
-    const headerPath = getAssetPath('beml-letterhead-header.png');
+    // ── HEADER ──
     const logoPath = getAssetPath('beml-logo.jpg');
-    
-    if (fs.existsSync(ncrHeaderPath)) {
-      try {
-        doc.image(ncrHeaderPath, 0, 0, { width: W, fit: [W, 100] });
-        y = 105;
-      } catch (e) {}
-    } else if (fs.existsSync(headerPath)) {
-      try {
-        doc.image(headerPath, 0, 0, { width: W, fit: [W, 120] });
-        y = 115;
-      } catch (e) {}
-    } else {
-      // Fallback: Draw header manually
-      if (fs.existsSync(logoPath)) {
-        try { doc.image(logoPath, 12, y, { width: 60, height: 30, fit: 'contain' }); } catch (e) {}
-      }
-      doc.font('Times-Bold').fontSize(14).fillColor('#000').text('BEML LIMITED', 0, y + 2, { width: W, align: 'center' });
-      y += 18;
-      doc.font('Times-Roman').fontSize(7).fillColor('#333').text('A Government of India Enterprise | Ministry of Defence', 0, y, { width: W, align: 'center' });
-      y += 12;
-      doc.moveTo(L, y).lineTo(R, y).lineWidth(1).stroke('#000');
-      y += 8;
+    if (fs.existsSync(logoPath)) {
+      try { doc.image(logoPath, 12, y, { width: 55, height: 25, fit: 'contain' }); } catch (e) {}
     }
+    doc.font('Times-Bold').fontSize(12).fillColor('#000').text('NON-CONFORMITY REPORT', 0, y, { width: W, align: 'center' });
+    y += 18;
 
-    // Title
-    doc.font('Times-Bold').fontSize(14).fillColor('#000').text('NON-CONFORMITY REPORT', 0, y, { width: W, align: 'center' });
-    y += 22;
+    // ── TOP INFO BAR (OEM/SBU info + Report no) ──
+    const barH = 28;
+    doc.rect(L, y, CW, barH).lineWidth(0.4).stroke();
+    doc.font('Times-Roman').fontSize(7).fillColor('#000');
+    doc.text('OEM/ SBU-S&M / R&D/ PM/Purchase/ Quality', L + 4, y + 3, { width: CW / 2 - 10 });
+    doc.text(data.trainSet ? `${data.trainSet} ${data.car || ''} ${data.line || ''}` : '', L + 4, y + 13, { width: CW / 2 - 10 });
+    doc.font('Times-Bold').fontSize(7.5);
+    doc.text('Report no.', R - CW / 2 + 10, y + 3, { width: 60 });
+    doc.font('Times-Roman').fontSize(7.5);
+    doc.text(data.ncrNo || '---', R - CW / 2 + 70, y + 3, { width: CW / 2 - 80 });
+    doc.font('Times-Bold').fontSize(7.5);
+    doc.text('Distribution to:', R - CW / 2 + 10, y + 15, { width: 70 });
+    doc.font('Times-Roman').fontSize(7.5);
+    doc.text(data.distribution || '---', R - CW / 2 + 80, y + 15, { width: CW / 2 - 90 });
+    y += barH;
 
-    // NCR Number and Date row
-    const c1 = L, c2 = L + 130, c3 = L + 300, c4 = R, rowH = 20;
-    function drawRow(l1, v1, l2, v2, h) {
+    // ── MAIN DATA TABLE (4 columns: label1 | value1 | label2 | value2) ──
+    const col1 = L, col2 = L + 90, col3 = L + CW / 2, col4 = L + CW / 2 + 85, col5 = R;
+    const rowH = 17;
+
+    function drawCellRow(l1, v1, l2, v2, h) {
       const rh = h || rowH;
-      doc.moveTo(c1, y + rh).lineTo(c4, y + rh).lineWidth(0.4).stroke();
-      doc.moveTo(c2, y).lineTo(c2, y + rh).lineWidth(0.4).stroke();
-      if (l2) doc.moveTo(c3, y).lineTo(c3, y + rh).lineWidth(0.4).stroke();
-      doc.font('Times-Bold').fontSize(7.5).fillColor('#000');
-      if (l1) doc.text(l1, c1 + 3, y + 4, { width: c2 - c1 - 6 });
-      if (l2) doc.text(l2, c3 + 3, y + 4, { width: c4 - c3 - 6 });
-      doc.font('Times-Roman').fontSize(8);
-      if (v1 !== undefined) doc.text(v1 || '---', c2 + 3, y + 4, { width: c3 - c2 - 6 });
-      if (v2 !== undefined) doc.text(v2 || '---', c4 + 3, y + 4, { width: R - c4 - 6 });
+      doc.moveTo(col1, y + rh).lineTo(col5, y + rh).lineWidth(0.3).stroke();
+      doc.moveTo(col2, y).lineTo(col2, y + rh).lineWidth(0.3).stroke();
+      doc.moveTo(col3, y).lineTo(col3, y + rh).lineWidth(0.3).stroke();
+      doc.moveTo(col4, y).lineTo(col4, y + rh).lineWidth(0.3).stroke();
+      doc.font('Times-Bold').fontSize(7).fillColor('#000');
+      doc.text(l1, col1 + 3, y + 4, { width: col2 - col1 - 6 });
+      if (l2) doc.text(l2, col3 + 3, y + 4, { width: col4 - col3 - 6 });
+      doc.font('Times-Roman').fontSize(7.5);
+      if (v1 !== undefined) doc.text(v1 || '---', col2 + 3, y + 4, { width: col3 - col2 - 6 });
+      if (v2 !== undefined) doc.text(v2 || '---', col4 + 3, y + 4, { width: col5 - col4 - 6 });
       y += rh;
     }
 
-    // Row 1: NCR No + Date
-    drawRow('NCR Report No.', data.ncrNo, 'Date of NCR:', data.date);
-    // Row 2: Project + Detection Date
-    drawRow('Project:', data.project, 'Date of Detection:', data.detectionDate);
-    // Row 3: Issued By + Issued To (Responsibility)
-    drawRow('Issued By:', data.issuedBy || data.raisedBy, 'Issued To (Responsibility):', data.responsibility);
-    // Row 4: Product/Item
-    doc.moveTo(c1, y + rowH).lineTo(c4, y + rowH).lineWidth(0.4).stroke();
-    doc.font('Times-Bold').fontSize(7.5).fillColor('#000').text('Item Description:', c1 + 3, y + 4, { width: c2 - c1 - 6 });
-    doc.font('Times-Roman').fontSize(8).text(data.itemDesc || data.product || '---', c2 + 3, y + 4, { width: c4 - c2 - 6 });
-    y += rowH;
-    // Row 5: Part No + Qty
-    drawRow('Part Number:', data.partNo, 'Quantity:', data.qty);
-    // Row 6: Train Set + Car
-    drawRow('Train Set / Train No:', data.trainSet || data.trainNo || data.vehicleNo, 'Car / Vehicle:', data.car);
-    // Row 7: Vendor/OEM + Location
-    drawRow('Vendor / OEM:', data.vendor || data.supplier || data.oem, 'Location:', data.location || data.place);
-    // Row 8: Sub-System + System
-    drawRow('Sub-System:', data.subSystem, 'System:', data.system);
+    // Row 1: Project + Vehicle no
+    drawCellRow('Project', data.project || '---', 'Vehicle no.', data.vehicleNo || data.trainSet || '---');
+    // Row 2: Product + Assy dwg no
+    drawCellRow('Product', data.product || data.itemDesc || '---', 'Assy dwg no.', data.assyDwgNo || '---');
+    // Row 3: Quantity + Part no
+    drawCellRow('Quantity', data.qty || '---', 'Part no.', data.partNo || '---');
+    // Row 4: Supplier + Assy serial no
+    drawCellRow('Supplier', data.supplier || data.vendor || data.oem || '---', 'Assy serial no.', data.assySerialNo || '---');
+    // Row 5: Detection + Part serial no
+    drawCellRow('Detection', data.detectionDate || '---', 'Part serial no.', data.partSerialNo || '---');
+    // Row 6: Place + B/L No
+    drawCellRow('Place', data.place || data.location || '---', 'B/L No.', data.blNo || '---');
+    // Row 7: Stored at + Invoice no
+    drawCellRow('Stored at', data.storedAt || '---', 'Invoice no.', data.invoiceNo || '---');
 
+    // Row 8: Severity + Material status (with checkboxes)
+    const sevRowH = 28;
+    doc.moveTo(col1, y + sevRowH).lineTo(col5, y + sevRowH).lineWidth(0.3).stroke();
+    doc.moveTo(col2, y).lineTo(col2, y + sevRowH).lineWidth(0.3).stroke();
+    doc.moveTo(col3, y).lineTo(col3, y + sevRowH).lineWidth(0.3).stroke();
+    doc.font('Times-Bold').fontSize(7).fillColor('#000');
+    doc.text('Severity', col1 + 3, y + 4, { width: col2 - col1 - 6 });
+    doc.text('Material status', col3 + 3, y + 4, { width: col4 - col3 - 6 });
+    const svY = y + 13;
+    drawCheckbox(doc, col2 + 5, svY, data.severity === 'Critical');
+    doc.font('Times-Roman').fontSize(6.5).text(' Critical', col2 + 14, svY, { width: 45 });
+    drawCheckbox(doc, col2 + 55, svY, data.severity === 'Major');
+    doc.text(' Major', col2 + 64, svY, { width: 40 });
+    drawCheckbox(doc, col2 + 100, svY, data.severity === 'Minor');
+    doc.text(' Minor', col2 + 109, svY, { width: 40 });
+    const msY = y + 6;
+    drawCheckbox(doc, col3 + 5, msY, data.materialStatus === 'Before installation');
+    doc.font('Times-Roman').fontSize(6.5).text(' Before installation', col3 + 14, msY, { width: 90 });
+    drawCheckbox(doc, col3 + 5, msY + 10, data.materialStatus === 'Installed');
+    doc.text(' Installed', col3 + 14, msY + 10, { width: 60 });
+    drawCheckbox(doc, col3 + 80, msY + 10, data.materialStatus === 'Before receiving');
+    doc.text(' Before receiving', col3 + 89, msY + 10, { width: 80 });
+    y += sevRowH;
+
+    // Row 9: Responsible party + Disassembled
+    const respRowH = 17;
+    doc.moveTo(col1, y + respRowH).lineTo(col5, y + respRowH).lineWidth(0.3).stroke();
+    doc.moveTo(col2, y).lineTo(col2, y + respRowH).lineWidth(0.3).stroke();
+    doc.moveTo(col3, y).lineTo(col3, y + respRowH).lineWidth(0.3).stroke();
+    doc.font('Times-Bold').fontSize(7).fillColor('#000');
+    doc.text('Responsible party', col1 + 3, y + 4, { width: col2 - col1 - 6 });
+    doc.text('Disassembled', col3 + 3, y + 4, { width: col4 - col3 - 6 });
+    doc.font('Times-Roman').fontSize(7.5);
+    doc.text(data.responsibility || '---', col2 + 3, y + 4, { width: col3 - col2 - 6 });
+    drawCheckbox(doc, col4 + 5, y + 5, data.disassembled === 'Yes');
+    doc.font('Times-Roman').fontSize(6.5).text(' Yes', col4 + 14, y + 5, { width: 30 });
+    y += respRowH;
+
+    // ── OUTERMOST BORDER ──
+    // (Already drawn by rows)
+
+    // ── DESCRIPTION OF NON-CONFORMITY ──
+    y += 4;
+    y = checkPageBreak(doc, y, 70, L, R);
+    doc.moveTo(col1, y).lineTo(col5, y).lineWidth(0.4).stroke();
+    doc.font('Times-Bold').fontSize(7.5).fillColor('#000').text('Description of non-conformity:', col1 + 3, y + 4);
+    y += 14;
+    doc.font('Times-Roman').fontSize(7.5).fillColor('#000').text(data.ncrDesc || '---', col1 + 6, y, { width: CW - 12, lineGap: 2 });
+    y = doc.y + 4;
+    doc.font('Times-Italic').fontSize(6.5).fillColor('#444').text('Attached documents (if any):', col1 + 3, y);
+    y += 10;
+    doc.moveTo(col1, y).lineTo(col5, y).lineWidth(0.4).stroke();
     y += 2;
 
-    // Severity row with checkboxes
-    doc.moveTo(c1, y + rowH).lineTo(c4, y + rowH).lineWidth(0.4).stroke();
-    doc.moveTo(c2, y).lineTo(c2, y + rowH).lineWidth(0.4).stroke();
-    doc.font('Times-Bold').fontSize(7.5).fillColor('#000').text('Severity:', c1 + 3, y + 4, { width: c2 - c1 - 6 });
-    const sv = y + 6;
-    drawCheckbox(doc, c2 + 8, sv, data.severity === 'Critical');
-    doc.font('Times-Roman').fontSize(7.5).text(' Critical', c2 + 18, sv, { width: 55 });
-    drawCheckbox(doc, c2 + 70, sv, data.severity === 'Major');
-    doc.text(' Major', c2 + 80, sv, { width: 50 });
-    drawCheckbox(doc, c2 + 120, sv, data.severity === 'Minor');
-    doc.text(' Minor', c2 + 130, sv, { width: 50 });
-    doc.font('Times-Bold').fontSize(7.5).text('NCR Category:', c3 + 3, y + 4, { width: c4 - c3 - 6 });
-    doc.font('Times-Roman').fontSize(8).text(data.ncrCategory || '---', c4 + 3, y + 4, { width: R - c4 - 6 });
-    y += rowH;
-
-    // Description of Non-Conformity
-    y = checkPageBreak(doc, y, 80, L, R);
-    doc.moveTo(c1, y).lineTo(c4, y).lineWidth(0.4).stroke();
-    doc.font('Times-Bold').fontSize(8).fillColor('#000').text('Description of Non-Conformity:', c1 + 3, y + 4);
-    y += 14;
-    doc.font('Times-Roman').fontSize(8).fillColor('#000').text(data.ncrDesc || '---', c1 + 6, y, { width: CW - 12, lineGap: 3 });
-    const descLines = Math.ceil((data.ncrDesc || '').length / 90);
-    y += Math.max(25, descLines * 11 + 15);
-    doc.moveTo(c1, y).lineTo(c4, y).lineWidth(0.4).stroke();
-    y += 4;
-
-    // Attached Documents table
-    y = checkPageBreak(doc, y, 60, L, R);
-    doc.font('Times-Bold').fontSize(7).fillColor('#666').text('Attached Documents (if any):', c1 + 3, y);
-    y += 10;
-    const tC = [c1, c1 + 80, c1 + 200, c1 + 320, c4];
-    const tH = 14;
-    doc.moveTo(c1, y).lineTo(c4, y).lineWidth(0.3).stroke();
-    doc.moveTo(c1, y + tH).lineTo(c4, y + tH).lineWidth(0.3).stroke();
+    // ── ATTACHED DOCUMENTS TABLE ──
+    y = checkPageBreak(doc, y, 30, L, R);
+    const tC = [col1, col1 + 80, col1 + 180, col1 + 300, col5];
+    const tH = 13;
+    doc.moveTo(col1, y).lineTo(col5, y).lineWidth(0.3).stroke();
+    doc.moveTo(col1, y + tH).lineTo(col5, y + tH).lineWidth(0.3).stroke();
     tC.forEach((cx, i) => { if (i > 0) doc.moveTo(cx, y).lineTo(cx, y + tH).lineWidth(0.3).stroke(); });
     doc.font('Times-Bold').fontSize(6.5).fillColor('#000');
     doc.text('Date', tC[0] + 2, y + 3, { width: 76 });
-    doc.text('Team', tC[1] + 2, y + 3, { width: 116 });
-    doc.text('Issued By', tC[2] + 2, y + 3, { width: 116 });
-    doc.text('Reviewed & Approved By', tC[3] + 2, y + 3, { width: R - tC[3] - 2 });
+    doc.text('Team', tC[1] + 2, y + 3, { width: 96 });
+    doc.text('Issued by', tC[2] + 2, y + 3, { width: 116 });
+    doc.text('Reviewed & approved by', tC[3] + 2, y + 3, { width: R - tC[3] - 2 });
     y += tH;
     doc.font('Times-Roman').fontSize(7);
     doc.text(data.detectionDate || '---', tC[0] + 2, y + 3, { width: 76 });
-    doc.text(data.team || '---', tC[1] + 2, y + 3, { width: 116 });
+    doc.text(data.team || '---', tC[1] + 2, y + 3, { width: 96 });
     doc.text(data.issuedBy || '---', tC[2] + 2, y + 3, { width: 116 });
     doc.text(data.reviewedBy || '---', tC[3] + 2, y + 3, { width: R - tC[3] - 2 });
-    y += tH + 6;
+    y += tH + 4;
 
-    // Cause of Non-Conformity
+    // ── CAUSE OF NON-CONFORMITY ──
     y = checkPageBreak(doc, y, 60, L, R);
-    doc.moveTo(c1, y).lineTo(c4, y).lineWidth(0.4).stroke();
-    doc.font('Times-Bold').fontSize(8).fillColor('#000').text('Cause of Non-Conformity:', c1 + 3, y + 4);
+    doc.moveTo(col1, y).lineTo(col5, y).lineWidth(0.4).stroke();
+    doc.font('Times-Bold').fontSize(7.5).fillColor('#000').text('Cause of non-conformity:', col1 + 3, y + 4);
     y += 14;
-    doc.font('Times-Roman').fontSize(8).text(data.cause || data.rootCause || '---', c1 + 6, y, { width: CW - 12, lineGap: 3 });
-    const causeLines = Math.ceil((data.cause || data.rootCause || '').length / 90);
-    y += Math.max(20, causeLines * 11 + 10);
-    doc.moveTo(c1, y).lineTo(c4, y).lineWidth(0.4).stroke();
-    y += 6;
+    doc.font('Times-Roman').fontSize(7.5).text(data.cause || data.rootCause || '---', col1 + 6, y, { width: CW - 12, lineGap: 2 });
+    y = doc.y + 4;
+    doc.font('Times-Italic').fontSize(6.5).fillColor('#444').text('Attached documents (if any):', col1 + 3, y);
+    y += 10;
+    doc.moveTo(col1, y).lineTo(col5, y).lineWidth(0.4).stroke();
+    y += 2;
 
-    // Correction / Corrective Action
+    // ── CORRECTION / CORRECTIVE ACTION RESULT ──
     y = checkPageBreak(doc, y, 70, L, R);
-    doc.moveTo(c1, y).lineTo(c4, y).lineWidth(0.4).stroke();
-    doc.font('Times-Bold').fontSize(8).fillColor('#000').text('Correction / Corrective Action Result:', c1 + 3, y + 4);
+    doc.moveTo(col1, y).lineTo(col5, y).lineWidth(0.4).stroke();
+    doc.font('Times-Bold').fontSize(7.5).fillColor('#000').text('Correction / Corrective Action Result:', col1 + 3, y + 4);
     y += 14;
-    doc.font('Times-Roman').fontSize(8).text(data.correction || data.correctiveAction || '---', c1 + 6, y, { width: CW - 12, lineGap: 3 });
-    const corrLines = Math.ceil((data.correction || data.correctiveAction || '').length / 90);
-    y += Math.max(20, corrLines * 11 + 10);
+    doc.font('Times-Roman').fontSize(7.5).text(data.correction || data.correctiveAction || '---', col1 + 6, y, { width: CW - 12, lineGap: 2 });
+    y = doc.y + 3;
     if (data.healthySl || data.faultySl) {
-      doc.font('Times-Roman').fontSize(8);
-      if (data.healthySl) { doc.text('Healthy Sl. No: ' + data.healthySl, c1 + 20, y); y += 11; }
-      if (data.faultySl) { doc.text('Faulty Sl. No: ' + data.faultySl, c1 + 20, y); y += 11; }
+      doc.font('Times-Roman').fontSize(7.5);
+      if (data.healthySl) { doc.text('In (Healthy) Sl. No: ' + data.healthySl, col1 + 10, y); y += 11; }
+      if (data.faultySl) { doc.text('Out (Faulty) Sl. No: ' + data.faultySl, col1 + 10, y); y += 11; }
     }
-    doc.moveTo(c1, y).lineTo(c4, y).lineWidth(0.4).stroke();
-    y += 6;
+    doc.font('Times-Italic').fontSize(6.5).fillColor('#444').text('Attached documents (if any):', col1 + 3, y);
+    y += 10;
+    doc.moveTo(col1, y).lineTo(col5, y).lineWidth(0.4).stroke();
+    y += 2;
 
-    // Preventive Action
-    y = checkPageBreak(doc, y, 40, L, R);
-    doc.moveTo(c1, y).lineTo(c4, y).lineWidth(0.4).stroke();
-    doc.font('Times-Bold').fontSize(8).fillColor('#000').text('Preventive Action:', c1 + 3, y + 4);
-    y += 14;
-    doc.font('Times-Roman').fontSize(8).text(data.preventiveAction || '---', c1 + 6, y, { width: CW - 12, lineGap: 3 });
-    const prevLines = Math.ceil((data.preventiveAction || '').length / 90);
-    y += Math.max(18, prevLines * 11 + 8);
-    doc.moveTo(c1, y).lineTo(c4, y).lineWidth(0.4).stroke();
-    y += 6;
-
-    // Decision checkboxes
-    y = checkPageBreak(doc, y, 40, L, R);
-    doc.moveTo(c1, y).lineTo(c4, y).lineWidth(0.4).stroke();
-    doc.font('Times-Bold').fontSize(8).fillColor('#000').text('Decision:', c1 + 3, y + 4);
-    y += 14;
-    const decisions = ['Claim', 'Holding', 'Use as is', 'Rework', 'Waiver', 'Scrap', 'Repair'];
-    let dx = c1 + 10;
-    decisions.forEach(d => {
-      drawCheckbox(doc, dx, y, data.decision === d);
-      doc.font('Times-Roman').fontSize(7).text(' ' + d, dx + 10, y, { width: 55 });
-      dx += 65;
-      if (dx > c4 - 60) { dx = c1 + 10; y += 12; }
+    // ── REVIEW TABLE ──
+    y = checkPageBreak(doc, y, 50, L, R);
+    const rC = [col1, col1 + 55, col1 + 140, col1 + 280, col1 + 350, col5];
+    const rH = 14;
+    // Header row
+    doc.moveTo(col1, y).lineTo(col5, y).lineWidth(0.3).stroke();
+    doc.moveTo(col1, y + rH).lineTo(col5, y + rH).lineWidth(0.3).stroke();
+    rC.forEach((cx, i) => { if (i > 0) doc.moveTo(cx, y).lineTo(cx, y + rH + rH).lineWidth(0.3).stroke(); });
+    doc.font('Times-Bold').fontSize(6.5).fillColor('#000');
+    doc.text('Reviewed by', rC[0] + 2, y + 3, { width: 50 });
+    doc.text('Date', rC[1] + 2, y + 3, { width: 80 });
+    doc.text('Action by', rC[2] + 2, y + 3, { width: 130 });
+    doc.text('Decision', rC[3] + 2, y + 3, { width: 65 });
+    doc.text('Name', rC[4] + 2, y + 3, { width: R - rC[4] - 2 });
+    y += rH;
+    // Decision checkboxes in review row
+    const dY = y + 3;
+    let dX = rC[3] + 2;
+    ['Claim', 'Holding', 'Use as is', 'Rework'].forEach(d => {
+      drawCheckbox(doc, dX, dY, data.decision === d);
+      doc.font('Times-Roman').fontSize(5.5).text(d, dX + 9, dY, { width: 50 });
+      dX += 48;
     });
-    y += 16;
-    doc.moveTo(c1, y).lineTo(c4, y).lineWidth(0.4).stroke();
-    y += 6;
+    doc.font('Times-Roman').fontSize(6.5);
+    doc.text('Date', rC[4] + 2, y + 3, { width: R - rC[4] - 2 });
+    y += rH;
 
-    // Status and Closure
-    y = checkPageBreak(doc, y, 50, L, R);
-    doc.moveTo(c1, y).lineTo(c4, y).lineWidth(0.4).stroke();
-    doc.font('Times-Bold').fontSize(8).fillColor('#000').text('Status & Closure:', c1 + 3, y + 4);
-    y += 14;
-    doc.font('Times-Roman').fontSize(8);
-    doc.text('Status: ' + (data.status || 'Open'), c1 + 6, y, { width: 200 });
-    doc.text('Closure Date: ' + (data.closureDate || '---'), c1 + 220, y, { width: 150 });
-    doc.text('Closure Authority: ' + (data.closureAuthority || '---'), c1 + 6, y + 12, { width: CW - 12 });
-    y += 28;
-    doc.moveTo(c1, y).lineTo(c4, y).lineWidth(0.4).stroke();
-    y += 6;
+    // Second review row
+    doc.moveTo(col1, y + rH).lineTo(col5, y + rH).lineWidth(0.3).stroke();
+    rC.forEach((cx, i) => { if (i > 0) doc.moveTo(cx, y).lineTo(cx, y + rH).lineWidth(0.3).stroke(); });
+    const dY2 = y + 3;
+    let dX2 = rC[3] + 2;
+    ['Waiver', 'Scrap', 'Repair'].forEach(d => {
+      drawCheckbox(doc, dX2, dY2, data.decision === d);
+      doc.font('Times-Roman').fontSize(5.5).text(d, dX2 + 9, dY2, { width: 50 });
+      dX2 += 48;
+    });
+    doc.font('Times-Bold').fontSize(6.5).fillColor('#000');
+    doc.text('Sign', rC[4] + 2, y + 3, { width: R - rC[4] - 2 });
+    y += rH + 2;
 
-    // Approved By table
-    y = checkPageBreak(doc, y, 50, L, R);
-    doc.moveTo(c1, y).lineTo(c4, y).lineWidth(0.4).stroke();
-    const aC = [c1, c1 + 80, c1 + 200, c1 + 320, c4];
-    doc.moveTo(c1, y + 16).lineTo(c4, y + 16).lineWidth(0.3).stroke();
-    doc.moveTo(c1, y + 32).lineTo(c4, y + 32).lineWidth(0.3).stroke();
-    aC.forEach((cx, i) => { if (i > 0) { doc.moveTo(cx, y).lineTo(cx, y + 32).lineWidth(0.3).stroke(); } });
-    doc.font('Times-Bold').fontSize(7).fillColor('#000');
-    doc.text('Approved By', aC[0] + 2, y + 3, { width: 76 });
+    // ── VERIFICATION TABLE ──
+    y = checkPageBreak(doc, y, 40, L, R);
+    const vC = [col1, col1 + 110, col1 + 180, col5];
+    const vH = 14;
+    // Verification on correction
+    doc.moveTo(col1, y).lineTo(col5, y).lineWidth(0.3).stroke();
+    doc.moveTo(col1, y + vH).lineTo(col5, y + vH).lineWidth(0.3).stroke();
+    vC.forEach((cx, i) => { if (i > 0) doc.moveTo(cx, y).lineTo(cx, y + vH * 2).lineWidth(0.3).stroke(); });
+    doc.font('Times-Bold').fontSize(6.5).fillColor('#000');
+    doc.text('Verification on correction', col1 + 3, y + 4, { width: vC[1] - col1 - 6 });
+    doc.text('Name', vC[1] + 2, y + 4, { width: vC[2] - vC[1] - 4 });
+    doc.text('Date', vC[2] + 2, y + 4, { width: vC[3] - vC[2] - 4 });
+    doc.text('Sign', vC[3] + 2, y + 4, { width: R - vC[3] - 2 });
+    y += vH;
+    // Verification on corrective action
+    doc.moveTo(col1, y + vH).lineTo(col5, y + vH).lineWidth(0.3).stroke();
+    vC.forEach((cx, i) => { if (i > 0) doc.moveTo(cx, y).lineTo(cx, y + vH).lineWidth(0.3).stroke(); });
+    doc.font('Times-Bold').fontSize(6.5).fillColor('#000');
+    doc.text('Verification on corrective action', col1 + 3, y + 4, { width: vC[1] - col1 - 6 });
+    y += vH;
+
+    // ── APPROVAL TABLE ──
+    y = checkPageBreak(doc, y, 40, L, R);
+    const aC = [col1, col1 + 60, col1 + 180, col1 + 300, col5];
+    const aH = 14;
+    doc.moveTo(col1, y).lineTo(col5, y).lineWidth(0.3).stroke();
+    doc.moveTo(col1, y + aH).lineTo(col5, y + aH).lineWidth(0.3).stroke();
+    aC.forEach((cx, i) => { if (i > 0) doc.moveTo(cx, y).lineTo(cx, y + aH).lineWidth(0.3).stroke(); });
+    doc.font('Times-Bold').fontSize(6.5).fillColor('#000');
+    doc.text('Approved by', aC[0] + 2, y + 3, { width: 55 });
     doc.text('Entity', aC[1] + 2, y + 3, { width: 116 });
     doc.text('Position', aC[2] + 2, y + 3, { width: 116 });
-    doc.text('Name', aC[3] + 2, y + 3, { width: R - aC[3] - 2 });
+    doc.text('Sign', aC[3] + 2, y + 3, { width: R - aC[3] - 2 });
+    y += aH;
+    // Approval scope row
+    doc.moveTo(col1, y + aH).lineTo(col5, y + aH).lineWidth(0.3).stroke();
+    aC.forEach((cx, i) => { if (i > 0) doc.moveTo(cx, y).lineTo(cx, y + aH).lineWidth(0.3).stroke(); });
+    doc.font('Times-Bold').fontSize(6.5).fillColor('#000');
+    doc.text('Approval', col1 + 3, y + 4, { width: 55 });
+    const apprY = y + 4;
+    drawCheckbox(doc, aC[0] + 3, apprY + 10, data.approvalScope === 'Internal');
+    doc.font('Times-Roman').fontSize(6).text(' Internal', aC[0] + 12, apprY + 10, { width: 40 });
+    drawCheckbox(doc, aC[0] + 55, apprY + 10, data.approvalScope === 'Customer');
+    doc.text(' Customer', aC[0] + 64, apprY + 10, { width: 45 });
+    doc.text(data.approvedBy || '---', aC[1] + 2, y + 4, { width: 116 });
+    doc.text(data.approvedPosition || '---', aC[2] + 2, y + 4, { width: 116 });
+    doc.font('Times-Bold').fontSize(6.5);
+    doc.text('Issued by', aC[3] + 2, y + 4, { width: R - aC[3] - 2 });
+    y += aH;
+
+    // ── REPAIR PROCEDURE ──
+    y = checkPageBreak(doc, y, 20, L, R);
+    doc.moveTo(col1, y).lineTo(col5, y).lineWidth(0.3).stroke();
+    doc.font('Times-Bold').fontSize(7).fillColor('#000').text('Repair procedure', col1 + 3, y + 4);
+    drawCheckbox(doc, col1 + 90, y + 5, data.repairProcedure === 'Yes');
+    doc.font('Times-Roman').fontSize(7).text(' Yes', col1 + 99, y + 5, { width: 25 });
+    drawCheckbox(doc, col1 + 125, y + 5, data.repairProcedure === 'No');
+    doc.text(' No', col1 + 134, y + 5, { width: 25 });
     y += 16;
-    doc.font('Times-Roman').fontSize(7);
-    doc.text(data.approvedBy || '---', aC[0] + 2, y + 3, { width: 76 });
-    doc.text(data.approvedEntity || '---', aC[1] + 2, y + 3, { width: 116 });
-    doc.text(data.approvedPosition || '---', aC[2] + 2, y + 3, { width: 116 });
-    doc.text(data.approvedDate || '---', aC[3] + 2, y + 3, { width: R - aC[3] - 2 });
-    y += 36;
+    doc.moveTo(col1, y).lineTo(col5, y).lineWidth(0.4).stroke();
 
-    // Remarks at bottom
-    if (data.remarks) {
-      y = checkPageBreak(doc, y, 30, L, R);
-      doc.font('Times-Bold').fontSize(8).fillColor('#000').text('Remarks:', c1 + 3, y);
-      y += 12;
-      doc.font('Times-Roman').fontSize(8).text(data.remarks, c1 + 6, y, { width: CW - 12 });
-    }
-
-    // Add BEML footer
+    // ── BEML FOOTER ──
     drawBEMLFooter(doc, W, H);
 
     doc.end();

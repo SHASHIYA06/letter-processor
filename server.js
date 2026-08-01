@@ -242,7 +242,10 @@ const NCR_COLUMNS = [
   'NCR Category', 'NCR Type', 'Severity', 'Priority', 'System',
   'Location', 'Vendor', 'Raised By', 'Assigned To',
   'Root Cause', 'Corrective Action', 'Preventive Action', 'Disposition',
-  'Closure Date', 'Closure Authority'
+  'Closure Date', 'Closure Authority', 'Distribution', 'Assy Dwg No',
+  'Rev', 'Assy Serial No', 'Part Serial No', 'Place', 'B/L No',
+  'Stored At', 'Invoice No', 'Material Status', 'Disassembled',
+  'Approval Scope', 'Repair Procedure'
 ];
 
 // ══════════════════════════════════════════════════════════════
@@ -907,7 +910,7 @@ app.post('/api/ncr/create', authenticateToken, async (req, res) => {
 app.post('/api/ncr/update', authenticateToken, async (req, res) => {
   try {
     const { rowIndex, data } = req.body;
-    // Build row data based on NCR_COLUMNS (49 columns)
+    // Build row data based on NCR_COLUMNS
     const ncrRow = [
       rowIndex, // S.No (keep original)
       data.ncrNo || '', data.date || '', data.detectionDate || '', data.itemDesc || data.product || '',
@@ -922,7 +925,12 @@ app.post('/api/ncr/update', authenticateToken, async (req, res) => {
       data.ncrCategory || '', data.ncrType || '', data.severity || '', data.priority || '', data.system || '',
       data.location || '', data.vendor || data.supplier || '', data.raisedBy || data.issuedBy || '', data.assignedTo || '',
       data.rootCause || data.cause || '', data.correctiveAction || data.correction || '', data.preventiveAction || '',
-      data.disposition || '', data.closureDate || '', data.closureAuthority || ''
+      data.disposition || '', data.closureDate || '', data.closureAuthority || '',
+      data.distribution || '', data.assyDwgNo || '', data.rev || '',
+      data.assySerialNo || '', data.partSerialNo || '', data.place || '',
+      data.blNo || '', data.storedAt || '', data.invoiceNo || '',
+      data.materialStatus || '', data.disassembled || '',
+      data.approvalScope || '', data.repairProcedure || ''
     ];
     if (sheets) {
       const updates = [];

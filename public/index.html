@@ -1360,6 +1360,14 @@
                   <div class="form-group"><label>Closure Date</label><input type="date" id="ncr_closureDate" onchange="updateNCRPreview()"></div>
                 </div>
                 <div class="form-group"><label>Closure Authority</label><input id="ncr_closureAuthority" onchange="updateNCRPreview()"></div>
+                <div class="form-row">
+                  <div class="form-group"><label>Approval Scope</label><select id="ncr_approvalScope" onchange="updateNCRPreview()">
+                    <option value="">Select</option><option value="Internal">Internal</option><option value="Customer">Customer</option>
+                  </select></div>
+                  <div class="form-group"><label>Repair Procedure</label><select id="ncr_repairProcedure" onchange="updateNCRPreview()">
+                    <option value="">Select</option><option value="Yes">Yes</option><option value="No">No</option>
+                  </select></div>
+                </div>
                 <div class="form-group"><label>Remarks</label><textarea id="ncr_remarks" rows="3" onchange="updateNCRPreview()"></textarea></div>
               </div>
             </div>
@@ -1441,6 +1449,8 @@
         status: getField('ncr_status') || 'Open',
         closureDate: getField('ncr_closureDate'),
         closureAuthority: getField('ncr_closureAuthority'),
+        approvalScope: getField('ncr_approvalScope'),
+        repairProcedure: getField('ncr_repairProcedure'),
         remarks: getField('ncr_remarks'),
         trainNo: (getField('ncr_trainSet') || getField('ncr_vehicleNo') || '').replace(/TS#?/i, '').split(/\s/)[0]
       };
@@ -2085,7 +2095,8 @@
           'Raised By':'raisedBy','Assigned To':'assignedTo',
           'Root Cause':'rootCause','Corrective Action':'correction',
           'Preventive Action':'preventiveAction','Disposition':'disposition',
-          'Closure Date':'closureDate','Closure Authority':'closureAuthority'
+          'Closure Date':'closureDate','Closure Authority':'closureAuthority',
+          'Approval Scope':'approvalScope','Repair Procedure':'repairProcedure'
         };
         headers.forEach((h, i) => { if (NCR_KEY_MAP[h] && record[i]) data[NCR_KEY_MAP[h]] = record[i]; });
         authFetch('/api/ncr/generate-pdf', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(data) })
