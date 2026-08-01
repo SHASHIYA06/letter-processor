@@ -6,6 +6,19 @@ import { Document, Packer, Paragraph, TextRun, AlignmentType, BorderStyle, Table
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
+// Asset path resolution for Vercel
+function getAssetPath(filename) {
+  const candidates = [
+    path.join(__dirname, 'assets', filename),
+    path.join('/var/task', 'assets', filename),
+    path.join(process.cwd(), 'assets', filename),
+  ];
+  for (const p of candidates) {
+    if (fs.existsSync(p)) return p;
+  }
+  return candidates[0];
+}
+
 const PAGE_MARGIN_BOTTOM = 50;
 const A4_W = 595.28, A4_H = 841.89;
 
@@ -28,8 +41,8 @@ function drawCheckbox(doc, x, y, checked) {
 //  BEML LETTER HEADER - Official Format (uses letterhead image)
 // ══════════════════════════════════════════════════════════════
 function drawBEMLHeader(doc, W) {
-  const headerPath = path.join(__dirname, 'assets', 'beml-letterhead-header.png');
-  const logoPath = path.join(__dirname, 'assets', 'beml-logo.jpg');
+  const headerPath = getAssetPath('beml-letterhead-header.png');
+  const logoPath = getAssetPath('beml-logo.jpg');
   
   // Try to use the official letterhead header image
   if (fs.existsSync(headerPath)) {
@@ -60,7 +73,7 @@ function drawBEMLHeader(doc, W) {
 }
 
 function drawBEMLFooter(doc, W, H) {
-  const footerPath = path.join(__dirname, 'assets', 'beml-letterhead-footer.png');
+  const footerPath = getAssetPath('beml-letterhead-footer.png');
   
   // Try to use the official letterhead footer image
   if (fs.existsSync(footerPath)) {
@@ -182,9 +195,9 @@ function generateNCRPdf(data, outputPath) {
     let y = 12;
 
     // Try to use official NCR header image
-    const ncrHeaderPath = path.join(__dirname, 'assets', 'ncr-header.png');
-    const headerPath = path.join(__dirname, 'assets', 'beml-letterhead-header.png');
-    const logoPath = path.join(__dirname, 'assets', 'beml-logo.jpg');
+    const ncrHeaderPath = getAssetPath('ncr-header.png');
+    const headerPath = getAssetPath('beml-letterhead-header.png');
+    const logoPath = getAssetPath('beml-logo.jpg');
     
     if (fs.existsSync(ncrHeaderPath)) {
       try {
