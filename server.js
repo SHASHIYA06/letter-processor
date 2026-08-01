@@ -1869,6 +1869,190 @@ app.post('/api/master-data/:category', async (req, res) => {
   }
 });
 
+// ══════════════════════════════════════════════════════════════
+//  AI INTEGRATION - Letter & NCR Generation
+// ══════════════════════════════════════════════════════════════
+
+async function callAI(prompt, systemPrompt) {
+  const apiKey = process.env.AI_API_KEY || process.env.OPENAI_API_KEY || '';
+  const provider = (process.env.AI_PROVIDER || 'openai').toLowerCase();
+  const model = process.env.AI_MODEL || 'gpt-4o-mini';
+
+  if (!apiKey) throw new Error('AI API key not configured. Set AI_API_KEY in environment.');
+
+  if (provider === 'gemini') {
+    const geminiModel = process.env.AI_MODEL || 'gemini-2.0-flash';
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent?key=${apiKey}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ contents: [{ parts: [{ text: (systemPrompt || '') + '\n\n' + prompt }] }] })
+    });
+    const data = await res.json();
+    if (data.error) throw new Error(data.error.message || 'Gemini API error');
+    return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+  }
+
+  const res = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+    body: JSON.stringify({
+      model, temperature: 0.7, max_tokens: 4000,
+      messages: [
+        { role: 'system', content: systemPrompt || 'You are an expert BEML railway documentation assistant. Generate professional, formal, technically accurate content following Indian railway documentation standards.' },
+        { role: 'user', content: prompt }
+      ]
+    })
+  });
+  const data = await res.json();
+  if (data.error) throw new Error(data.error.message || 'OpenAI API error');
+  return data.choices?.[0]?.message?.content || '';
+}
+
+app.post('/api/ai/generate-letter', async (req, res) => {
+  try {
+    const { org, subject, recipient, context, tone, letterType } = req.body;
+    const orgName = org || 'BEML';
+    const prompt = `Generate a professional ${orgName} official letter with the following details:
+Subject: ${subject || 'To be determined'}
+Recipient: ${recipient || 'Sir/Madam'}
+Context/Purpose: ${context || 'Official correspondence'}
+Letter Type: ${letterType || 'General'}
+Tone: ${tone || 'Professional and formal'}
+
+Generate the complete letter body in professional railway documentation style. Include proper salutation, structured body paragraphs, and formal closing. Use Indian English and official government/PSU communication style.`;
+
+    const content = await callAI(prompt);
+    res.json({ success: true, content });
+  } catch (e) { res.status(500).json({ success: false, error: e.message }); }
+});
+
+app.post('/api/ai/generate-reply', async (req, res) => {
+  try {
+    const { originalLetter, originalRef, originalSubject, originalFrom, org, customInstructions } = req.body;
+    const prompt = `You are an expert BEML (Bharat Earth Movers Limited) correspondence officer. Generate a professional REPLY letter from BEML against the following incoming letter:
+
+Original Reference: ${originalRef || 'Not specified'}
+From: ${originalFrom || 'Not specified'}
+Subject: ${originalSubject || 'Not specified'}
+Original Letter Content:
+${originalLetter || 'Not provided'}
+
+${customInstructions ? `Additional Instructions: ${customInstructions}` : ''}
+
+Generate a complete BEML reply letter including:
+1. BEML Reference Number format: BEML/PROJECT/DEPT/NUMBER/YEAR
+2. Date
+3. To address (respond to the original sender)
+4. Subject line with "Re:" prefix and original reference
+5. Proper reference to original letter
+6. Professional response addressing all points
+7. Technical commitments if applicable
+8. Proper closing with for BEML Limited
+
+Use formal Indian PSU communication style. Be technically precise and professional.`;
+
+    const content = await callAI(prompt, 'You are an expert BEML letter drafting assistant. Generate professional reply letters in BEML official format. Use Indian English, formal PSU communication style, and railway engineering terminology.');
+    res.json({ success: true, content });
+  } catch (e) { res.status(500).json({ success: false, error: e.message }); }
+});
+
+app.post('/api/ai/generate-ncr', async (req, res) => {
+  try {
+    const { project, itemDesc, severity, context, trainNo, car, vendor } = req.body;
+    const prompt = `Generate a professional BEML Non-Conformity Report (NCR) content with the following details:
+
+Project: ${project || 'Not specified'}
+Item/Product: ${itemDesc || 'Not specified'}
+Severity: ${severity || 'Major'}
+Train No: ${trainNo || 'Not specified'}
+Car: ${car || 'Not specified'}
+Vendor/OEM: ${vendor || 'Not specified'}
+Context/Issue: ${context || 'Not specified'}
+
+Generate the following NCR sections:
+1. Description of Non-Conformity (detailed technical description)
+2. Root Cause Analysis (systematic root cause with 5-Why analysis)
+3. Corrective Action (immediate fix and long-term correction)
+4. Preventive Action (measures to prevent recurrence)
+5. Disposition recommendation
+
+Use professional railway engineering language, BEML standards, and Indian railway terminology. Be technically precise.`;
+
+    const content = await callAI(prompt, 'You are an expert BEML quality assurance engineer. Generate professional NCR content using railway engineering terminology, Indian railway standards, and formal quality documentation style.');
+    res.json({ success: true, content });
+  } catch (e) { res.status(500).json({ success: false, error: e.message }); }
+});
+
+app.post('/api/ai/improve-content', async (req, res) => {
+  try {
+    const { content, type, instructions } = req.body;
+    const typeLabel = type === 'ncr' ? 'NCR' : type === 'letter' ? 'official letter' : 'document';
+    const prompt = `Improve the following ${typeLabel} content. Make it more professional, technically accurate, and well-structured:
+
+Original Content:
+${content}
+
+${instructions ? `Specific improvements requested: ${instructions}` : ''}
+
+Return the improved content maintaining the same structure and key information. Use formal Indian PSU/railway documentation style.`;
+
+    const improved = await callAI(prompt);
+    res.json({ success: true, content: improved });
+  } catch (e) { res.status(500).json({ success: false, error: e.message }); }
+});
+
+app.get('/api/ai/status', (req, res) => {
+  const hasKey = !!(process.env.AI_API_KEY || process.env.OPENAI_API_KEY);
+  res.json({ configured: hasKey, provider: process.env.AI_PROVIDER || 'openai', model: process.env.AI_MODEL || 'gpt-4o-mini' });
+});
+
+// ══════════════════════════════════════════════════════════════
+//  REPLY LETTER GENERATION - Parse incoming & generate BEML reply
+// ══════════════════════════════════════════════════════════════
+
+app.post('/api/letter/generate-reply', async (req, res) => {
+  try {
+    const { letterContent, refNumber, subject, from, to, org } = req.body;
+    const incomingText = letterContent || req.body.text || '';
+    const parsed = parseLetterContent(incomingText, org || 'BEML');
+
+    const replyData = {
+      incomingRef: refNumber || parsed.refLetterNumber || '',
+      incomingSubject: subject || parsed.subject || '',
+      incomingFrom: from || parsed.from || '',
+      incomingDate: parsed.date || '',
+      incomingTo: parsed.to || '',
+      incomingContent: incomingText.substring(0, 2000),
+      replySubject: 'Re: ' + (subject || parsed.subject || 'Your correspondence'),
+      replyTo: from || parsed.from || '',
+      replyDate: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+    };
+
+    let aiReply = '';
+    try {
+      const prompt = `Generate a BEML reply letter against:
+From: ${replyData.incomingFrom}
+Ref: ${replyData.incomingRef}
+Subject: ${replyData.incomingSubject}
+Content: ${replyData.incomingContent}
+
+Generate a professional BEML reply with proper reference, technical response, and formal closing.`;
+      aiReply = await callAI(prompt, 'You are BEML correspondence expert. Generate formal reply letters.');
+    } catch (aiErr) {
+      console.log('AI reply generation failed, using template:', aiErr.message);
+      aiReply = `We acknowledge receipt of your letter ref: ${replyData.incomingRef} regarding "${replyData.incomingSubject}".
+
+We are examining the matter and shall revert with our detailed response at the earliest.
+
+For any clarifications, please contact the undersigned.
+
+Thanking you,
+Yours faithfully,
+For BEML Limited`;
+    }
+
+    res.json({ success: true, replyData, aiContent: aiReply });
+  } catch (e) { res.status(500).json({ success: false, error: e.message }); }
+});
+
 // Global error handling middleware
 app.use((err, req, res, next) => {
   console.error('❌ Global error:', err.message);

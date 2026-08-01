@@ -129,7 +129,7 @@
   <aside class="sidebar">
     <div class="sidebar-logo">
       <h1>DocVault</h1>
-      <p>Document Management System</p>
+      <p>BEML Document Management System</p>
     </div>
     <nav class="sidebar-menu">
       <div class="menu-section">Main</div>
@@ -138,8 +138,12 @@
       <div class="menu-item" onclick="navigate('ncr')"><span class="icon">📋</span><span class="menu-text">NCR Records</span></div>
       <div class="menu-item" onclick="navigate('joint')"><span class="icon">📝</span><span class="menu-text">Joint Notes</span></div>
       <div class="menu-section">Create</div>
-      <div class="menu-item" onclick="navigate('create-ncr')"><span class="icon">➕</span><span class="menu-text">Create NCR</span></div>
-      <div class="menu-item" onclick="navigate('create-letter')"><span class="icon">➕</span><span class="menu-text">Create Letter</span></div>
+      <div class="menu-item" onclick="navigate('create-letter')"><span class="icon">✉️</span><span class="menu-text">Create Letter</span></div>
+      <div class="menu-item" onclick="navigate('create-ncr')"><span class="icon">📋</span><span class="menu-text">Create NCR</span></div>
+      <div class="menu-item" onclick="navigate('reply-letter')"><span class="icon">↩️</span><span class="menu-text">AI Reply Letter</span></div>
+      <div class="menu-section">AI Tools</div>
+      <div class="menu-item" onclick="navigate('ai-letter')"><span class="icon">🤖</span><span class="menu-text">AI Letter Writer</span></div>
+      <div class="menu-item" onclick="navigate('ai-ncr')"><span class="icon">🤖</span><span class="menu-text">AI NCR Writer</span></div>
       <div class="menu-section">Tools</div>
       <div class="menu-item" onclick="navigate('upload')"><span class="icon">📤</span><span class="menu-text">Upload</span></div>
       <div class="menu-item" onclick="navigate('bulk')"><span class="icon">📦</span><span class="menu-text">Bulk Import</span></div>
@@ -274,6 +278,9 @@
         case 'joint': renderJointNotes(content); break;
         case 'create-ncr': ncrCurrentRowIndex = null; renderCreateNCR(content); break;
         case 'create-letter': letterCurrentRowIndex = null; renderCreateLetter(content); break;
+        case 'reply-letter': renderReplyLetter(content); break;
+        case 'ai-letter': renderAILetter(content); break;
+        case 'ai-ncr': renderAINCR(content); break;
         case 'upload': showUploadModal(); navigate('dashboard'); break;
         case 'bulk': renderBulkImport(content); break;
         case 'search': renderSearch(content); break;
@@ -288,7 +295,12 @@
       const stats = getStats();
       el.innerHTML = `
         <div class="page-header">
-          <div><h2>Dashboard</h2><p>Overview of all documents and records</p></div>
+          <div><h2>BEML Document Management Dashboard</h2><p>Complete overview of letters, NCRs, and joint notes</p></div>
+          <div style="display:flex;gap:8px">
+            <button class="btn btn-primary" onclick="navigate('create-letter')">✉️ New Letter</button>
+            <button class="btn btn-primary" onclick="navigate('create-ncr')">📋 New NCR</button>
+            <button class="btn btn-primary" onclick="navigate('reply-letter')">🤖 AI Reply</button>
+          </div>
         </div>
         <div class="stats-grid">
           <div class="stat-card"><div class="label">Total Documents</div><div class="value" style="color:var(--primary)">${stats.total}</div></div>
@@ -297,6 +309,12 @@
           <div class="stat-card"><div class="label">NCR Records</div><div class="value" style="color:var(--ncr)">${stats.ncr}</div></div>
           <div class="stat-card"><div class="label">Joint Notes</div><div class="value" style="color:var(--jn)">${stats.jn}</div></div>
           <div class="stat-card"><div class="label">Open Items</div><div class="value" style="color:var(--success)">${stats.open}</div></div>
+        </div>
+        <div class="stats-grid" style="grid-template-columns:repeat(4,1fr)">
+          <div class="stat-card"><div class="label">Metro Rail Letters</div><div class="value" style="color:var(--ncr)">${stats.metro || 0}</div></div>
+          <div class="stat-card"><div class="label">Closed Items</div><div class="value" style="color:#666">${stats.total - stats.open}</div></div>
+          <div class="stat-card"><div class="label">Critical NCRs</div><div class="value" style="color:var(--error)">${stats.critical || 0}</div></div>
+          <div class="stat-card"><div class="label">Major NCRs</div><div class="value" style="color:var(--warning)">${stats.major || 0}</div></div>
         </div>
         <div class="grid-2">
           <div class="card">
@@ -307,9 +325,13 @@
             <div class="card-header"><h3>Quick Actions</h3></div>
             <div class="card-body">
               <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-                <button class="btn btn-primary" onclick="showUploadModal()" style="width:100%">📤 Upload Document</button>
+                <button class="btn btn-primary" onclick="navigate('create-letter')" style="width:100%">✉️ Create Letter</button>
+                <button class="btn btn-primary" onclick="navigate('create-ncr')" style="width:100%">📋 Create NCR</button>
+                <button class="btn btn-primary" onclick="navigate('reply-letter')" style="width:100%">🤖 AI Reply Letter</button>
+                <button class="btn btn-primary" onclick="navigate('ai-letter')" style="width:100%">🤖 AI Letter Writer</button>
+                <button class="btn btn-secondary" onclick="showUploadModal()" style="width:100%">📤 Upload Document</button>
                 <button class="btn btn-secondary" onclick="navigate('bulk')" style="width:100%">📦 Bulk Import</button>
-                <button class="btn btn-secondary" onclick="navigate('search')" style="width:100%">🔍 Search</button>
+                <button class="btn btn-secondary" onclick="navigate('ai-ncr')" style="width:100%">🤖 AI NCR Writer</button>
                 <button class="btn btn-secondary" onclick="navigate('export')" style="width:100%">📥 Export Data</button>
               </div>
             </div>
@@ -319,12 +341,13 @@
     }
 
     function getStats() {
-      let total = 0, beml = 0, kmrcl = 0, ncr = 0, jn = 0, open = 0;
+      let total = 0, beml = 0, kmrcl = 0, ncr = 0, jn = 0, open = 0, metro = 0, critical = 0, major = 0;
       for (const [key, rows] of Object.entries(allData)) {
         const count = Math.max(0, rows.length - 1);
         total += count;
         if (key.includes('BEML')) beml += count;
         else if (key.includes('KMRCL')) kmrcl += count;
+        else if (key.includes('Metro')) metro += count;
         else if (key.includes('NCR')) ncr += count;
         else if (key.includes('Joint')) jn += count;
         for (let i = 1; i < rows.length; i++) {
@@ -332,9 +355,14 @@
           const statusIdx = isNCR ? 17 : rows[i].length - 1;
           const status = (rows[i][statusIdx] || '').toLowerCase();
           if (status !== 'closed' && status !== '' && status !== 'n/a') open++;
+          if (isNCR) {
+            const sev = (rows[i][36] || '').toLowerCase();
+            if (sev === 'critical') critical++;
+            else if (sev === 'major') major++;
+          }
         }
       }
-      return { total, beml, kmrcl, ncr, jn, open };
+      return { total, beml, kmrcl, ncr, jn, open, metro, critical, major };
     }
 
     function renderRecentDocs() {
@@ -1837,6 +1865,260 @@
         const data = await res.json();
         if (data.success) { allData = data.data; renderPage(currentPage); }
       } catch (e) { console.error('Load error:', e); }
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    //  AI LETTER WRITER
+    // ══════════════════════════════════════════════════════════════
+    function renderAILetter(el) {
+      el.innerHTML = `
+        <div class="page-header">
+          <div><h2>AI Letter Writer</h2><p>Generate professional BEML letters with AI assistance</p></div>
+          <button class="btn btn-secondary" onclick="navigate('letters')">Back</button>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;height:calc(100vh - 180px)">
+          <div class="card" style="overflow-y:auto;padding:20px">
+            <h3 style="margin-bottom:16px;font-size:1rem">Letter Details</h3>
+            <div class="form-group"><label>Organization</label><select id="ai_org"><option value="BEML">BEML</option><option value="KMRCL">KMRCL</option><option value="Metro Rail">Metro Rail</option></select></div>
+            <div class="form-group"><label>Letter Type</label><select id="ai_type"><option value="General">General</option><option value="Technical">Technical</option><option value="Commercial">Commercial</option><option value="Compliance">Compliance</option><option value="Approval Request">Approval Request</option><option value="PDN/Obsolescence">PDN/Obsolescence</option></select></div>
+            <div class="form-group"><label>Subject / Purpose *</label><input id="ai_subject" placeholder="e.g. Request for technical clarification on door spindle specification"></div>
+            <div class="form-group"><label>Recipient</label><input id="ai_recipient" placeholder="e.g. The Project Director, KMRCL"></div>
+            <div class="form-group"><label>Context / Key Points *</label><textarea id="ai_context" rows="5" placeholder="Describe what the letter should cover. Include technical details, references, specific requirements..."></textarea></div>
+            <div class="form-group"><label>Tone</label><select id="ai_tone"><option value="Professional and formal">Professional</option><option value="Urgent and firm">Urgent</option><option value="Courteous and requesting">Courteous</option><option value="Technical and precise">Technical</option></select></div>
+            <div style="display:flex;gap:8px;margin-top:16px">
+              <button class="btn btn-primary" onclick="generateAILetter()">🤖 Generate with AI</button>
+              <button class="btn btn-success" onclick="useAILetterAsDraft()">📝 Use as Draft</button>
+            </div>
+          </div>
+          <div class="card" style="overflow-y:auto;padding:20px">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+              <h3 style="font-size:1rem;margin:0">AI Generated Content</h3>
+              <button class="btn btn-secondary btn-sm" onclick="improveAILetter()">✨ Improve</button>
+            </div>
+            <div id="aiLetterResult" style="white-space:pre-wrap;font-size:.85rem;line-height:1.6;min-height:200px;padding:16px;background:var(--bg);border-radius:8px">AI will generate professional letter content here...</div>
+          </div>
+        </div>`;
+    }
+
+    async function generateAILetter() {
+      const subject = document.getElementById('ai_subject').value;
+      const context = document.getElementById('ai_context').value;
+      if (!subject && !context) return showToast('Enter subject or context', 'error');
+      showToast('Generating with AI...', 'info');
+      try {
+        const res = await fetch('/api/ai/generate-letter', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            org: document.getElementById('ai_org').value,
+            subject, recipient: document.getElementById('ai_recipient').value,
+            context, tone: document.getElementById('ai_tone').value,
+            letterType: document.getElementById('ai_type').value
+          })
+        });
+        const r = await res.json();
+        if (r.success) { document.getElementById('aiLetterResult').textContent = r.content; showToast('AI generated!', 'success'); }
+        else showToast('AI error: ' + (r.error || ''), 'error');
+      } catch (e) { showToast('Error: ' + e.message, 'error'); }
+    }
+
+    async function improveAILetter() {
+      const content = document.getElementById('aiLetterResult').textContent;
+      if (!content || content.startsWith('AI will generate')) return showToast('Generate content first', 'error');
+      showToast('Improving with AI...', 'info');
+      try {
+        const res = await fetch('/api/ai/improve-content', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ content, type: 'letter', instructions: 'Make more professional, fix grammar, improve structure' })
+        });
+        const r = await res.json();
+        if (r.success) { document.getElementById('aiLetterResult').textContent = r.content; showToast('Improved!', 'success'); }
+        else showToast('Error: ' + (r.error || ''), 'error');
+      } catch (e) { showToast('Error: ' + e.message, 'error'); }
+    }
+
+    function useAILetterAsDraft() {
+      const content = document.getElementById('aiLetterResult').textContent;
+      if (!content || content.startsWith('AI will generate')) return showToast('Generate content first', 'error');
+      navigate('create-letter');
+      setTimeout(() => {
+        const el = document.getElementById('letter_letterContent');
+        if (el) { el.value = content; updateLetterPreview(); }
+      }, 500);
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    //  AI REPLY LETTER GENERATOR
+    // ══════════════════════════════════════════════════════════════
+    function renderReplyLetter(el) {
+      el.innerHTML = `
+        <div class="page-header">
+          <div><h2>AI Reply Letter Generator</h2><p>Generate BEML reply against incoming KMRCL/MR/OEM letters</p></div>
+          <button class="btn btn-secondary" onclick="navigate('letters')">Back</button>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;height:calc(100vh - 180px)">
+          <div class="card" style="overflow-y:auto;padding:20px">
+            <h3 style="margin-bottom:16px;font-size:1rem">Incoming Letter Details</h3>
+            <div class="form-group"><label>Reply Organization</label><select id="reply_org"><option value="BEML">BEML (Default)</option></select></div>
+            <div class="form-group"><label>Original Reference No.</label><input id="reply_ref" placeholder="e.g. KMRCL/RS3R/T&C/0456/2025"></div>
+            <div class="form-group"><label>Original Date</label><input id="reply_date" placeholder="e.g. 30 Dec 2025"></div>
+            <div class="form-group"><label>From (Sender)</label><input id="reply_from" placeholder="e.g. The Chief Project Manager, KMRCL"></div>
+            <div class="form-group"><label>Subject</label><input id="reply_subject" placeholder="Original letter subject"></div>
+            <div class="form-group"><label>Original Letter Content / Key Points *</label><textarea id="reply_content" rows="8" placeholder="Paste the original letter content or key points that need response..."></textarea></div>
+            <div class="form-group"><label>Custom Instructions</label><textarea id="reply_instructions" rows="3" placeholder="Any specific points to address in the reply..."></textarea></div>
+            <div style="display:flex;gap:8px;margin-top:16px">
+              <button class="btn btn-primary" onclick="generateReplyLetter()">🤖 Generate Reply</button>
+              <button class="btn btn-success" onclick="useReplyAsDraft()">📝 Use as Draft Letter</button>
+            </div>
+          </div>
+          <div class="card" style="overflow-y:auto;padding:20px">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+              <h3 style="font-size:1rem;margin:0">Generated BEML Reply</h3>
+              <button class="btn btn-secondary btn-sm" onclick="improveReply()">✨ Improve</button>
+            </div>
+            <div id="replyResult" style="white-space:pre-wrap;font-size:.85rem;line-height:1.6;min-height:200px;padding:16px;background:var(--bg);border-radius:8px">AI will generate a professional BEML reply letter here...</div>
+          </div>
+        </div>`;
+    }
+
+    async function generateReplyLetter() {
+      const content = document.getElementById('reply_content').value;
+      if (!content) return showToast('Enter original letter content', 'error');
+      showToast('Generating BEML reply with AI...', 'info');
+      try {
+        const res = await fetch('/api/ai/generate-reply', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            letterContent: content, org: document.getElementById('reply_org').value,
+            originalRef: document.getElementById('reply_ref').value,
+            originalSubject: document.getElementById('reply_subject').value,
+            originalFrom: document.getElementById('reply_from').value,
+            customInstructions: document.getElementById('reply_instructions').value
+          })
+        });
+        const r = await res.json();
+        if (r.success) { document.getElementById('replyResult').textContent = r.content; showToast('Reply generated!', 'success'); }
+        else showToast('AI error: ' + (r.error || ''), 'error');
+      } catch (e) { showToast('Error: ' + e.message, 'error'); }
+    }
+
+    async function improveReply() {
+      const content = document.getElementById('replyResult').textContent;
+      if (!content || content.startsWith('AI will generate')) return showToast('Generate reply first', 'error');
+      showToast('Improving...', 'info');
+      try {
+        const res = await fetch('/api/ai/improve-content', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ content, type: 'letter', instructions: 'Make it a more complete BEML reply with proper references, technical commitments, and formal closing' })
+        });
+        const r = await res.json();
+        if (r.success) { document.getElementById('replyResult').textContent = r.content; showToast('Improved!', 'success'); }
+        else showToast('Error: ' + (r.error || ''), 'error');
+      } catch (e) { showToast('Error: ' + e.message, 'error'); }
+    }
+
+    function useReplyAsDraft() {
+      const content = document.getElementById('replyResult').textContent;
+      if (!content || content.startsWith('AI will generate')) return showToast('Generate reply first', 'error');
+      navigate('create-letter');
+      setTimeout(() => {
+        const el = document.getElementById('letter_letterContent');
+        const subjEl = document.getElementById('letter_subject');
+        const refEl = document.getElementById('letter_allReferences');
+        if (el) { el.value = content; }
+        if (subjEl) { subjEl.value = document.getElementById('reply_subject')?.value || ''; }
+        if (refEl) { refEl.value = 'Ref: ' + (document.getElementById('reply_ref')?.value || ''); }
+        updateLetterPreview();
+      }, 500);
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    //  AI NCR WRITER
+    // ══════════════════════════════════════════════════════════════
+    function renderAINCR(el) {
+      el.innerHTML = `
+        <div class="page-header">
+          <div><h2>AI NCR Writer</h2><p>Generate professional NCR content with AI assistance</p></div>
+          <button class="btn btn-secondary" onclick="navigate('ncr')">Back</button>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;height:calc(100vh - 180px)">
+          <div class="card" style="overflow-y:auto;padding:20px">
+            <h3 style="margin-bottom:16px;font-size:1rem">NCR Details</h3>
+            <div class="form-group"><label>Project</label><input id="aiNcr_project" placeholder="e.g. BEML RS3R"></div>
+            <div class="form-group"><label>Item / Product *</label><input id="aiNcr_item" placeholder="e.g. Saloon door spindle assembly"></div>
+            <div class="form-group"><label>Train No / Vehicle</label><input id="aiNcr_train" placeholder="e.g. TS#16 DMC1"></div>
+            <div class="form-group"><label>Car / Vehicle</label><input id="aiNcr_car" placeholder="e.g. MC2"></div>
+            <div class="form-group"><label>Vendor / OEM</label><input id="aiNcr_vendor" placeholder="e.g. ABC Components Ltd"></div>
+            <div class="form-group"><label>Severity</label><select id="aiNcr_severity"><option value="Major">Major</option><option value="Minor">Minor</option><option value="Critical">Critical</option></select></div>
+            <div class="form-group"><label>Issue Description *</label><textarea id="aiNcr_context" rows="5" placeholder="Describe the non-conformity issue, observations, failures..."></textarea></div>
+            <div style="display:flex;gap:8px;margin-top:16px">
+              <button class="btn btn-primary" onclick="generateAINCR()">🤖 Generate NCR Content</button>
+              <button class="btn btn-success" onclick="useAINCRAsDraft()">📝 Use in NCR Form</button>
+            </div>
+          </div>
+          <div class="card" style="overflow-y:auto;padding:20px">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+              <h3 style="font-size:1rem;margin:0">AI Generated NCR Content</h3>
+              <button class="btn btn-secondary btn-sm" onclick="improveAINCR()">✨ Improve</button>
+            </div>
+            <div id="aiNcrResult" style="white-space:pre-wrap;font-size:.85rem;line-height:1.6;min-height:200px;padding:16px;background:var(--bg);border-radius:8px">AI will generate professional NCR content with root cause analysis, corrective and preventive actions...</div>
+          </div>
+        </div>`;
+    }
+
+    async function generateAINCR() {
+      const item = document.getElementById('aiNcr_item').value;
+      const context = document.getElementById('aiNcr_context').value;
+      if (!item && !context) return showToast('Enter item or issue description', 'error');
+      showToast('Generating NCR content with AI...', 'info');
+      try {
+        const res = await fetch('/api/ai/generate-ncr', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            project: document.getElementById('aiNcr_project').value,
+            itemDesc: item, trainNo: document.getElementById('aiNcr_train').value,
+            car: document.getElementById('aiNcr_car').value,
+            vendor: document.getElementById('aiNcr_vendor').value,
+            severity: document.getElementById('aiNcr_severity').value,
+            context
+          })
+        });
+        const r = await res.json();
+        if (r.success) { document.getElementById('aiNcrResult').textContent = r.content; showToast('NCR content generated!', 'success'); }
+        else showToast('AI error: ' + (r.error || ''), 'error');
+      } catch (e) { showToast('Error: ' + e.message, 'error'); }
+    }
+
+    async function improveAINCR() {
+      const content = document.getElementById('aiNcrResult').textContent;
+      if (!content || content.startsWith('AI will generate')) return showToast('Generate content first', 'error');
+      showToast('Improving...', 'info');
+      try {
+        const res = await fetch('/api/ai/improve-content', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ content, type: 'ncr', instructions: 'Make more technically precise, add engineering terminology, improve root cause analysis' })
+        });
+        const r = await res.json();
+        if (r.success) { document.getElementById('aiNcrResult').textContent = r.content; showToast('Improved!', 'success'); }
+        else showToast('Error: ' + (r.error || ''), 'error');
+      } catch (e) { showToast('Error: ' + e.message, 'error'); }
+    }
+
+    function useAINCRAsDraft() {
+      const content = document.getElementById('aiNcrResult').textContent;
+      if (!content || content.startsWith('AI will generate')) return showToast('Generate content first', 'error');
+      navigate('create-ncr');
+      setTimeout(() => {
+        const sections = content.split(/\n(?=\d\.|##|Root Cause|Corrective|Preventive|Description)/i);
+        const desc = document.getElementById('ncr_ncrDesc');
+        const rootCause = document.getElementById('ncr_rootCause');
+        const correction = document.getElementById('ncr_correction');
+        const prev = document.getElementById('ncr_preventiveAction');
+        if (desc) desc.value = content.substring(0, 500);
+        if (rootCause) rootCause.value = sections.find(s => s.toLowerCase().includes('root cause'))?.substring(0, 300) || '';
+        if (correction) correction.value = sections.find(s => s.toLowerCase().includes('corrective'))?.substring(0, 300) || '';
+        if (prev) prev.value = sections.find(s => s.toLowerCase().includes('preventive'))?.substring(0, 300) || '';
+        updateNCRPreview();
+      }, 500);
     }
 
     // === INIT ===
