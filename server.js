@@ -227,7 +227,7 @@ const LETTER_COLUMNS = [
   'To (Addressee)', 'Kind Attention', 'Subject', 'Letter Type',
   'Letter Content', 'Enclosures', 'Remarks', 'Attachment Link', 'File Name', 'Status',
   'Signatory', 'Designation', 'Project', 'Cc',
-  'Depot', 'Priority', 'Reply Type', 'Tech Details'
+  'Depot', 'Priority', 'Reply Type', 'Tech Details', 'Reply To Ref'
 ];
 
 const NCR_COLUMNS = [
@@ -416,7 +416,8 @@ const LETTER_KEY_TO_COL = {
   letterType: 'Letter Type', letterContent: 'Letter Content', enclosures: 'Enclosures',
   remarks: 'Remarks', attachmentLink: 'Attachment Link', fileName: 'File Name', status: 'Status',
   signatory: 'Signatory', designation: 'Designation', project: 'Project', cc: 'Cc',
-  depot: 'Depot', priority: 'Priority', replyType: 'Reply Type', techDetails: 'Tech Details'
+  depot: 'Depot', priority: 'Priority', replyType: 'Reply Type', techDetails: 'Tech Details',
+  replyToRef: 'Reply To Ref'
 };
 
 const NCR_KEY_TO_COL = {
@@ -1762,27 +1763,46 @@ app.post('/api/save-reply', authenticateToken, async (req, res) => {
       refNumber: data.refNumber || '',
       date: data.date || new Date().toISOString().split('T')[0],
       to: data.to || '',
-      kindAttn: '',
+      kindAttn: data.kindAttn || '',
       subject: data.subject || '',
       allReferences: data.allReferences || '',
       letterContent: data.letterContent || '',
-      signatory: '',
-      designation: '',
-      project: '',
-      enclosures: '',
-      cc: '',
+      signatory: data.signatory || '',
+      designation: data.designation || '',
+      project: data.project || '',
+      enclosures: data.enclosures || '',
+      cc: data.cc || '',
       attachmentLink: '',
+      fileName: '',
       status: data.status || 'Open',
       depot: data.depot || '',
       priority: data.priority || 'normal',
       replyType: data.replyType || 'response',
-      techDetails: data.techDetails || ''
+      techDetails: data.techDetails || '',
+      replyToRef: data.replyToRef || ''
     };
+
+    // Generate PDF and upload to Drive
+    let driveResult = { success: false };
+    try {
+      const fileName = `Reply_${(letterData.refNumber || 'draft').replace(/[^a-zA-Z0-9]/g, '_')}_${Date.now()}.pdf`;
+      const tmpDir = isVercelStorage ? '/tmp' : path.join(__dirname, 'uploads');
+      const outputPath = path.join(tmpDir, fileName);
+      await generateLetterPdf(letterData, outputPath);
+      
+      const originalName = `Reply_${letterData.refNumber || 'draft'}.pdf`;
+      driveResult = await uploadFileToDrive(outputPath, originalName, org, 'Letters');
+      if (driveResult.link) letterData.attachmentLink = driveResult.link;
+      letterData.fileName = originalName;
+      console.log(`✅ Reply PDF uploaded to Drive: ${originalName}`);
+    } catch (driveErr) {
+      console.log('⚠️  Reply Drive upload failed:', driveErr.message);
+    }
 
     const sheetName = SHEET_NAMES[org] || `${org} Letters`;
     const sheetResult = await appendToSheet(sheetName, letterData, LETTER_COLUMNS);
 
-    res.json({ success: true, sheet: sheetResult, message: 'Reply saved as letter' });
+    res.json({ success: true, sheet: sheetResult, drive: driveResult, message: 'Reply saved as letter' });
   } catch (err) {
     console.error('❌ Save reply error:', err);
     res.status(500).json({ success: false, error: err.message });

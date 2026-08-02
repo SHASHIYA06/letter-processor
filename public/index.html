@@ -571,7 +571,7 @@
         document.getElementById('lettersTable').innerHTML = '<div class="empty-state"><div class="icon">📄</div><p>No letters found</p></div>';
         return;
       }
-      let html = '<table class="table"><thead><tr><th>#</th><th>Org</th><th>Ref No</th><th>Date</th><th>From</th><th>Subject</th><th>Type</th><th>Status</th><th>Actions</th></tr></thead><tbody>';
+      let html = '<table class="table"><thead><tr><th>#</th><th>Org</th><th>Ref No</th><th>Date</th><th>From</th><th>Subject</th><th>Reply To</th><th>Status</th><th>Actions</th></tr></thead><tbody>';
       letters.forEach((item, i) => {
         const r = item.row;
         const badge = item.sheet.includes('BEML') ? 'badge-beml' : item.sheet.includes('KMRCL') ? 'badge-kmrcl' : 'badge-metro';
@@ -580,9 +580,8 @@
         const date = r[3] || '';
         const from = r[4] || '';
         const subject = r[7] || '';
-        const letterType = r[8] || '';
+        const replyToRef = r[23] || '';
         const fileName = r[13] || '';
-        const hasData = refNo || date || from || subject;
         html += `<tr>
           <td>${i+1}</td>
           <td><span class="badge ${badge}">${item.sheet.replace(' Letters','')}</span></td>
@@ -590,7 +589,7 @@
           <td>${esc(date || '—')}</td>
           <td title="${esc(from)}">${esc((from || '').substring(0,30) || '—')}</td>
           <td title="${esc(subject)}">${esc((subject || '').substring(0,50) || '—')}</td>
-          <td>${esc(letterType || '—')}</td>
+          <td title="${esc(replyToRef)}">${esc((replyToRef || '').substring(0,30) || '—')}</td>
           <td><span class="badge badge-${status.toLowerCase() === 'closed' ? 'closed' : 'open'}">${esc(status)}</span></td>
           <td class="actions">
             <button class="btn btn-secondary btn-sm" onclick="viewDocument('${item.sheet}',${item.idx})" title="View">👁️</button>
@@ -2230,7 +2229,7 @@
           'Enclosures':'enclosures','Remarks':'remarks',
           'Signatory':'signatory','Designation':'designation','Project':'project',
           'Cc':'cc','Status':'status','Depot':'depot','Priority':'priority',
-          'Reply Type':'replyType','Tech Details':'techDetails'
+          'Reply Type':'replyType','Tech Details':'techDetails','Reply To Ref':'replyToRef'
         };
         headers.forEach((h, i) => { if (LETTER_KEY_MAP[h] && record[i]) data[LETTER_KEY_MAP[h]] = record[i]; });
         // Determine org from sheet name
@@ -2375,46 +2374,82 @@
     //  AI REPLY LETTER GENERATOR
     // ══════════════════════════════════════════════════════════════
     function renderReplyLetter(el) {
+      // Build dropdown of existing customer letters (KMRCL + Metro Rail)
+      let customerLetters = [];
+      const kmrclRows = allData['KMRCL Letters'] || [];
+      const metroRows = allData['Metro Rail Letters'] || [];
+      customerLetters = [...kmrclRows.slice(1), ...metroRows.slice(1)].filter(r => r && r.length > 1);
+
+      let letterOptions = '<option value="">-- Select Existing Customer Letter --</option>';
+      customerLetters.forEach((r, i) => {
+        const ref = r[1] || '';
+        const subject = r[7] || '';
+        const org = (r[0] || '').includes('Metro') ? 'Metro Rail' : 'KMRCL';
+        if (ref || subject) {
+          letterOptions += `<option value="${i}" data-ref="${ref}" data-date="${r[3]||''}" data-from="${r[4]||''}" data-to="${r[5]||''}" data-attention="${r[6]||''}" data-subject="${subject}" data-content="${(r[9]||'').substring(0,300)}" data-org="${org}">[${org}] ${ref} - ${subject.substring(0,60)}</option>`;
+        }
+      });
+
       el.innerHTML = `
         <div class="page-header">
-          <div><h2>Reply Letter Generator</h2><p>Generate BEML/KMRCL reply against incoming letters with reference linking</p></div>
+          <div><h2>Reply Letter Generator</h2><p>Generate BEML reply against incoming KMRCL/Metro Rail letters with reference linking</p></div>
           <button class="btn btn-secondary" onclick="navigate('letters')">Back</button>
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;height:calc(100vh - 180px)">
           <div class="card" style="overflow-y:auto;padding:20px">
+            <h3 style="margin-bottom:16px;font-size:1rem">Select Customer Letter</h3>
+            <div class="form-group"><label>Select from Uploaded Letters</label><select id="reply_select" onchange="autoFillFromLetter()">${letterOptions}</select></div>
+            <hr style="border-color:var(--border);margin:16px 0">
             <h3 style="margin-bottom:16px;font-size:1rem">Incoming Letter Details</h3>
             <div class="form-row">
-              <div class="form-group"><label>Reply Organization</label><select id="reply_org"><option value="BEML">BEML</option><option value="KMRCL">KMRCL</option><option value="Metro Rail">Metro Rail</option></select></div>
+              <div class="form-group"><label>Reply Organization</label><select id="reply_org"><option value="BEML" selected>BEML (Reply)</option></select></div>
               <div class="form-group"><label>Reply Type</label><select id="replyType"><option value="response">Response</option><option value="clarification">Clarification</option><option value="action_taken">Action Taken</option><option value="technical">Technical Reply</option></select></div>
             </div>
             <div class="form-row">
               <div class="form-group"><label>Depot</label><select id="reply_depot"><option value="">Select Depot</option><option value="KMRCL">KMRCL</option><option value="BMRCL">BMRCL</option><option value="DMCRL">DMCRL</option><option value="MMRCL">MMRCL</option><option value="CMRCL">CMRCL</option></select></div>
               <div class="form-group"><label>Priority</label><select id="reply_priority"><option value="normal">Normal</option><option value="urgent">Urgent</option><option value="immediate">Immediate</option></select></div>
             </div>
-            <div class="form-group"><label>Original Reference No. *</label><input id="reply_ref" placeholder="e.g. KMRCL/RS3R/T&C/0456/2025"></div>
-            <div class="form-group"><label>Original Date</label><input id="reply_date" placeholder="e.g. 30 Dec 2025"></div>
-            <div class="form-group"><label>From (Sender) *</label><input id="reply_from" placeholder="e.g. The Chief Project Manager, KMRCL"></div>
+            <div class="form-group"><label>Customer Reference No. *</label><input id="reply_ref" placeholder="e.g. KMRCL/RS3R/T&C/0456/2025"></div>
+            <div class="form-group"><label>Customer Date</label><input id="reply_date" placeholder="e.g. 30 Dec 2025"></div>
+            <div class="form-group"><label>From (Customer) *</label><input id="reply_from" placeholder="e.g. The Chief Project Manager, KMRCL"></div>
+            <div class="form-group"><label>To (BEML Addressee)</label><input id="reply_to" placeholder="e.g. The Senior Manager, BEML"></div>
+            <div class="form-group"><label>Kind Attention</label><input id="reply_attention" placeholder="e.g. Shri. Name, Designation"></div>
             <div class="form-group"><label>Subject *</label><input id="reply_subject" placeholder="Original letter subject"></div>
-            <div class="form-group"><label>Technical Details</label><input id="reply_techDetails" placeholder="e.g. Train No. TC-01, Car No. C3, LHB Coach"></div>
-            <div class="form-group"><label>Original Letter Content / Key Points *</label><textarea id="reply_content" rows="6" placeholder="Paste the original letter content or key points that need response..."></textarea></div>
-            <div class="form-group"><label>Custom Instructions</label><textarea id="reply_instructions" rows="2" placeholder="Any specific points to address in the reply..."></textarea></div>
+            <div class="form-group"><label>Technical Details</label><input id="reply_techDetails" placeholder="e.g. Train No. TC-01, Car No. C3"></div>
+            <div class="form-group"><label>Customer Letter Content *</label><textarea id="reply_content" rows="6" placeholder="Paste the original letter content or key points..."></textarea></div>
+            <div class="form-group"><label>Custom Instructions for Reply</label><textarea id="reply_instructions" rows="2" placeholder="Specific points to address in the reply..."></textarea></div>
             <div style="display:flex;gap:8px;margin-top:16px">
               <button class="btn btn-primary" onclick="generateReplyLetter()">🤖 Generate Reply</button>
-              <button class="btn btn-success" onclick="useReplyAsDraft()">📝 Use as Draft Letter</button>
+              <button class="btn btn-success" onclick="useReplyAsDraft()">📝 Use as Draft</button>
             </div>
           </div>
           <div class="card" style="overflow-y:auto;padding:20px">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-              <h3 style="font-size:1rem;margin:0">Generated Reply</h3>
+              <h3 style="font-size:1rem;margin:0">Generated BEML Reply</h3>
               <div style="display:flex;gap:6px">
                 <button class="btn btn-secondary btn-sm" onclick="improveReply()">✨ Improve</button>
-                <button class="btn btn-success btn-sm" onclick="saveReplyAsLetter()">💾 Save as Letter</button>
+                <button class="btn btn-success btn-sm" onclick="saveReplyAsLetter()">💾 Save & Upload</button>
               </div>
             </div>
-            <div id="replyResult" style="white-space:pre-wrap;font-size:.85rem;line-height:1.6;min-height:200px;padding:16px;background:var(--bg);border-radius:8px">AI will generate a professional reply letter here...</div>
+            <div id="replyResult" style="white-space:pre-wrap;font-size:.85rem;line-height:1.6;min-height:200px;padding:16px;background:var(--bg);border-radius:8px">AI will generate a professional BEML reply letter here...</div>
             <div id="replyPreview" style="margin-top:16px"></div>
           </div>
         </div>`;
+    }
+
+    function autoFillFromLetter() {
+      const sel = document.getElementById('reply_select');
+      if (!sel || !sel.value) return;
+      const opt = sel.options[sel.selectedIndex];
+      document.getElementById('reply_ref').value = opt.dataset.ref || '';
+      document.getElementById('reply_date').value = opt.dataset.date || '';
+      document.getElementById('reply_from').value = opt.dataset.from || '';
+      document.getElementById('reply_subject').value = opt.dataset.subject || '';
+      document.getElementById('reply_content').value = opt.dataset.content || '';
+      const org = opt.dataset.org || '';
+      if (org === 'KMRCL') document.getElementById('reply_depot').value = 'KMRCL';
+      else if (org === 'Metro Rail') document.getElementById('reply_depot').value = 'BMRCL';
+      showToast('Fields auto-filled from selected letter', 'success');
     }
 
     async function generateReplyLetter() {
@@ -2422,12 +2457,12 @@
       const ref = document.getElementById('reply_ref').value;
       if (!content) return showToast('Enter original letter content', 'error');
       if (!ref) return showToast('Enter original reference number', 'error');
-      showToast('Generating reply...', 'info');
+      showToast('Generating BEML reply...', 'info');
       try {
         const res = await authFetch('/api/ai/generate-reply', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            letterContent: content, org: document.getElementById('reply_org').value,
+            letterContent: content, org: 'BEML',
             replyType: document.getElementById('replyType').value,
             depot: document.getElementById('reply_depot').value,
             priority: document.getElementById('reply_priority').value,
@@ -2469,27 +2504,33 @@
       if (!content || content.startsWith('AI will generate')) return showToast('Generate reply first', 'error');
       const ref = document.getElementById('reply_ref').value;
       const org = document.getElementById('reply_org').value;
-      showToast('Saving reply as letter...', 'info');
+      showToast('Saving reply and uploading PDF...', 'info');
       try {
         const res = await authFetch('/api/save-reply', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             organization: org, refNumber: ref,
             date: document.getElementById('reply_date').value || new Date().toISOString().split('T')[0],
-            to: document.getElementById('reply_from').value,
+            from: 'BEML Limited',
+            to: document.getElementById('reply_to')?.value || document.getElementById('reply_from').value,
+            kindAttn: document.getElementById('reply_attention')?.value || '',
             subject: document.getElementById('reply_subject').value,
             letterContent: content,
-            allReferences: 'Ref: ' + ref,
+            allReferences: 'Ref: ' + ref + (document.getElementById('reply_from')?.value ? ' | Reply to: ' + document.getElementById('reply_from').value : ''),
             depot: document.getElementById('reply_depot').value,
             priority: document.getElementById('reply_priority').value,
             replyType: document.getElementById('replyType').value,
             techDetails: document.getElementById('reply_techDetails').value,
+            replyToRef: ref,
             status: 'Open'
           })
         });
         const r = await res.json();
         if (r.success) {
-          showToast('Reply saved as letter!', 'success');
+          let msg = 'Reply saved as letter!';
+          if (r.drive && r.drive.link) msg += ' (Drive: ✅)';
+          else if (r.drive && r.drive.error) msg += ' (Drive: ⚠️)';
+          showToast(msg, 'success');
           loadAllData();
           navigate('letters');
         } else showToast('Save failed: ' + (r.error || ''), 'error');
@@ -2505,10 +2546,14 @@
         const subjEl = document.getElementById('letter_subject');
         const refEl = document.getElementById('letter_allReferences');
         const orgEl = document.getElementById('letter_org');
+        const toEl = document.getElementById('letter_to');
+        const attnEl = document.getElementById('letter_kindAttn');
         if (el) { el.value = content; }
         if (subjEl) { subjEl.value = document.getElementById('reply_subject')?.value || ''; }
-        if (refEl) { refEl.value = 'Ref: ' + (document.getElementById('reply_ref')?.value || ''); }
-        if (orgEl) { orgEl.value = document.getElementById('reply_org')?.value || 'BEML'; }
+        if (refEl) { refEl.value = 'Ref: ' + (document.getElementById('reply_ref')?.value || '') + ' | Reply to customer letter'; }
+        if (orgEl) { orgEl.value = 'BEML'; }
+        if (toEl) { toEl.value = document.getElementById('reply_to')?.value || document.getElementById('reply_from')?.value || ''; }
+        if (attnEl) { attnEl.value = document.getElementById('reply_attention')?.value || ''; }
         updateLetterPreview();
       }, 500);
     }
