@@ -717,42 +717,211 @@ function parseLetterContent(text, org) {
 
   const extracted = { refNumber: '', allReferences: [], date: '', subject: '', from: '', to: '', kindAttn: '', enclosures: '', letterContent: '', remarks: '' };
 
-  // REF
-  for (let i = 0; i < Math.min(lines.length, 25); i++) {
+  // REF - improved to catch BEML formats like 1249/25/168/BEML/1234
+  for (let i = 0; i < Math.min(lines.length, 30); i++) {
     const line = lines[i]; let m;
-    m = line.match(/Our\s+No\.?\s*[:\.]?\s*(.+)/i);
-    if (m && m[1]) { let ref = m[1].trim().split(/\s{3,}/)[0].replace(/^[:\s]+/, '').trim(); if (ref.length >= 3 && !ref.match(/^date\s*:/i)) { extracted.refNumber = ref; break; } const sr = line.match(/([A-Z]{2,10}\s*\/\s*[A-Z0-9\/\-]+)/); if (sr && sr[1] && sr[1].includes('/')) { extracted.refNumber = sr[1].trim(); break; } }
-    m = line.match(/^([A-Z]{2,10}\/[A-Z0-9\/\-\(\)]+(?:\s+[A-Z][A-Za-z\/\-]+)*(?:\s*\/\s*\d{2,4})?(?:\s*\/\s*\d{2,5})?)\s/);
-    if (m && m[1] && m[1].includes('/')) { extracted.refNumber = m[1].trim(); break; }
-    if (!extracted.refNumber) { const ir = line.match(/([A-Z]{2,10}\s*\/\s*[A-Z0-9\/\-]+(?:\s*\/\s*[A-Z0-9]+)*(?:\s*\/\s*\d{2,4})?(?:\s*\/\s*\d{2,5})?)/); if (ir && ir[1] && (ir[1].match(/\//g) || []).length >= 2) { extracted.refNumber = ir[1].replace(/\s+/g, ' ').trim(); break; } }
-    if (i < 15) { m = line.match(/(?:^Ref|reference)\s*[:\.]?\s*(?:\(I\)\s*)?(.+)/i); if (m && m[1]) { let ref = m[1].trim().split(/\s{3,}/)[0].replace(/^[:\s]+/, '').trim(); if (ref.length >= 3) { extracted.refNumber = ref; break; } } }
-    m = line.match(/PDN\s+ref\.?\s*[:\.]?\s*(.+)/i); if (m && m[1]) { extracted.refNumber = m[1].trim().split(/\s{3,}/)[0].trim(); break; }
-    m = line.match(/Your\s+Ref\s*(?:No\.?)?\s*[:\.]?\s*(.+)/i); if (m && m[1]) { let ref = m[1].trim().split(/\s{3,}/)[0].replace(/^[:\s]+/, '').trim(); if (ref.length >= 3 && !ref.match(/^date\s*:/i)) { extracted.refNumber = ref; break; } }
+    // Explicit "Our No:" or "Ref No:" patterns
+    m = line.match(/(?:Our|Ref(?:erence)?|Letter)\s*(?:No|Number)?\.?\s*[:\.]?\s*(.+)/i);
+    if (m && m[1]) {
+      let ref = m[1].trim().split(/\s{3,}/)[0].replace(/^[:\s]+/, '').trim();
+      if (ref.length >= 3 && !ref.match(/^date\s*:/i) && !ref.match(/^(dear|sir|madam)/i)) {
+        extracted.refNumber = ref;
+        break;
+      }
+    }
+    // BEML-style reference: number/number/number/ORG
+    m = line.match(/(\d{3,6}\/\d{2,4}\/\d{1,5}\/[A-Z]+(?:\/\d{1,5})?)/i);
+    if (m && m[1]) { extracted.refNumber = m[1].trim(); break; }
+    // PDN ref
+    m = line.match(/PDN\s+ref\.?\s*[:\.]?\s*(.+)/i);
+    if (m && m[1]) { extracted.refNumber = m[1].trim().split(/\s{3,}/)[0].trim(); break; }
+    // Generic REF pattern with slashes
+    const ir = line.match(/([A-Z]{2,15}\s*\/\s*[A-Z0-9\/\-]+(?:\s*\/\s*[A-Z0-9]+)*(?:\s*\/\s*\d{2,4})?(?:\s*\/\s*\d{2,5})?)/);
+    if (ir && ir[1] && (ir[1].match(/\//g) || []).length >= 2) {
+      extracted.refNumber = ir[1].replace(/\s+/g, ' ').trim(); break;
+    }
+    // Your Ref
+    m = line.match(/Your\s+Ref\s*(?:No\.?)?\s*[:\.]?\s*(.+)/i);
+    if (m && m[1]) {
+      let ref = m[1].trim().split(/\s{3,}/)[0].replace(/^[:\s]+/, '').trim();
+      if (ref.length >= 3 && !ref.match(/^date\s*:/i)) { extracted.refNumber = ref; break; }
+    }
   }
-  if (!extracted.refNumber) { const ms = fullText.match(/([A-Z]{2,15}\s*\/\s*\d{2,4}[\-\/]\d{2,4}\s*\/\s*[A-Z]{2,15}\s*\/\s*\d{2,5})/); if (ms) extracted.refNumber = ms[1].replace(/\s+/g, ' ').trim(); else { const all = fullText.match(/([A-Z]{2,15}\s*\/\s*[A-Z0-9\/\-]+(?:\s*\/\s*[A-Z0-9]+)*(?:\s*\/\s*\d{2,4})?(?:\s*\/\s*\d{2,5})?)/g); if (all) { const v = all.filter(r => (r.match(/\//g) || []).length >= 2); if (v.length) extracted.refNumber = v.sort((a, b) => b.length - a.length)[0].replace(/\s+/g, ' ').trim(); } } }
-  if (!extracted.refNumber) { for (const l of lines.slice(0, 20)) { const m = l.match(/Project\s+Ref\.?\s*[:\.]?\s*(.+)/i); if (m && m[1]) { extracted.refNumber = m[1].trim().split(/\s{3,}/)[0]; break; } } }
+  // Broader fallback: scan full text for ref-like patterns
+  if (!extracted.refNumber) {
+    const ms = fullText.match(/(\d{3,6}\/\d{2,4}\/\d{1,5}\/[A-Z]+(?:\/\d{1,5})?)/i);
+    if (ms) extracted.refNumber = ms[1].replace(/\s+/g, ' ').trim();
+  }
+  if (!extracted.refNumber) {
+    const ms = fullText.match(/([A-Z]{2,15}\s*\/\s*\d{2,4}[\-\/]\d{2,4}\s*\/\s*[A-Z]{2,15}\s*\/\s*\d{2,5})/);
+    if (ms) extracted.refNumber = ms[1].replace(/\s+/g, ' ').trim();
+  }
+  if (!extracted.refNumber) {
+    const all = fullText.match(/([A-Z]{2,15}\s*\/\s*[A-Z0-9\/\-]+(?:\s*\/\s*[A-Z0-9]+)*(?:\s*\/\s*\d{2,4})?(?:\s*\/\s*\d{2,5})?)/g);
+    if (all) {
+      const v = all.filter(r => (r.match(/\//g) || []).length >= 2);
+      if (v.length) extracted.refNumber = v.sort((a, b) => b.length - a.length)[0].replace(/\s+/g, ' ').trim();
+    }
+  }
 
-  // DATE
-  for (let i = 0; i < Math.min(lines.length, 25); i++) { const line = lines[i]; let m; m = line.match(/(?:Date|Dated?)\s*[:\.]?\s*(\d{1,2}[\.\/\-]\d{1,2}[\.\/\-]\d{2,4})/i); if (m && m[1]) { extracted.date = m[1].trim(); break; } m = line.match(/(?:Date|Dated?)\s*[:\.]?\s*(\d{1,2})\s*[\.\/\-]\s*(\d{1,2})\s*[\.\/\-]\s*(\d{2,4})/i); if (m) { extracted.date = `${m[1]}.${m[2]}.${m[3]}`; break; } m = line.match(/(?:Date|Dated?)\s*[:\.]?\s*(\d{1,2})(?:st|nd|rd|th)?/i); if (m && m[1]) { for (let j = i + 1; j < Math.min(i + 4, lines.length); j++) { const my = lines[j].match(/((?:of\s+)?(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s*,?\s*\d{2,4})/i); if (my) { extracted.date = `${m[1]} ${my[1].replace(/^of\s+/i, '')}`; break; } } if (extracted.date) break; } }
-  if (!extracted.date) { for (const l of lines.slice(0, 10)) { const m = l.match(/(\d{1,2}[\.\/\-]\d{1,2}[\.\/\-]\d{2,4})/); if (m) { extracted.date = m[1]; break; } } }
+  // DATE - improved to catch BEML formats
+  for (let i = 0; i < Math.min(lines.length, 30); i++) {
+    const line = lines[i]; let m;
+    // "Date: 12.05.2025" or "Date: 12/05/2025" or "Date: 12-05-2025"
+    m = line.match(/(?:Date|Dated?)\s*[:\.]?\s*(\d{1,2}[\.\/\-]\d{1,2}[\.\/\-]\d{2,4})/i);
+    if (m && m[1]) { extracted.date = m[1].trim(); break; }
+    // "Dated: 12th May 2025"
+    m = line.match(/(?:Date|Dated?)\s*[:\.]?\s*(\d{1,2})(?:st|nd|rd|th)?/i);
+    if (m && m[1]) {
+      for (let j = i + 1; j < Math.min(i + 4, lines.length); j++) {
+        const my = lines[j].match(/((?:of\s+)?(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s*,?\s*\d{2,4})/i);
+        if (my) { extracted.date = `${m[1]} ${my[1].replace(/^of\s+/i, '')}`; break; }
+      }
+      if (extracted.date) break;
+    }
+    // Standalone date pattern: "12.05.2025" or "12/05/2025" (within first 15 lines)
+    if (i < 15) {
+      m = line.match(/(\d{1,2}[\.\/\-]\d{1,2}[\.\/\-]\d{2,4})/);
+      if (m && m[1]) { extracted.date = m[1].trim(); break; }
+    }
+  }
+  // Broader fallback
+  if (!extracted.date) { for (const l of lines.slice(0, 15)) { const m = l.match(/(\d{1,2}[\.\/\-]\d{1,2}[\.\/\-]\d{2,4})/); if (m) { extracted.date = m[1]; break; } } }
+  // Fallback: "May 12, 2025" or "12 May 2025"
+  if (!extracted.date) { for (const l of lines.slice(0, 15)) { const m = l.match(/((?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+\d{1,2},?\s*\d{2,4})/i); if (m) { extracted.date = m[1].trim(); break; } } }
 
-  // SUBJECT
-  for (let i = 0; i < lines.length; i++) { const line = lines[i]; let m = line.match(/Subject\s*[:\.—–\-]\s*(.+)/i); if (m && m[1]) { let s = m[1].trim(); for (let j = i + 1; j < Math.min(i + 3, lines.length); j++) { const n = lines[j]; if (n.match(/^(dear|hello|with|the |our |we |thank|please|refer|enclos|attach|kind attn)/i) || n.length === 0) break; s += ' ' + n.trim(); } extracted.subject = s.replace(/\s+/g, ' ').substring(0, 500); break; } m = line.match(/Sub\.?\s*[:\.—–\-]\s*(.+)/i); if (m && m[1]) { extracted.subject = m[1].trim().substring(0, 500); break; } }
+  // SUBJECT - improved to handle more formats
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    // "Subject: ..." or "Subject - ..." or "Subject – ..."
+    let m = line.match(/Subject\s*[:\.—–\-]\s*(.+)/i);
+    if (m && m[1]) {
+      let s = m[1].trim();
+      // Capture continuation lines (up to 3 lines after)
+      for (let j = i + 1; j < Math.min(i + 4, lines.length); j++) {
+        const n = lines[j];
+        if (n.match(/^(dear|hello|with|the |our |we |thank|please|refer|enclos|attach|kind attn|ref\b|date\b)/i) || n.length === 0) break;
+        s += ' ' + n.trim();
+      }
+      extracted.subject = s.replace(/\s+/g, ' ').substring(0, 500);
+      break;
+    }
+    // "Sub:" or "Sub." or "Sub "
+    m = line.match(/Sub\.?\s*[:\.—–\-]\s*(.+)/i);
+    if (m && m[1]) { extracted.subject = m[1].trim().substring(0, 500); break; }
+    // BEML format: "RE:" for subject
+    if (i < 20) {
+      m = line.match(/^(?:RE|Ref)\s*[:\.]\s*(.+)/i);
+      if (m && m[1] && m[1].trim().length > 5 && !extracted.subject) {
+        extracted.subject = m[1].trim().substring(0, 500);
+      }
+    }
+  }
 
-  // FROM
-  for (let i = 0; i < Math.min(lines.length, 15); i++) { const m = lines[i].match(/^From\s*[:\.]\s*(.+)/i); if (m && m[1] && m[1].trim().length > 2) { extracted.from = m[1].trim().replace(/\s+/g, ' ').substring(0, 150); break; } }
-  if (!extracted.from) { let toIdx = lines.findIndex(l => /^To\s*[:,]?\s*$/.test(l) || /^The\s+(?:Manager|Director|Project\s+Manager)/i.test(l)); if (toIdx === -1) toIdx = 20; const ht = lines.slice(0, Math.min(toIdx, 15)).join(' '); for (const c of [/\b(FORTUNA\s+IMPEX)\b/i, /\b(BEML\s+Limited)\b/i, /\b(Televic\s+Rail\s*N\.?V\.?)\b/i, /\b(KMRCL)\b/i]) { const m = ht.match(c); if (m) { extracted.from = m[1]; break; } } }
+  // FROM - improved to catch BEML format
+  for (let i = 0; i < Math.min(lines.length, 20); i++) {
+    const line = lines[i];
+    // "From: BEML Limited, Bangalore"
+    const m = line.match(/^(?:From|Sender)\s*[:\.]\s*(.+)/i);
+    if (m && m[1] && m[1].trim().length > 2) {
+      extracted.from = m[1].trim().replace(/\s+/g, ' ').substring(0, 150);
+      break;
+    }
+    // BEML-specific: look for "BEML Limited" or similar org names
+    if (/^(BEML|Beml)\s+(Limited|Ltd)/i.test(line)) {
+      extracted.from = line.trim().substring(0, 150);
+      break;
+    }
+  }
+  // Fallback: search for common sender patterns in header area
+  if (!extracted.from) {
+    const headerLines = lines.slice(0, 20).join(' ');
+    // Try to find department/division info
+    const deptMatch = headerLines.match(/((?:General|Commercial|Technical|Quality|Purchase|Engineering|Projects?|Design)\s+(?:Manager|Manager|Dept|Division|Group|Team))/i);
+    if (deptMatch) { extracted.from = deptMatch[1].trim().substring(0, 150); }
+    else {
+      // Look for BEML, Televic, KMRCL etc
+      for (const pat of [/\b(BEML\s+Limited)\b/i, /\b(BEML)\b/i, /\b(Televic\s+Rail\s*N\.?V\.?)\b/i, /\b(KMRCL)\b/i, /\b(BMRCL)\b/i, /\b(FORTUNA\s+IMPEX)\b/i]) {
+        const m = headerLines.match(pat);
+        if (m) { extracted.from = m[1]; break; }
+      }
+    }
+  }
 
-  // TO
-  for (let i = 0; i < Math.min(lines.length, 25); i++) { if (/^To\s*[:,]?\s*$/.test(lines[i])) { const a = []; for (let j = i + 1; j < Math.min(i + 10, lines.length); j++) { if (lines[j].match(/^(kind\s+attn|dear|subject|sub\b|ref\b|date\b|our\s|your\s|reg\b)/i) || lines[j].length === 0) break; a.push(lines[j]); } if (a.length) extracted.to = a.join(', ').replace(/\s+/g, ' ').substring(0, 300); break; } if (/^The\s+(?:Manager|Director|Project\s+Manager)/i.test(lines[i])) { const a = [lines[i]]; for (let j = i + 1; j < Math.min(i + 8, lines.length); j++) { if (lines[j].match(/^(kind\s+attn|dear|subject|sub\b|ref\b|date\b)/i) || lines[j].length === 0) break; a.push(lines[j]); } if (a.length) extracted.to = a.join(', ').replace(/\s+/g, ' ').substring(0, 300); break; } }
+  // TO - improved to handle "To," and "To:" formats
+  for (let i = 0; i < Math.min(lines.length, 30); i++) {
+    const line = lines[i];
+    // "To," or "To:" on its own line
+    if (/^To\s*[,:]\s*$/.test(line) || /^To\s*[:\.]\s*$/.test(line)) {
+      const a = [];
+      for (let j = i + 1; j < Math.min(i + 10, lines.length); j++) {
+        const l = lines[j];
+        if (l.match(/^(kind\s+attn|dear|subject|sub\b|ref\b|date\b|our\s|your\s|reg\b|enclosure)/i) || l.length === 0) break;
+        a.push(l);
+      }
+      if (a.length) { extracted.to = a.join(', ').replace(/\s+/g, ' ').substring(0, 300); break; }
+    }
+    // "To: The Manager..."
+    const toMatch = line.match(/^To\s*[:\.]\s*(.+)/i);
+    if (toMatch && toMatch[1] && toMatch[1].trim().length > 2) {
+      const a = [toMatch[1].trim()];
+      for (let j = i + 1; j < Math.min(i + 8, lines.length); j++) {
+        const l = lines[j];
+        if (l.match(/^(kind\s+attn|dear|subject|sub\b|ref\b|date\b)/i) || l.length === 0) break;
+        a.push(l);
+      }
+      extracted.to = a.join(', ').replace(/\s+/g, ' ').substring(0, 300);
+      break;
+    }
+    // "The Manager / Director / Project Manager..."
+    if (/^The\s+(?:Manager|Director|Project\s+Manager|General\s+Manager)/i.test(line)) {
+      const a = [line];
+      for (let j = i + 1; j < Math.min(i + 8, lines.length); j++) {
+        const l = lines[j];
+        if (l.match(/^(kind\s+attn|dear|subject|sub\b|ref\b|date\b)/i) || l.length === 0) break;
+        a.push(l);
+      }
+      if (a.length) { extracted.to = a.join(', ').replace(/\s+/g, ' ').substring(0, 300); break; }
+    }
+  }
 
-  // KIND ATTENTION
-  for (const l of lines) { let m = l.match(/Kind\s+Attn\s*[:\.]?\s*(.+)/i); if (m && m[1]) { extracted.kindAttn = m[1].trim().replace(/\s+/g, ' ').substring(0, 200); break; } m = l.match(/Attn\s*[:\.]?\s*(.+)/i); if (m && m[1] && m[1].trim().length > 2) { extracted.kindAttn = m[1].trim().substring(0, 200); break; } }
+  // KIND ATTENTION - improved
+  for (let i = 0; i < Math.min(lines.length, 30); i++) {
+    const l = lines[i];
+    let m = l.match(/Kind\s+Attn\s*[:\.]?\s*(.+)/i);
+    if (m && m[1]) { extracted.kindAttn = m[1].trim().replace(/\s+/g, ' ').substring(0, 200); break; }
+    m = l.match(/Attn\s*[:\.]?\s*(.+)/i);
+    if (m && m[1] && m[1].trim().length > 2) { extracted.kindAttn = m[1].trim().substring(0, 200); break; }
+    // "Kind Attention: Mr. ..."
+    m = l.match(/Kind\s+Attention\s*[:\.]?\s*(.+)/i);
+    if (m && m[1]) { extracted.kindAttn = m[1].trim().substring(0, 200); break; }
+    // "Attention: ..."
+    m = l.match(/Attention\s*[:\.]?\s*(.+)/i);
+    if (m && m[1] && m[1].trim().length > 2) { extracted.kindAttn = m[1].trim().substring(0, 200); break; }
+  }
 
-  // ENCLOSURES
+  // ENCLOSURES - improved
   const ann = fullText.match(/Annexure[\s\-]*(?:I{1,3}|IV|V|VI{0,3})\b/gi);
   if (ann) extracted.enclosures = [...new Set(ann.map(a => a.replace(/\s+/g, '-')))].join(', ');
-  if (!extracted.enclosures) { for (const l of lines) { const m = l.match(/(?:Enclosures?|Encl\.?)\s*[:\.]?\s*(.+)/i); if (m && m[1] && m[1].trim().length > 2) { extracted.enclosures = m[1].trim().substring(0, 300); break; } } }
+  if (!extracted.enclosures) {
+    for (let i = 0; i < Math.min(lines.length, 40); i++) {
+      const l = lines[i];
+      const m = l.match(/(?:Enclosures?|Encl\.?|Enc\.?)\s*[:\.]?\s*(.+)/i);
+      if (m && m[1] && m[1].trim().length > 2) {
+        extracted.enclosures = m[1].trim().substring(0, 300);
+        break;
+      }
+      // "Enclosures: 1. ... 2. ..."
+      if (/^Enclosures?\s*[:\.]?\s*$/.test(l)) {
+        const encLines = [];
+        for (let j = i + 1; j < Math.min(i + 5, lines.length); j++) {
+          if (lines[j].match(/^\d+\.\s+/)) encLines.push(lines[j]);
+          else if (encLines.length > 0) break;
+        }
+        if (encLines.length) { extracted.enclosures = encLines.join('; ').substring(0, 300); break; }
+      }
+    }
+  }
 
   // ALL REFERENCES
   const allRefs = [];
@@ -760,16 +929,43 @@ function parseLetterContent(text, org) {
   const refPatterns = [/Ref(?:erence)?\s*[:\.]?\s*(?:\(I\)\s*)?([A-Z][A-Z0-9\/\-\(\)\s]{5,})/gi, /Your\s+Ref\s*[:\.]?\s*([A-Z][A-Z0-9\/\-\(\)\s]{5,})/gi, /Letter\s+No\.?\s*[:\.]?\s*([A-Z][A-Z0-9\/\-\(\)\s]{5,})/gi, /GC\/KMRCL\s+Letter\s+No\.?\s*[:\.]?\s*([0-9\-]+)/gi];
   for (const p of refPatterns) { let m; while ((m = p.exec(fullText)) !== null) { const r = m[1].trim().split(/\s{3,}/)[0].trim(); if (r.length >= 5 && r.length <= 80 && !allRefs.some(x => x.includes(r) || r.includes(x))) allRefs.push(r); } }
 
-  // LETTER CONTENT
+  // LETTER CONTENT - improved to find body text
   let ci = -1;
-  for (let i = 0; i < lines.length; i++) { if (lines[i].match(/Dear\s+(?:Sir|Madam|Mr|Ms|Dr|valued)/i)) { ci = i; break; } }
-  if (ci > -1) extracted.letterContent = lines.slice(ci).join('\n');
-  else { for (let i = 0; i < lines.length; i++) { if (lines[i].match(/Subject\s*[:\.]/i)) { ci = i + 1; while (ci < lines.length && lines[ci].length === 0) ci++; if (ci < lines.length) extracted.letterContent = lines.slice(ci).join('\n'); break; } } }
+  // Try "Dear Sir/Madam" or similar
+  for (let i = 0; i < lines.length; i++) {
+    if (lines[i].match(/Dear\s+(?:Sir|Madam|Mr|Ms|Dr|valued|Sir\/Madam)/i)) { ci = i; break; }
+  }
+  // Try "Dear Team" or "Hi ..."
+  if (ci === -1) {
+    for (let i = 0; i < lines.length; i++) {
+      if (lines[i].match(/^(Dear|Hi|Hello)\s/i)) { ci = i; break; }
+    }
+  }
+  // Try after Subject line
+  if (ci === -1) {
+    for (let i = 0; i < lines.length; i++) {
+      if (lines[i].match(/Subject\s*[:\.]/i)) {
+        ci = i + 1;
+        while (ci < lines.length && lines[ci].length === 0) ci++;
+        break;
+      }
+    }
+  }
+  // Try after "Thank you" or similar opening
+  if (ci === -1) {
+    for (let i = 0; i < lines.length; i++) {
+      if (lines[i].match(/^(Thank|With\s+reference|This\s+is|As\s+per|With\s+regard)/i)) { ci = i; break; }
+    }
+  }
+  if (ci > -1) {
+    extracted.letterContent = lines.slice(ci).join('\n');
+  }
   if (!extracted.letterContent) extracted.letterContent = fullText;
   extracted.letterContent = extracted.letterContent.replace(/\f/g, ' ').replace(/Page\s+\d+\s+of\s+\d+/gi, '').replace(/\n{3,}/g, '\n\n').trim().substring(0, 3000);
 
-  // LETTER TYPE
+  // LETTER TYPE - improved detection
   const lt = text.toLowerCase();
+  const sub = extracted.subject.toLowerCase();
   const typeMap = [
     { p: ['product discontinuation', 'obsolescence', 'last time buy', 'end of life', 'pdn ref'], t: 'PDN/Obsolescence' },
     { p: ['purchase order'], t: 'Purchase Order' }, { p: ['work order'], t: 'Work Order' },
@@ -779,17 +975,30 @@ function parseLetterContent(text, org) {
     { p: ['meeting', 'minutes of meeting', 'mom'], t: 'Meeting Minutes' },
     { p: ['waiver', 'waived'], t: 'Waiver Request' },
     { p: ['inspection'], t: 'Inspection' },
-    { p: ['request for approval', 'kindly approve'], t: 'Approval Request' },
+    { p: ['request for approval', 'kindly approve', 'for your approval'], t: 'Approval Request' },
     { p: ['technical'], t: 'Technical' }, { p: ['commercial'], t: 'Commercial' },
-    { p: ['correspondence'], t: 'Correspondence' }
+    { p: ['correspondence'], t: 'Correspondence' },
+    { p: ['reply', 'response'], t: 'Reply' },
+    { p: ['clarification'], t: 'Clarification' },
+    { p: ['follow up', 'follow-up', 'reminder'], t: 'Follow Up' },
+    { p: ['test report', 'test certificate'], t: 'Test Report' },
+    { p: ['delivery', 'dispatch', 'shipment'], t: 'Delivery' },
+    { p: ['warranty', 'guarantee'], t: 'Warranty' },
+    { p: ['non conformanc', 'ncr', 'ncn'], t: 'NCR' }
   ];
   let letterType = 'General';
-  for (const t of typeMap) { if (t.p.some(p => lt.includes(p))) { letterType = t.t; break; } }
+  for (const t of typeMap) { if (t.p.some(p => lt.includes(p) || sub.includes(p))) { letterType = t.t; break; } }
 
-  // REMARKS
+  // REMARKS - improved to catch CC, copy to, remarks
   let remarks = '';
-  const rm = fullText.match(/(?:CC:|Copy to)[:\.]?\s*(.+?)(?:\n\n|Annexure|$)/is);
-  if (rm) remarks = rm[1].trim().replace(/\n/g, ' ').substring(0, 300);
+  // "CC: ..." or "Copy to: ..."
+  const ccMatch = fullText.match(/(?:CC|Copy\s+to|Copies?\s+to)[:\.]?\s*(.+?)(?:\n\n|Annexure|Enclosures?|$)/is);
+  if (ccMatch) remarks = ccMatch[1].trim().replace(/\n/g, ' ').substring(0, 300);
+  // "Remarks: ..."
+  if (!remarks) {
+    const rmMatch = fullText.match(/Remarks?\s*[:\.]?\s*(.+?)(?:\n\n|$)/is);
+    if (rmMatch) remarks = rmMatch[1].trim().replace(/\n/g, ' ').substring(0, 300);
+  }
 
   return {
     organization: org, letterType, refLetterNumber: extracted.refNumber || '',
@@ -1422,7 +1631,7 @@ app.post('/api/extract', authenticateToken, upload.single('file'), async (req, r
         success: true, 
         data: {
           organization: org,
-          fileName: req.file.filename,
+          fileName: req.file.originalname || req.file.filename,
           uploadDate: new Date().toISOString().split('T')[0],
           letterType: 'General',
           status: 'Open',
@@ -1438,27 +1647,28 @@ app.post('/api/extract', authenticateToken, upload.single('file'), async (req, r
     }
 
     let parsed;
+    const originalFileName = req.file.originalname || req.file.filename;
     try {
       if (docType === 'ncr') {
         parsed = parseNCRContent(text);
         parsed.organization = org;
-        parsed.fileName = req.file.filename;
+        parsed.fileName = originalFileName;
         parsed.uploadDate = new Date().toISOString().split('T')[0];
       } else if (docType === 'joint_note') {
         parsed = parseJointNoteContent(text);
         parsed.organization = org;
-        parsed.fileName = req.file.filename;
+        parsed.fileName = originalFileName;
         parsed.uploadDate = new Date().toISOString().split('T')[0];
       } else {
         parsed = parseLetterContent(text, org);
-        parsed.fileName = req.file.filename;
+        parsed.fileName = originalFileName;
         parsed.detectedOrg = org;
       }
     } catch (parseErr) {
       console.log('⚠️  Content parsing failed:', parseErr.message);
       parsed = {
         organization: org,
-        fileName: req.file.filename,
+        fileName: originalFileName,
         uploadDate: new Date().toISOString().split('T')[0],
         letterType: 'General',
         status: 'Open',
@@ -1515,13 +1725,13 @@ app.post('/api/save', authenticateToken, upload.single('file'), async (req, res)
       
       try {
         driveResult = await uploadFileToDrive(filePath, req.file.originalname, org, subfolder);
-        data.fileName = req.file.filename;
+        data.fileName = req.file.originalname || req.file.filename;
         if (driveResult.link) data.attachmentLink = driveResult.link;
       } catch (driveErr) {
         console.log('⚠️  Drive upload failed:', driveErr.message);
         driveResult = { success: false, error: driveErr.message };
         // Still save to sheet even if Drive fails
-        data.fileName = req.file.filename;
+        data.fileName = req.file.originalname || req.file.filename;
       }
     }
 

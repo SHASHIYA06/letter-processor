@@ -482,7 +482,8 @@
           else if (key.includes('NCR')) ncr++;
           else if (key.includes('Joint')) jn++;
           const isNCR = key.includes('NCR');
-          const statusIdx = isNCR ? 17 : 14;
+          const isJN = key.includes('Joint');
+          const statusIdx = isNCR ? 17 : isJN ? 12 : 14;
           const status = (r[statusIdx] || '').toLowerCase();
           if (status !== 'closed' && status !== '' && status !== 'n/a') open++;
           else if (status === 'closed') closed++;
@@ -509,10 +510,12 @@
         const badge = item.sheet.includes('NCR') ? 'badge-ncr' : item.sheet.includes('BEML') ? 'badge-beml' : item.sheet.includes('KMRCL') ? 'badge-kmrcl' : 'badge-jn';
         const statusIdx = item.sheet.includes('NCR') ? 17 : item.sheet.includes('Joint') ? 12 : 14;
         const status = r[statusIdx] || 'Open';
+        const docTitle = r[13] || r[1] || r[7] || r[3] || '—';
+        const docDate = r[2] || r[3] || '—';
         html += `<tr style="cursor:pointer" onclick="viewDocument('${item.sheet}',${item.idx})">
-          <td><strong>${esc(r[1] || r[3] || 'N/A')}</strong></td>
+          <td><strong>${esc(docTitle.substring(0,40))}</strong></td>
           <td><span class="badge ${badge}">${item.sheet}</span></td>
-          <td>${esc(r[3] || r[2] || 'N/A')}</td>
+          <td>${esc(docDate)}</td>
           <td><span class="badge badge-${(status||'open').toLowerCase() === 'closed' ? 'closed' : 'open'}">${esc(status) || 'Open'}</span></td>
         </tr>`;
       });
@@ -573,14 +576,21 @@
         const r = item.row;
         const badge = item.sheet.includes('BEML') ? 'badge-beml' : item.sheet.includes('KMRCL') ? 'badge-kmrcl' : 'badge-metro';
         const status = r[14] || 'Open';
+        const refNo = r[1] || '';
+        const date = r[3] || '';
+        const from = r[4] || '';
+        const subject = r[7] || '';
+        const letterType = r[8] || '';
+        const fileName = r[13] || '';
+        const hasData = refNo || date || from || subject;
         html += `<tr>
           <td>${i+1}</td>
           <td><span class="badge ${badge}">${item.sheet.replace(' Letters','')}</span></td>
-          <td><strong>${esc(r[1] || '')}</strong></td>
-          <td>${esc(r[3] || '')}</td>
-          <td title="${esc(r[4] || '')}">${esc((r[4] || '').substring(0,30))}</td>
-          <td title="${esc(r[7] || '')}">${esc((r[7] || '').substring(0,50))}</td>
-          <td>${esc(r[8] || '')}</td>
+          <td><strong>${esc(refNo || (fileName ? fileName.substring(0,25) : '—'))}</strong></td>
+          <td>${esc(date || '—')}</td>
+          <td title="${esc(from)}">${esc((from || '').substring(0,30) || '—')}</td>
+          <td title="${esc(subject)}">${esc((subject || '').substring(0,50) || '—')}</td>
+          <td>${esc(letterType || '—')}</td>
           <td><span class="badge badge-${status.toLowerCase() === 'closed' ? 'closed' : 'open'}">${esc(status)}</span></td>
           <td class="actions">
             <button class="btn btn-secondary btn-sm" onclick="viewDocument('${item.sheet}',${item.idx})" title="View">👁️</button>
@@ -644,13 +654,13 @@
         const severityClass = severity.toLowerCase() === 'critical' ? 'error' : severity.toLowerCase() === 'major' ? 'warning' : 'open';
         html += `<tr>
           <td>${i+1}</td>
-          <td><strong>${esc(r[1] || 'N/A')}</strong></td>
-          <td>${esc(r[2] || r[3] || 'N/A')}</td>
-          <td title="${esc(r[4] || '')}">${esc((r[4] || 'N/A').substring(0,35))}</td>
-          <td title="${esc(project)}">${esc((project || 'N/A').substring(0,25))}</td>
-          <td>${esc(trainSet || 'N/A')}</td>
-          <td>${esc(r[15] || 'N/A')}</td>
-          <td>${esc(r[40] || 'N/A')}</td>
+          <td><strong>${esc(r[1] || '—')}</strong></td>
+          <td>${esc(r[2] || r[3] || '—')}</td>
+          <td title="${esc(r[4] || '')}">${esc((r[4] || '').substring(0,35) || '—')}</td>
+          <td title="${esc(project)}">${esc((project || '').substring(0,25) || '—')}</td>
+          <td>${esc(trainSet || '—')}</td>
+          <td>${esc(r[15] || '—')}</td>
+          <td>${esc(r[40] || '—')}</td>
           <td><span class="badge badge-${severityClass}">${esc(severity)}</span></td>
           <td><span class="badge badge-${statusClass}">${esc(status)}</span></td>
           <td class="actions">
@@ -686,10 +696,10 @@
         const status = r[12] || 'Open';
         html += `<tr>
           <td>${i+1}</td>
-          <td><strong>${esc(r[1] || '')}</strong></td>
-          <td>${esc(r[2] || '')}</td>
-          <td title="${esc(r[3] || '')}">${esc((r[3] || '').substring(0,30))}</td>
-          <td title="${esc(r[4] || '')}">${esc((r[4] || '').substring(0,50))}</td>
+          <td><strong>${esc(r[1] || '—')}</strong></td>
+          <td>${esc(r[2] || '—')}</td>
+          <td title="${esc(r[3] || '')}">${esc((r[3] || '').substring(0,30) || '—')}</td>
+          <td title="${esc(r[4] || '')}">${esc((r[4] || '').substring(0,50) || '—')}</td>
           <td><span class="badge badge-${status.toLowerCase() === 'closed' ? 'closed' : 'open'}">${esc(status)}</span></td>
           <td class="actions">
             <button class="btn btn-secondary btn-sm" onclick="viewDocument('Joint Notes',${item.idx})" title="View">👁️</button>
@@ -1899,11 +1909,11 @@
       headers.forEach((h, i) => {
         if (i === 0) return;
         const val = record[i] || '';
-        if (!val) return;
         const isLong = val.length > 100;
+        const displayVal = val || '—';
         html += `<div style="padding:10px;background:var(--bg);border-radius:8px;${isLong ? 'grid-column:1/-1' : ''}">
           <div style="font-size:.7rem;color:var(--text3);text-transform:uppercase;margin-bottom:4px">${esc(h)}</div>
-          <div style="font-size:.85rem;word-break:break-word;max-height:200px;overflow-y:auto;white-space:pre-wrap">${esc(val)}</div>
+          <div style="font-size:.85rem;word-break:break-word;max-height:200px;overflow-y:auto;white-space:pre-wrap;${!val ? 'color:var(--text3);font-style:italic' : ''}">${esc(displayVal)}</div>
         </div>`;
       });
       html += '</div>';
@@ -1914,7 +1924,7 @@
         <button class="btn btn-danger btn-sm" onclick="deleteRecord('${sheet}',${idx})">🗑️ Delete</button>
       </div>`;
 
-      document.getElementById('detailTitle').textContent = sheet + ' - ' + (record[1] || record[2] || record[3] || 'Record');
+      document.getElementById('detailTitle').textContent = sheet + ' - ' + (record[13] || record[1] || record[7] || record[3] || 'Record');
       document.getElementById('detailBody').innerHTML = html;
       document.getElementById('detailModal').classList.add('show');
     }
