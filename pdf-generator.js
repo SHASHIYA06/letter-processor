@@ -79,7 +79,9 @@ function drawBEMLFooter(doc, W, H) {
   if (fs.existsSync(footerPath)) {
     try {
       doc.save();
-      doc.image(footerPath, 0, H - 85, { width: W, fit: [W, 85] });
+      // Footer image should be at the very bottom of the page
+      const footerHeight = 80;
+      doc.image(footerPath, 0, H - footerHeight, { width: W, fit: [W, footerHeight] });
       doc.restore();
       return;
     } catch (e) {}
@@ -167,16 +169,23 @@ function generateLetterPdf(data, outputPath) {
       y += 16;
     }
 
-    // Subject (underlined, bold)
+    // Subject (underlined, bold) - BEML format
     y += 4;
-    doc.font('Times-Bold').fontSize(10).fillColor('#000').text('Subject: ' + (data.subject || ''), L, y, { width: CW, underline: true });
-    y += 18;
+    doc.font('Times-Bold').fontSize(10).fillColor('#000');
+    doc.text('Subject: ', L, y, { continued: true, underline: false });
+    doc.font('Times-Bold').fontSize(10).text(data.subject || '', { underline: true });
+    y = doc.y + 8;
 
-    // All References
+    // All References - BEML format
     if (data.allReferences) {
       doc.font('Times-Roman').fontSize(9).fillColor('#333');
       const refLines = data.allReferences.split('\n');
-      refLines.forEach(line => { doc.text('Ref: ' + line.trim(), L, y, { width: CW }); y += 12; });
+      refLines.forEach(line => {
+        if (line.trim()) {
+          doc.text('Ref: ' + line.trim(), L, y, { width: CW });
+          y = doc.y + 2;
+        }
+      });
       y += 4;
     }
 
@@ -185,8 +194,18 @@ function generateLetterPdf(data, outputPath) {
 
     // Letter body
     const body = data.letterContent || data.letterBody || '';
-    doc.font('Times-Roman').fontSize(10).fillColor('#000').text(body, L, y, { width: CW, lineGap: 4, align: 'justify' });
-    y = doc.y + 10;
+    if (body) {
+      doc.font('Times-Roman').fontSize(10).fillColor('#000');
+      // Handle multi-line content
+      const bodyLines = body.split('\n');
+      bodyLines.forEach(line => {
+        if (line.trim()) {
+          doc.text(line.trim(), L, y, { width: CW, lineGap: 4, align: 'justify' });
+          y = doc.y + 2;
+        }
+      });
+      y += 10;
+    }
 
     // Closing
     y = checkPageBreak(doc, y, 120, L, R);
@@ -204,17 +223,24 @@ function generateLetterPdf(data, outputPath) {
     // Enclosures
     if (data.enclosures) {
       y += 8;
-      doc.font('Times-Roman').fontSize(9).fillColor('#333').text('Encl: ' + data.enclosures, L, y, { width: CW });
-      y += 14;
+      doc.font('Times-Roman').fontSize(9).fillColor('#333');
+      doc.text('Encl: ' + data.enclosures, L, y, { width: CW });
+      y = doc.y + 6;
     }
 
     // CC
     if (data.cc) {
       y += 4;
-      doc.font('Times-Bold').fontSize(9).fillColor('#333').text('Copy to:', L, y); y += 12;
+      doc.font('Times-Bold').fontSize(9).fillColor('#333').text('Copy to:', L, y);
+      y = doc.y + 2;
       doc.font('Times-Roman').fontSize(9);
       const ccLines = data.cc.split('\n');
-      ccLines.forEach(line => { if (line.trim()) { doc.text(line.trim(), L + 10, y, { width: CW - 10 }); y += 11; } });
+      ccLines.forEach(line => {
+        if (line.trim()) {
+          doc.text(line.trim(), L + 10, y, { width: CW - 10 });
+          y = doc.y + 2;
+        }
+      });
     }
 
     doc.end();
@@ -263,7 +289,7 @@ function generateNCRPdf(data, outputPath) {
     doc.rect(L, y, CW, barH).lineWidth(0.4).stroke();
     doc.font('Times-Roman').fontSize(7).fillColor('#000');
     doc.text('OEM/ SBU-S&M / R&D/ PM/Purchase/ Quality', L + 4, y + 3, { width: CW / 2 - 10 });
-    doc.text(data.trainSet ? `${data.trainSet} ${data.car || ''} ${data.line || ''}` : '', L + 4, y + 13, { width: CW / 2 - 10 });
+    doc.text(data.trainSet || data.trainNo ? `${data.trainSet || data.trainNo || ''} ${data.car || ''} ${data.line || ''}` : '', L + 4, y + 13, { width: CW / 2 - 10 });
     doc.font('Times-Bold').fontSize(7.5);
     doc.text('Report no.', R - CW / 2 + 10, y + 3, { width: 60 });
     doc.font('Times-Roman').fontSize(7.5);
@@ -294,7 +320,7 @@ function generateNCRPdf(data, outputPath) {
     }
 
     // Row 1: Project + Vehicle no
-    drawCellRow('Project', data.project || '---', 'Vehicle no.', data.vehicleNo || data.trainSet || '---');
+    drawCellRow('Project', data.project || '---', 'Vehicle no.', data.vehicleNo || data.trainNo || data.trainSet || '---');
     // Row 2: Product + Assy dwg no
     drawCellRow('Product', data.product || data.itemDesc || '---', 'Assy dwg no.', data.assyDwgNo || '---');
     // Row 3: Quantity + Part no

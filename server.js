@@ -445,7 +445,7 @@ const NCR_KEY_TO_COL = {
   // Legacy aliases from form
   vehicleNo: 'Train No', product: 'Item Description', partNumber: 'Part Number',
   supplier: 'Vendor', correction: 'Corrective Action', cause: 'Root Cause',
-  department: 'Issued By'
+  department: 'Issued By', investigationReportDate: 'Investigation Report Date'
 };
 
 const JN_KEY_TO_COL = {

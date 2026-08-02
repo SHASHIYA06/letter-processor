@@ -2211,6 +2211,13 @@
           'Repair Procedure':'repairProcedure'
         };
         headers.forEach((h, i) => { if (NCR_KEY_MAP[h] && record[i]) data[NCR_KEY_MAP[h]] = record[i]; });
+        // Alias mappings for PDF generator
+        if (data.trainNo && !data.vehicleNo) data.vehicleNo = data.trainNo;
+        if (data.vendor && !data.supplier) data.supplier = data.vendor;
+        if (data.rootCause && !data.cause) data.cause = data.rootCause;
+        if (data.correctiveAction && !data.correction) data.correction = data.correctiveAction;
+        if (data.investigationDate && !data.investigationReportDate) data.investigationReportDate = data.investigationDate;
+        data.organization = currentDepot || 'BEML';
         authFetch('/api/ncr/generate-pdf', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(data) })
           .then(r => r.json()).then(r => { if (r.pdfData) { const bin = atob(r.pdfData); const bytes = new Uint8Array(bin.length); for(let i=0;i<bin.length;i++) bytes[i]=bin.charCodeAt(i); const url = URL.createObjectURL(new Blob([bytes],{type:'application/pdf'})); const a = document.createElement('a'); a.href = url; a.download = r.fileName || 'NCR.pdf'; a.click(); } });
       } else if (isLetter) {
@@ -2226,6 +2233,11 @@
           'Reply Type':'replyType','Tech Details':'techDetails'
         };
         headers.forEach((h, i) => { if (LETTER_KEY_MAP[h] && record[i]) data[LETTER_KEY_MAP[h]] = record[i]; });
+        // Determine org from sheet name
+        if (sheet.includes('BEML')) data.organization = 'BEML';
+        else if (sheet.includes('KMRCL')) data.organization = 'KMRCL';
+        else if (sheet.includes('Metro')) data.organization = 'Metro Rail';
+        else data.organization = currentDepot || 'BEML';
         authFetch('/api/letter/generate-pdf', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(data) })
           .then(r => r.json()).then(r => { if (r.pdfData) { const bin = atob(r.pdfData); const bytes = new Uint8Array(bin.length); for(let i=0;i<bin.length;i++) bytes[i]=bin.charCodeAt(i); const url = URL.createObjectURL(new Blob([bytes],{type:'application/pdf'})); const a = document.createElement('a'); a.href = url; a.download = r.fileName || 'Letter.pdf'; a.click(); } });
       } else {
