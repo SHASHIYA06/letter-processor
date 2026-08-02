@@ -218,6 +218,10 @@ const SHEET_NAMES = {
   'BEML': 'BEML Letters',
   'KMRCL': 'KMRCL Letters',
   'Metro Rail': 'Metro Rail Letters',
+  'BMRCL': 'BMRCL Letters',
+  'DMCRL': 'DMCRL Letters',
+  'MMRCL': 'MMRCL Letters',
+  'CMRCL': 'CMRCL Letters',
   'NCR': 'NCR Records',
   'Joint Note': 'Joint Notes'
 };
@@ -379,8 +383,12 @@ async function ensureHeaders(sheetName, columns) {
     const res = await sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range });
     const existingHeaders = res.data.values ? res.data.values[0] : [];
     
-    // Update if empty OR if column count doesn't match
-    if (!existingHeaders || existingHeaders.length === 0 || existingHeaders.length !== columns.length) {
+    // Always update if empty OR if column count doesn't match OR if headers differ
+    const needsUpdate = !existingHeaders || existingHeaders.length === 0 || 
+                        existingHeaders.length !== columns.length ||
+                        existingHeaders.some((h, i) => h !== columns[i]);
+    
+    if (needsUpdate) {
       await sheets.spreadsheets.values.update({
         spreadsheetId: SPREADSHEET_ID, range,
         valueInputOption: 'RAW', requestBody: { values: [columns] }
@@ -716,7 +724,7 @@ function parseLetterContent(text, org) {
   const lines = normalized.split('\n').map(l => l.trim()).filter(Boolean);
   const fullText = lines.join('\n');
 
-  const extracted = { refNumber: '', allReferences: [], date: '', subject: '', from: '', to: '', kindAttn: '', enclosures: '', letterContent: '', remarks: '' };
+  const extracted = { refNumber: '', allReferences: [], date: '', subject: '', from: '', to: '', kindAttn: '', enclosures: '', letterContent: '', remarks: '', cc: '', signatory: '', designation: '', project: '' };
 
   // REF - improved to catch BEML formats like 1249/25/168/BEML/1234
   for (let i = 0; i < Math.min(lines.length, 30); i++) {
@@ -1001,13 +1009,61 @@ function parseLetterContent(text, org) {
     if (rmMatch) remarks = rmMatch[1].trim().replace(/\n/g, ' ').substring(0, 300);
   }
 
+  // CC - extract "CC:" or "Copy to:" block
+  let cc = '';
+  const ccBlock = fullText.match(/(?:CC|Copy\s+to|Copies?\s+to)[:\.]?\s*\n?([\s\S]*?)(?:\n\n|Annexure|Enclosures?|Yours|Thank|With\s+regard|$)/i);
+  if (ccBlock) cc = ccBlock[1].trim().replace(/\n/g, '; ').substring(0, 300);
+  if (!cc && ccMatch) cc = remarks; // fallback: use CC from remarks
+
+  // SIGNATORY - look for name/designation near closing
+  let signatory = '', designation = '';
+  for (let i = Math.max(0, lines.length - 15); i < lines.length; i++) {
+    const l = lines[i];
+    if (l.match(/Yours\s+(sincerely|faithfully|truly)/i)) {
+      for (let j = i + 1; j < Math.min(i + 6, lines.length); j++) {
+        const n = lines[j];
+        if (n.match(/for\s+BEML|BEML\s+Limited|Manager|General\s+Manager|Senior|Chief|Director/i) && !signatory) {
+          signatory = n.trim().substring(0, 100);
+        }
+        if (n.match(/Manager|Engineer|Officer|Director|Chief|General|Senior|Quality|Head/i) && !designation) {
+          designation = n.trim().substring(0, 100);
+        }
+      }
+      break;
+    }
+  }
+  if (!signatory) {
+    for (let i = lines.length - 10; i < lines.length; i++) {
+      if (lines[i] && lines[i].match(/^[A-Z][a-z]+\s+[A-Z][a-z]+/) && i + 1 < lines.length) {
+        const next = lines[i + 1] || '';
+        if (next.match(/Manager|Engineer|Officer|Director|Chief|General|Senior|Quality|Head/i)) {
+          signatory = lines[i].trim();
+          designation = next.trim();
+          break;
+        }
+      }
+    }
+  }
+
+  // PROJECT - look for project identifiers
+  let project = '';
+  const projMatch = fullText.match(/(?:Project|Contract|Work\s+Order)\s*(?:No\.?|Number)?\s*[:\.]?\s*([A-Z0-9\/\-]+)/i);
+  if (projMatch) project = projMatch[1].trim().substring(0, 50);
+  if (!project) {
+    const trainMatch = fullText.match(/\b(RS[13]R|RS\s+[13]R|KMRC|BMRC|Metro)\b/i);
+    if (trainMatch) project = trainMatch[1].trim();
+  }
+
   return {
-    organization: org, letterType, refLetterNumber: extracted.refNumber || '',
+    organization: org, letterType, refNumber: extracted.refNumber || '',
+    refLetterNumber: extracted.refNumber || '',
     allReferences: allRefs.length > 0 ? allRefs.join(' | ') : '',
     date: extracted.date || '', from: extracted.from || '', to: extracted.to || '',
     kindAttn: extracted.kindAttn || '', subject: extracted.subject || '',
     letterContent: extracted.letterContent || '', enclosures: extracted.enclosures || '',
     remarks: remarks || '', fileName: '',
+    cc: cc || '', signatory: signatory || '',
+    designation: designation || '', project: project || '',
     uploadDate: new Date().toISOString().split('T')[0],
     status: 'Open'
   };
@@ -1458,7 +1514,11 @@ app.post('/api/joint-note/generate-docx', authenticateToken, async (req, res) =>
 // ══════════════════════════════════════════════════════════════
 function detectOrganization(text) {
   const l = text.toLowerCase();
-  if (l.includes('kmrcl') || l.includes('kolkata metro')) return 'KMRCL';
+  if (l.includes('kmrcl') || l.includes('kolkata metro rail')) return 'KMRCL';
+  if (l.includes('bmrcl') || l.includes('bangalore metro rail')) return 'BMRCL';
+  if (l.includes('dmcr') || l.includes('delhi metro')) return 'DMCRL';
+  if (l.includes('mmrcl') || l.includes('mumbai metro rail')) return 'MMRCL';
+  if (l.includes('cmrcl') || l.includes('chennai metro rail')) return 'CMRCL';
   if (l.includes('metro rail') || l.includes('metro railway')) return 'Metro Rail';
   if (l.includes('beml') || l.includes('bharat earth')) return 'BEML';
   return null;
@@ -1857,6 +1917,80 @@ app.post('/api/bulk-upload', authenticateToken, (req, res) => {
       res.json({ success: true, totalFiles: files.length, successCount: ok, failCount: fail, results });
     } catch (err) { res.status(500).json({ success: false, error: err.message }); }
   });
+});
+
+// ══════════════════════════════════════════════════════════════
+//  EXCEL IMPORT - Import legacy Excel data
+// ══════════════════════════════════════════════════════════════
+app.post('/api/import-excel', authenticateToken, upload.single('file'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ success: false, error: 'No file uploaded' });
+    const filePath = getFilePath(req);
+    const org = req.body.organization || 'BEML';
+    const docType = req.body.type || 'letter';
+    console.log(`\n📊 Excel Import: ${req.file.originalname} for ${org} (${docType})`);
+
+    const XLSX = await import('xlsx');
+    const workbook = XLSX.readFile(filePath);
+    const sheetName = workbook.SheetNames[0];
+    const worksheet = workbook.Sheets[sheetName];
+    const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+    if (jsonData.length < 2) return res.status(400).json({ success: false, error: 'Excel has no data rows' });
+
+    const headers = jsonData[0].map(h => String(h || '').trim());
+    const rows = jsonData.slice(1).filter(row => row.some(cell => cell));
+    console.log(`   Sheet: ${sheetName}, Headers: ${headers.length}, Rows: ${rows.length}`);
+
+    const targetColumns = docType === 'ncr' ? NCR_COLUMNS : docType === 'joint_note' ? JOINT_NOTE_COLUMNS : LETTER_COLUMNS;
+    const keyToCol = docType === 'ncr' ? NCR_KEY_TO_COL : docType === 'joint_note' ? JN_KEY_TO_COL : LETTER_KEY_TO_COL;
+    const colToKey = {};
+    for (const [key, colName] of Object.entries(keyToCol)) { if (!colToKey[colName]) colToKey[colName] = key; }
+
+    const aliasMap = {
+      'Ref No': 'Ref. Letter Number', 'Ref Number': 'Ref. Letter Number', 'Reference': 'Ref. Letter Number',
+      'Reference No': 'Ref. Letter Number', 'Letter No': 'Ref. Letter Number', 'Letter Number': 'Ref. Letter Number',
+      'All Ref': 'All References', 'References': 'All References',
+      'Address': 'To (Addressee)', 'Addressee': 'To (Addressee)',
+      'Attn': 'Kind Attention', 'Attention': 'Kind Attention', 'Kind Attn': 'Kind Attention',
+      'Sub': 'Subject', 'Title': 'Subject',
+      'Content': 'Letter Content', 'Body': 'Letter Content', 'Letter Body': 'Letter Content',
+      'Type': 'Letter Type', 'Category': 'Letter Type',
+      'File': 'File Name', 'Filename': 'File Name',
+      'Drive Link': 'Attachment Link', 'URL': 'Attachment Link', 'Link': 'Attachment Link',
+      'NCR No': 'NCR Report No', 'NCR Number': 'NCR Report No',
+      'Vendor': 'Vendor', 'Supplier': 'Vendor',
+      'Root Cause': 'Root Cause', 'Corrective Action': 'Corrective Action', 'Preventive Action': 'Preventive Action',
+      'Severity': 'Severity', 'Priority': 'Priority', 'Status': 'Status'
+    };
+
+    const results = []; let ok = 0, fail = 0;
+    for (let rowIdx = 0; rowIdx < rows.length; rowIdx++) {
+      try {
+        const row = rows[rowIdx];
+        const data = {};
+        for (let colIdx = 0; colIdx < headers.length; colIdx++) {
+          const header = headers[colIdx];
+          if (!header || colIdx >= row.length) continue;
+          const value = String(row[colIdx] || '').trim();
+          if (!value) continue;
+          let targetCol = aliasMap[header] || header;
+          const dataKey = colToKey[targetCol];
+          if (dataKey) data[dataKey] = value;
+        }
+        data.organization = org;
+        data.status = data.status || 'Open';
+        data.fileName = data.fileName || req.file.originalname;
+        data.uploadDate = new Date().toISOString().split('T')[0];
+        const sheetTarget = docType === 'ncr' ? 'NCR Records' : docType === 'joint_note' ? 'Joint Notes' : (SHEET_NAMES[org] || `${org} Letters`);
+        const sheetRes = await appendToSheet(sheetTarget, data, targetColumns);
+        results.push({ row: rowIdx + 2, success: true, sheet: sheetRes });
+        ok++;
+      } catch (e) { results.push({ row: rowIdx + 2, success: false, error: e.message }); fail++; }
+    }
+    try { fs.unlinkSync(filePath); } catch {}
+    console.log(`✅ Import complete: ${ok} success, ${fail} failed`);
+    res.json({ success: true, totalRows: rows.length, successCount: ok, failCount: fail, results: results.slice(0, 50) });
+  } catch (err) { console.error('❌ Import error:', err); res.status(500).json({ success: false, error: err.message }); }
 });
 
 app.get('/api/records', authenticateToken, async (req, res) => {

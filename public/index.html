@@ -250,6 +250,10 @@
                 <option value="BEML">BEML</option>
                 <option value="KMRCL">KMRCL</option>
                 <option value="Metro Rail">Metro Rail</option>
+                <option value="BMRCL">BMRCL</option>
+                <option value="DMCRL">DMCRL</option>
+                <option value="MMRCL">MMRCL</option>
+                <option value="CMRCL">CMRCL</option>
               </select>
             </div>
             <div class="form-group">
@@ -399,6 +403,7 @@
                 <div style="width:42px;height:42px;background:rgba(255,255,255,.2);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:1.2rem">✉️</div>
               </div>
               <div style="font-size:.68rem;opacity:.7;margin-top:6px">BEML: ${stats.beml} | KMRCL: ${stats.kmrcl} | Metro: ${stats.metro}</div>
+              <div style="font-size:.68rem;opacity:.7;margin-top:2px">BMRCL: ${stats.bmrcl} | DMCRL: ${stats.dmcr} | MMRCL: ${stats.mmrcl} | CMRCL: ${stats.cmrcl}</div>
             </div>
             <div style="background:linear-gradient(135deg,#EF4444,#B91C1C);border-radius:12px;padding:18px;color:white;box-shadow:0 4px 15px rgba(239,68,68,.3)">
               <div style="display:flex;justify-content:space-between;align-items:start">
@@ -465,13 +470,13 @@
 
     function getStats() {
       let total = 0, beml = 0, kmrcl = 0, ncr = 0, jn = 0, open = 0, closed = 0, metro = 0, letters = 0;
+      let bmrcl = 0, dmcr = 0, mmrcl = 0, cmrcl = 0;
       const vendorSet = new Set();
       const depotFilter = currentDepot || '';
       for (const [key, rows] of Object.entries(allData)) {
         for (let i = 1; i < rows.length; i++) {
           const r = rows[i];
-          // Depot filtering for letters (col 19 = Depot)
-          if (depotFilter && (key.includes('Letters') || key.includes('BEML') || key.includes('KMRCL') || key.includes('Metro'))) {
+          if (depotFilter && key.includes('Letters')) {
             const rowDepot = (r[19] || '').toLowerCase();
             if (rowDepot && rowDepot !== depotFilter.toLowerCase()) continue;
           }
@@ -479,6 +484,10 @@
           if (key.includes('BEML')) { beml++; letters++; }
           else if (key.includes('KMRCL')) { kmrcl++; letters++; }
           else if (key.includes('Metro')) { metro++; letters++; }
+          else if (key.includes('BMRCL')) { bmrcl++; letters++; }
+          else if (key.includes('DMCRL')) { dmcr++; letters++; }
+          else if (key.includes('MMRCL')) { mmrcl++; letters++; }
+          else if (key.includes('CMRCL')) { cmrcl++; letters++; }
           else if (key.includes('NCR')) ncr++;
           else if (key.includes('Joint')) jn++;
           const isNCR = key.includes('NCR');
@@ -490,7 +499,7 @@
           if (isNCR && r[40]) vendorSet.add(r[40]);
         }
       }
-      return { total, beml, kmrcl, ncr, jn, open, closed, metro, letters, vendors: vendorSet.size };
+      return { total, beml, kmrcl, ncr, jn, open, closed, metro, letters, vendors: vendorSet.size, bmrcl, dmcr, mmrcl, cmrcl };
     }
 
     function renderRecentDocs() {
@@ -857,14 +866,20 @@
     // === BULK IMPORT ===
     function renderBulkImport(el) {
       el.innerHTML = `
-        <div class="page-header"><div><h2>Bulk Import</h2><p>Import data from Excel (.xlsx) or JSON files</p></div></div>
+        <div class="page-header"><div><h2>Bulk Import</h2><p>Import legacy Excel data into the system</p></div></div>
         <div class="grid-2">
           <div class="card">
             <div class="card-header"><h3>Import from Excel (.xlsx)</h3></div>
             <div class="card-body">
-              <div class="form-group">
-                <label>Select Target Sheet</label>
-                <select id="importSheetExcel"><option value="BEML Letters">BEML Letters</option><option value="KMRCL Letters">KMRCL Letters</option><option value="Metro Rail Letters">Metro Rail Letters</option><option value="NCR Records">NCR Records</option><option value="Joint Notes">Joint Notes</option></select>
+              <div class="form-row">
+                <div class="form-group">
+                  <label>Target Organization</label>
+                  <select id="importOrgExcel"><option value="BEML">BEML</option><option value="KMRCL">KMRCL</option><option value="Metro Rail">Metro Rail</option><option value="BMRCL">BMRCL</option><option value="DMCRL">DMCRL</option><option value="MMRCL">MMRCL</option><option value="CMRCL">CMRCL</option></select>
+                </div>
+                <div class="form-group">
+                  <label>Document Type</label>
+                  <select id="importTypeExcel"><option value="letter">Letter</option><option value="ncr">NCR Record</option><option value="joint_note">Joint Note</option></select>
+                </div>
               </div>
               <div class="form-group">
                 <label>Upload Excel File</label>
@@ -876,35 +891,23 @@
                 </div>
               </div>
               <div id="importExcelPreview" style="display:none;margin-top:16px"></div>
-              <button class="btn btn-success" id="importExcelBtn" onclick="doExcelImport()" disabled>📥 Import from Excel</button>
+              <button class="btn btn-success" id="importExcelBtn" onclick="doExcelImport()" disabled>📥 Import Data</button>
             </div>
           </div>
           <div class="card">
-            <div class="card-header"><h3>Import from JSON</h3></div>
+            <div class="card-header"><h3>Import Format Guide</h3></div>
             <div class="card-body">
-              <div class="form-group">
-                <label>Select Target Sheet</label>
-                <select id="importSheet"><option value="BEML Letters">BEML Letters</option><option value="KMRCL Letters">KMRCL Letters</option><option value="Metro Rail Letters">Metro Rail Letters</option><option value="NCR Records">NCR Records</option><option value="Joint Notes">Joint Notes</option></select>
+              <p style="font-size:.85rem;color:var(--text2);margin-bottom:12px">Your Excel columns will be auto-mapped. Common column names are recognized:</p>
+              <div style="font-size:.8rem;font-family:monospace;background:var(--bg);padding:12px;border-radius:8px;overflow-x:auto">
+                <div><strong>Letters:</strong> Ref No, Date, From, To, Subject, Content, Status, Enclosures, CC, Priority</div>
+                <div style="margin-top:8px"><strong>NCR:</strong> NCR No, Date, Item Description, Part No, Vendor, Train No, Severity, Status</div>
+                <div style="margin-top:8px"><strong>Joint Notes:</strong> JN No, Date, Parties, Subject, Description, Status</div>
               </div>
-              <div class="form-group">
-                <label>Upload JSON File</label>
-                <div class="drop-zone" id="importDropZone">
-                  <input type="file" id="importFile" accept=".json" onchange="handleImportFile(this)">
-                  <div class="icon">📁</div>
-                  <p>Drop JSON file here or click to browse</p>
-                </div>
-              </div>
-              <div id="importPreview" style="display:none;margin-top:16px"></div>
-              <button class="btn btn-success" id="importBtn" onclick="doImport()" disabled>📥 Import from JSON</button>
+              <p style="font-size:.8rem;color:var(--text3);margin-top:12px">Column name variations like "Ref No", "Reference No", "Letter Number" are automatically mapped to the correct field.</p>
             </div>
           </div>
-        </div>
-        <div class="card" style="margin-top:20px">
-          <div class="card-header"><h3>Import Format Guide</h3></div>
-          <div class="card-body">
-            <p style="font-size:.85rem;color:var(--text2);margin-bottom:12px">For Excel import, ensure your columns match one of these schemas:</p>
-            <div style="font-size:.8rem;font-family:monospace;background:var(--bg);padding:12px;border-radius:8px;overflow-x:auto">
-              <div><strong>Letters:</strong> Ref. Letter Number, Date, From, To (Addressee), Kind Attention, Subject, Letter Type, Letter Content, Enclosures, Remarks, Status</div>
+        </div>`;
+    }
               <div style="margin-top:8px"><strong>NCR Records:</strong> NCR Report No, Date of NCR, Date of Detection, Item Description, NCR Description, Faulty Sl No, Healthy Sl No, Qty, Sub-System, Train No, Car, Responsibility, Status</div>
               <div style="margin-top:8px"><strong>Joint Notes:</strong> Joint Note No, Date, Parties, Subject, Description, Items Discussed, Decisions, Action Items, Status</div>
             </div>
@@ -923,30 +926,30 @@
 
     async function doExcelImport() {
       if (!excelImportFile) return;
-      const sheetName = document.getElementById('importSheetExcel').value;
+      const org = document.getElementById('importOrgExcel').value;
+      const type = document.getElementById('importTypeExcel').value;
       const btn = document.getElementById('importExcelBtn');
       btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Importing...';
       
       try {
         const formData = new FormData();
         formData.append('file', excelImportFile);
-        formData.append('sheetName', sheetName);
+        formData.append('organization', org);
+        formData.append('type', type);
         
-        const res = await authFetch('/api/import/excel', {
+        const res = await authFetch('/api/import-excel', {
           method: 'POST',
           body: formData
         });
         const r = await res.json();
         
         if (r.success) {
-          let msg = `Imported ${r.imported} of ${r.total} records to ${r.sheetName}`;
-          if (r.errors && r.errors.length > 0) {
-            msg += ` (${r.errors.length} errors)`;
-          }
+          let msg = `Imported ${r.successCount} of ${r.totalRows} rows to ${org}`;
+          if (r.failCount > 0) msg += ` (${r.failCount} failed)`;
           showToast(msg, 'success');
           loadAllData();
           excelImportFile = null;
-          document.getElementById('importExcelPreview').innerHTML = `<div style="padding:12px;background:var(--success-bg);border-radius:8px;font-size:.85rem">✅ ${r.imported} records imported successfully</div>`;
+          document.getElementById('importExcelPreview').innerHTML = `<div style="padding:12px;background:var(--success-bg);border-radius:8px;font-size:.85rem">✅ ${r.successCount} records imported successfully</div>`;
         } else {
           showToast('Import failed: ' + (r.error || ''), 'error');
         }
