@@ -7,18 +7,11 @@ import fs from 'fs';
 import { fileURLToPath } from 'url';
 import 'dotenv/config';
 
-// Load dependencies for text extraction (works on both Vercel and local)
+// Load dependencies for text extraction
 let Tesseract, pdfParse, mammoth, execSync;
 const isVercel = !!process.env.VERCEL;
 
-try {
-  const tesseractModule = await import('tesseract.js');
-  Tesseract = tesseractModule.default;
-} catch (e) {
-  console.log('⚠️  Tesseract.js not available:', e.message);
-  Tesseract = { recognize: async () => { throw new Error('Tesseract not available'); } };
-}
-
+// Always load pdf-parse (fast, works everywhere)
 try {
   const pdfParseModule = await import('pdf-parse');
   pdfParse = pdfParseModule.default;
@@ -27,6 +20,7 @@ try {
   pdfParse = async () => ({ text: '' });
 }
 
+// Always load mammoth for DOCX
 try {
   const mammothModule = await import('mammoth');
   mammoth = mammothModule.default;
@@ -35,10 +29,21 @@ try {
   mammoth = { extractRawText: async () => ({ value: '' }) };
 }
 
+// Load Tesseract and child_process only locally (too slow for Vercel)
 if (!isVercel) {
+  try {
+    const tesseractModule = await import('tesseract.js');
+    Tesseract = tesseractModule.default;
+  } catch (e) {
+    console.log('⚠️  Tesseract.js not available:', e.message);
+    Tesseract = { recognize: async () => { throw new Error('Tesseract not available'); } };
+  }
   const childProcess = await import('child_process');
   execSync = childProcess.execSync;
 } else {
+  // On Vercel: Tesseract is too slow (exceeds 60s timeout)
+  // OCR only works locally; Vercel uses pdf-parse for text-based PDFs
+  Tesseract = { recognize: async () => { throw new Error('OCR not available on Vercel - use locally for scanned PDFs'); } };
   execSync = () => { throw new Error('execSync not available on Vercel'); };
 }
 
@@ -659,12 +664,18 @@ async function extractTextFromPDF(filePath) {
   const buffer = fs.readFileSync(filePath);
   const data = await pdfParse(buffer);
   if (data.text && data.text.trim().length > 50) return data.text;
-  console.log('🖼️  Scanned PDF, running OCR...');
-  try {
-    const ocrText = await extractTextFromScannedPDF(filePath);
-    if (ocrText && ocrText.trim().length > 20) return ocrText;
-  } catch (e) {
-    console.log('⚠️  OCR failed:', e.message);
+  
+  // Only try OCR locally (too slow for Vercel)
+  if (!isVercel) {
+    console.log('🖼️  Scanned PDF, running OCR...');
+    try {
+      const ocrText = await extractTextFromScannedPDF(filePath);
+      if (ocrText && ocrText.trim().length > 20) return ocrText;
+    } catch (e) {
+      console.log('⚠️  OCR failed:', e.message);
+    }
+  } else {
+    console.log('⚠️  Scanned PDF detected on Vercel - OCR not available. Use locally for scanned PDFs.');
   }
   // Return whatever text pdfParse got, even if short
   return data.text || '';
