@@ -178,6 +178,26 @@ async function initGoogleAuth() {
       }
     }
 
+    // Try OAuth2 from environment variables (Vercel)
+    if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET && process.env.GOOGLE_REFRESH_TOKEN) {
+      oauth2Client = new google.auth.OAuth2(
+        process.env.GOOGLE_CLIENT_ID,
+        process.env.GOOGLE_CLIENT_SECRET,
+        'http://localhost:3000/auth/google/callback'
+      );
+      oauth2Client.setCredentials({
+        access_token: process.env.GOOGLE_ACCESS_TOKEN,
+        refresh_token: process.env.GOOGLE_REFRESH_TOKEN,
+        token_type: 'Bearer',
+        expiry_date: parseInt(process.env.GOOGLE_OAUTH_EXPIRY || '0')
+      });
+      auth = oauth2Client;
+      sheets = google.sheets({ version: 'v4', auth });
+      drive = google.drive({ version: 'v3', auth });
+      console.log('✅ Google API authenticated (OAuth2 from env)');
+      return;
+    }
+
     // Try OAuth2 from file (local development)
     if (!process.env.VERCEL && fs.existsSync(oauthConfigPath)) {
       const { client_id, client_secret } = JSON.parse(fs.readFileSync(oauthConfigPath, 'utf8'));
