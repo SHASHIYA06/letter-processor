@@ -7,25 +7,39 @@ import fs from 'fs';
 import { fileURLToPath } from 'url';
 import 'dotenv/config';
 
-// Conditionally load heavy dependencies (not needed for Vercel PDF generation)
+// Load dependencies for text extraction (works on both Vercel and local)
 let Tesseract, pdfParse, mammoth, execSync;
 const isVercel = !!process.env.VERCEL;
 
-if (!isVercel) {
+try {
   const tesseractModule = await import('tesseract.js');
   Tesseract = tesseractModule.default;
+} catch (e) {
+  console.log('⚠️  Tesseract.js not available:', e.message);
+  Tesseract = { recognize: async () => { throw new Error('Tesseract not available'); } };
+}
+
+try {
   const pdfParseModule = await import('pdf-parse');
   pdfParse = pdfParseModule.default;
+} catch (e) {
+  console.log('⚠️  pdf-parse not available:', e.message);
+  pdfParse = async () => ({ text: '' });
+}
+
+try {
   const mammothModule = await import('mammoth');
   mammoth = mammothModule.default;
+} catch (e) {
+  console.log('⚠️  mammoth not available:', e.message);
+  mammoth = { extractRawText: async () => ({ value: '' }) };
+}
+
+if (!isVercel) {
   const childProcess = await import('child_process');
   execSync = childProcess.execSync;
 } else {
-  // Minimal implementations for Vercel
-  Tesseract = { recognize: async () => ({ data: { text: '' } }) };
-  pdfParse = async (buffer) => ({ text: '' });
-  mammoth = { extractRawText: async () => ({ value: '' }) };
-  execSync = () => { throw new Error('execSync not available on Vercel') };
+  execSync = () => { throw new Error('execSync not available on Vercel'); };
 }
 
 // Import NCR parser
@@ -657,43 +671,89 @@ async function extractTextFromPDF(filePath) {
 }
 
 async function extractTextFromScannedPDF(filePath) {
-  const tmpDir = path.join(isVercelStorage ? '/tmp' : __dirname, 'uploads', 'ocr_tmp_' + Date.now());
+  const tmpDir = path.join('/tmp', 'ocr_' + Date.now() + '_' + Math.random().toString(36).slice(2));
   fs.mkdirSync(tmpDir, { recursive: true });
   try {
-    // Try pdftoppm first (local)
     let files = [];
+
+    // Strategy 1: Try pdftoppm (local development)
     try {
       execSync(`pdftoppm -png -r 300 "${filePath}" "${path.join(tmpDir, 'page')}"`, { timeout: 60000, stdio: 'pipe' });
       files = fs.readdirSync(tmpDir).filter(f => f.endsWith('.png')).sort();
+      console.log(`✅ pdftoppm produced ${files.length} images`);
     } catch (e) {
-      console.log('⚠️  pdftoppm failed, trying Tesseract directly on PDF...');
-      // On Vercel or systems without pdftoppm, try Tesseract directly on the PDF
+      console.log('⚠️  pdftoppm not available, trying pdfjs-dist + sharp...');
+    }
+
+    // Strategy 2: Use pdfjs-dist + sharp (works on Vercel)
+    if (files.length === 0) {
       try {
+        const pdfjsLib = await import('pdfjs-dist/legacy/build/pdf.mjs');
+        const sharpModule = await import('sharp');
+        const sharp = sharpModule.default;
+
+        const data = new Uint8Array(fs.readFileSync(filePath));
+        const pdfDoc = await pdfjsLib.getDocument({ data }).promise;
+        console.log(`📄 PDF has ${pdfDoc.numPages} pages, converting to images...`);
+
+        for (let pageNum = 1; pageNum <= pdfDoc.numPages; pageNum++) {
+          const page = await pdfDoc.getPage(pageNum);
+          const viewport = page.getViewport({ scale: 2.0 }); // 2x for better OCR
+
+          // Render to SVG using pdfjs-dist
+          const opList = await page.getOperatorList();
+          const svgFactory = new pdfjsLib.SVGGraphics(page.commonObjs, page.objs);
+          const svg = await svgFactory.getSVG({
+            viewport,
+            operatorList: opList,
+            annotationStorage: pdfDoc.annotationStorage
+          });
+
+          // Convert SVG string to buffer
+          const svgString = svg.toString();
+          const svgBuffer = Buffer.from(svgString, 'utf-8');
+
+          // Convert SVG to PNG using sharp
+          const pngBuffer = await sharp(svgBuffer)
+            .resize({ width: 2480 }) // A4 at 300 DPI
+            .png()
+            .toBuffer();
+
+          const imagePath = path.join(tmpDir, `page-${String(pageNum).padStart(3, '0')}.png`);
+          fs.writeFileSync(imagePath, pngBuffer);
+          files.push(imagePath);
+          console.log(`  ✅ Page ${pageNum} converted`);
+        }
+      } catch (e) {
+        console.log('⚠️  pdfjs-dist + sharp failed:', e.message);
+      }
+    }
+
+    // Strategy 3: Try Tesseract directly on PDF (some PDFs work)
+    if (files.length === 0) {
+      try {
+        console.log('🔍 Trying Tesseract directly on PDF...');
         const result = await Tesseract.recognize(filePath, 'eng');
         if (result.data.text && result.data.text.trim().length > 20) {
           return result.data.text;
         }
-      } catch (e2) {
-        console.log('⚠️  Direct Tesseract on PDF failed:', e2.message);
+      } catch (e) {
+        console.log('⚠️  Direct Tesseract on PDF failed:', e.message);
       }
-      // Last resort: try extracting embedded images from PDF using pdf-parse
-      try {
-        const buffer = fs.readFileSync(filePath);
-        const pdfData = await pdfParse(buffer, { max: 0 });
-        // Check if there are any embedded images
-        if (pdfData.numpages > 0) {
-          console.log(`📄 PDF has ${pdfData.numpages} pages but no extractable text`);
-        }
-      } catch (e3) {}
-      return '';
     }
-    let fullText = '';
-    for (let i = 0; i < files.length; i++) {
-      console.log(`🔍 OCR page ${i + 1}/${files.length}...`);
-      const result = await Tesseract.recognize(path.join(tmpDir, files[i]), 'eng');
-      fullText += result.data.text + '\n\n';
+
+    // OCR all converted images
+    if (files.length > 0) {
+      let fullText = '';
+      for (let i = 0; i < files.length; i++) {
+        console.log(`🔍 OCR page ${i + 1}/${files.length}...`);
+        const result = await Tesseract.recognize(files[i], 'eng');
+        fullText += result.data.text + '\n\n';
+      }
+      return fullText;
     }
-    return fullText;
+
+    return '';
   } finally {
     try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
   }
