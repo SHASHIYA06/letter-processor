@@ -1904,31 +1904,52 @@ app.post('/api/extract', authenticateToken, upload.single('file'), async (req, r
   }
 });
 
-// OCR images endpoint - uses Google Cloud Vision API for fast OCR
+// OCR images endpoint - tries Google Cloud Vision first, falls back to Tesseract
 app.post('/api/ocr-images', authenticateToken, upload.array('images', 10), async (req, res) => {
   try {
     if (!req.files || req.files.length === 0) {
       return res.status(400).json({ success: false, error: 'No images uploaded' });
     }
-    console.log(`\n🖼️  OCR: Processing ${req.files.length} images with Google Cloud Vision...`);
-
-    const vision = await import('@google-cloud/vision');
-    const imageAnnotator = new vision.ImageAnnotatorClient({ authClient: oauth2Client });
+    console.log(`\n🖼️  OCR: Processing ${req.files.length} images...`);
 
     let fullText = '';
-    for (const file of req.files) {
-      try {
+    let ocrMethod = 'none';
+
+    // Try Google Cloud Vision API first (fast, accurate)
+    try {
+      const vision = await import('@google-cloud/vision');
+      const imageAnnotator = new vision.ImageAnnotatorClient({ authClient: oauth2Client });
+      
+      for (const file of req.files) {
         const [result] = await imageAnnotator.textDetection({ image: { content: file.buffer } });
         const text = result.fullTextAnnotation ? result.fullTextAnnotation.text : '';
         fullText += text + '\n\n';
-        console.log(`  ✅ OCR page: ${text.length} chars`);
-      } catch (e) {
-        console.log(`  ⚠️  OCR page failed:`, e.message);
+      }
+      ocrMethod = 'Google Cloud Vision';
+      console.log(`  ✅ Used Google Cloud Vision`);
+    } catch (visionErr) {
+      console.log(`  ⚠️  Vision API failed:`, visionErr.message.substring(0, 100));
+      
+      // Fallback to Tesseract.js (local only)
+      if (!isVercel) {
+        try {
+          for (const file of req.files) {
+            const tmpPath = path.join('/tmp', `ocr_${Date.now()}_${Math.random().toString(36).slice(2)}.png`);
+            fs.writeFileSync(tmpPath, file.buffer);
+            const result = await Tesseract.recognize(tmpPath, 'eng');
+            fullText += result.data.text + '\n\n';
+            try { fs.unlinkSync(tmpPath); } catch {}
+          }
+          ocrMethod = 'Tesseract.js';
+          console.log(`  ✅ Used Tesseract.js (local)`);
+        } catch (tessErr) {
+          console.log(`  ⚠️  Tesseract failed:`, tessErr.message);
+        }
       }
     }
 
-    console.log(`📝 OCR complete: ${fullText.length} chars total`);
-    res.json({ success: true, text: fullText, pages: req.files.length });
+    console.log(`📝 OCR complete: ${fullText.length} chars via ${ocrMethod}`);
+    res.json({ success: true, text: fullText, pages: req.files.length, method: ocrMethod });
   } catch (err) {
     console.error('❌ OCR error:', err);
     res.status(500).json({ success: false, error: err.message });
