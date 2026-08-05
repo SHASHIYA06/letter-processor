@@ -646,19 +646,51 @@ async function extractTextFromPDF(filePath) {
   const data = await pdfParse(buffer);
   if (data.text && data.text.trim().length > 50) return data.text;
   console.log('🖼️  Scanned PDF, running OCR...');
-  return await extractTextFromScannedPDF(filePath);
+  try {
+    const ocrText = await extractTextFromScannedPDF(filePath);
+    if (ocrText && ocrText.trim().length > 20) return ocrText;
+  } catch (e) {
+    console.log('⚠️  OCR failed:', e.message);
+  }
+  // Return whatever text pdfParse got, even if short
+  return data.text || '';
 }
 
 async function extractTextFromScannedPDF(filePath) {
-  const tmpDir = path.join(__dirname, 'uploads', 'ocr_tmp_' + Date.now());
+  const tmpDir = path.join(isVercelStorage ? '/tmp' : __dirname, 'uploads', 'ocr_tmp_' + Date.now());
   fs.mkdirSync(tmpDir, { recursive: true });
   try {
-    execSync(`pdftoppm -png -r 300 "${filePath}" "${path.join(tmpDir, 'page')}"`, { timeout: 60000, stdio: 'pipe' });
-    const files = fs.readdirSync(tmpDir).filter(f => f.endsWith('.png')).sort();
+    // Try pdftoppm first (local)
+    let files = [];
+    try {
+      execSync(`pdftoppm -png -r 300 "${filePath}" "${path.join(tmpDir, 'page')}"`, { timeout: 60000, stdio: 'pipe' });
+      files = fs.readdirSync(tmpDir).filter(f => f.endsWith('.png')).sort();
+    } catch (e) {
+      console.log('⚠️  pdftoppm failed, trying Tesseract directly on PDF...');
+      // On Vercel or systems without pdftoppm, try Tesseract directly on the PDF
+      try {
+        const result = await Tesseract.recognize(filePath, 'eng');
+        if (result.data.text && result.data.text.trim().length > 20) {
+          return result.data.text;
+        }
+      } catch (e2) {
+        console.log('⚠️  Direct Tesseract on PDF failed:', e2.message);
+      }
+      // Last resort: try extracting embedded images from PDF using pdf-parse
+      try {
+        const buffer = fs.readFileSync(filePath);
+        const pdfData = await pdfParse(buffer, { max: 0 });
+        // Check if there are any embedded images
+        if (pdfData.numpages > 0) {
+          console.log(`📄 PDF has ${pdfData.numpages} pages but no extractable text`);
+        }
+      } catch (e3) {}
+      return '';
+    }
     let fullText = '';
     for (let i = 0; i < files.length; i++) {
       console.log(`🔍 OCR page ${i + 1}/${files.length}...`);
-      const result = await Tesseract.recognize(path.join(tmpDir, files[i]), 'eng');
+      const result = await Tesseract.recognize(files[i], 'eng');
       fullText += result.data.text + '\n\n';
     }
     return fullText;
