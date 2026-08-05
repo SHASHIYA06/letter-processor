@@ -1915,13 +1915,22 @@ app.post('/api/ocr-images', authenticateToken, upload.array('images', 10), async
     let fullText = '';
     let ocrMethod = 'none';
 
+    // Get image buffer - handle both memory storage (Vercel) and disk storage (local)
+    function getFileBuffer(file) {
+      if (file.buffer) return file.buffer; // Memory storage (Vercel)
+      if (file.path) return fs.readFileSync(file.path); // Disk storage (local)
+      return null;
+    }
+
     // Try Google Cloud Vision API first (fast, accurate)
     try {
       const vision = await import('@google-cloud/vision');
       const imageAnnotator = new vision.ImageAnnotatorClient({ authClient: oauth2Client });
       
       for (const file of req.files) {
-        const [result] = await imageAnnotator.textDetection({ image: { content: file.buffer } });
+        const imageBuffer = getFileBuffer(file);
+        if (!imageBuffer) continue;
+        const [result] = await imageAnnotator.textDetection({ image: { content: imageBuffer } });
         const text = result.fullTextAnnotation ? result.fullTextAnnotation.text : '';
         fullText += text + '\n\n';
       }
@@ -1934,8 +1943,10 @@ app.post('/api/ocr-images', authenticateToken, upload.array('images', 10), async
       if (!isVercel) {
         try {
           for (const file of req.files) {
+            const imageBuffer = getFileBuffer(file);
+            if (!imageBuffer) continue;
             const tmpPath = path.join('/tmp', `ocr_${Date.now()}_${Math.random().toString(36).slice(2)}.png`);
-            fs.writeFileSync(tmpPath, file.buffer);
+            fs.writeFileSync(tmpPath, imageBuffer);
             const result = await Tesseract.recognize(tmpPath, 'eng');
             fullText += result.data.text + '\n\n';
             try { fs.unlinkSync(tmpPath); } catch {}
