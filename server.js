@@ -1892,11 +1892,24 @@ app.post('/api/ocr-images', authenticateToken, upload.array('images', 10), async
     }
     console.log(`\n🖼️  OCR: Processing ${req.files.length} images with Google Cloud Vision...`);
 
-    // Use Google Cloud Vision API
+    // Use Google Cloud Vision API with OAuth2 credentials
     const vision = await import('@google-cloud/vision');
-    const imageAnnotator = new vision.ImageAnnotatorClient({
-      credentials: JSON.parse(fs.readFileSync(path.join(__dirname, 'credentials', 'service-account.json'), 'utf8'))
-    });
+    
+    // Try service account first (local), fallback to OAuth2 (Vercel)
+    let authOptions = {};
+    const saPath = path.join(__dirname, 'credentials', 'service-account.json');
+    if (fs.existsSync(saPath)) {
+      authOptions.credentials = JSON.parse(fs.readFileSync(saPath, 'utf8'));
+      console.log('  Using service account credentials');
+    } else if (sheets) {
+      // Use the OAuth2 client that's already authenticated for Sheets/Drive
+      authOptions.authClient = oauth2Client;
+      console.log('  Using OAuth2 credentials');
+    } else {
+      return res.status(500).json({ success: false, error: 'No Google credentials available for OCR' });
+    }
+    
+    const imageAnnotator = new vision.ImageAnnotatorClient(authOptions);
 
     let fullText = '';
     for (const file of req.files) {
