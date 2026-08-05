@@ -2064,7 +2064,8 @@ app.post('/api/import-excel', authenticateToken, upload.single('file'), async (r
     const docType = req.body.type || 'letter';
     console.log(`\n📊 Excel Import: ${req.file.originalname} for ${org} (${docType})`);
 
-    const XLSX = await import('xlsx');
+    const XLSXModule = await import('xlsx');
+    const XLSX = XLSXModule.default || XLSXModule;
     const workbook = XLSX.readFile(filePath);
     const sheetName = workbook.SheetNames[0];
     const worksheet = workbook.Sheets[sheetName];
