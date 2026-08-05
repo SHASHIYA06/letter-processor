@@ -283,6 +283,15 @@
             <button type="submit" class="btn btn-primary" id="uploadBtn">📤 Upload & Extract</button>
           </div>
         </form>
+        <!-- Extracted Data Preview (hidden by default) -->
+        <div id="extractedPreview" style="display:none;margin-top:16px;border:1px solid var(--border);border-radius:8px;padding:16px;background:var(--bg)">
+          <h4 style="margin:0 0 12px 0;font-size:14px">Extracted Data (Review & Edit)</h4>
+          <div id="extractedFields"></div>
+          <div style="display:flex;gap:12px;justify-content:flex-end;margin-top:16px">
+            <button type="button" class="btn btn-secondary" onclick="resetUploadForm()">Upload Another</button>
+            <button type="button" class="btn btn-primary" id="confirmSaveBtn" onclick="confirmUploadSave()">✅ Save to Sheet</button>
+          </div>
+        </div>
         <div id="uploadProgress" style="display:none;margin-top:16px">
           <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
             <span class="spinner"></span>
@@ -2037,9 +2046,13 @@
     function showUploadModal() {
       document.getElementById('uploadModal').classList.add('show');
       document.getElementById('uploadForm').reset();
+      document.getElementById('uploadForm').style.display = 'block';
       document.getElementById('uploadFileInfo').style.display = 'none';
       document.getElementById('uploadProgress').style.display = 'none';
+      document.getElementById('extractedPreview').style.display = 'none';
       currentUploadFile = null;
+      window._pendingUploadData = null;
+      window._pendingUploadFile = null;
     }
 
     document.getElementById('uploadDropZone').addEventListener('dragover', e => { e.preventDefault(); e.currentTarget.classList.add('dragover'); });
@@ -2106,31 +2119,15 @@
 
         clearInterval(iv);
         document.getElementById('uploadProgressBar').style.width = '100%';
-          document.getElementById('uploadProgressText').textContent = 'Saving to Google Sheets...';
+        document.getElementById('uploadProgressText').textContent = 'Extraction complete. Review below.';
 
         if (extractData.success) {
-          const uploadStatus = document.getElementById('uploadStatus').value || 'Draft';
-          const saveData = { ...extractData.data, docType: type, organization: org, fileName: file.name, uploadDate: new Date().toISOString().split('T')[0], status: uploadStatus };
-          const saveFormData = new FormData();
-          saveFormData.append('file', file);
-          saveFormData.append('data', JSON.stringify(saveData));
-
-          const saveRes = await authFetch('/api/save', { method: 'POST', body: saveFormData });
-          const saveResult = await saveRes.json();
-
-          if (saveResult.success) {
-            let msg = 'Document uploaded and saved!';
-            if (saveResult.drive && saveResult.drive.link) {
-              msg += ' (Google Drive: ✅)';
-            } else if (saveResult.drive && saveResult.drive.error) {
-              msg += ' (Drive upload failed: ' + saveResult.drive.error.substring(0, 50) + ')';
-            }
-            showToast(msg, 'success');
-            closeModal('uploadModal');
-            loadAllData();
-          } else {
-            showToast('Save failed: ' + (saveResult.error || 'Unknown error'), 'error');
-          }
+          // Store extracted data for saving later
+          window._pendingUploadData = { ...extractData.data, docType: type, organization: org, fileName: file.name, uploadDate: new Date().toISOString().split('T')[0], status: document.getElementById('uploadStatus').value || 'Draft' };
+          window._pendingUploadFile = file;
+          
+          // Show preview with editable fields
+          showExtractedPreview(extractData.data, type);
         } else {
           showToast('Extraction failed: ' + (extractData.error || 'Unknown error'), 'error');
         }
@@ -2143,6 +2140,104 @@
       btn.disabled = false; btn.innerHTML = '📤 Upload & Extract';
       document.getElementById('uploadProgress').style.display = 'none';
     });
+
+    function showExtractedPreview(data, type) {
+      const fields = document.getElementById('extractedFields');
+      const preview = document.getElementById('extractedPreview');
+      
+      // Build editable fields based on document type
+      let html = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">';
+      
+      if (type === 'letter') {
+        html += makeField('Ref Number', 'refNumber', data.refNumber);
+        html += makeField('Date', 'date', data.date);
+        html += makeField('To', 'to', data.to, true);
+        html += makeField('Kind Attention', 'kindAttn', data.kindAttn);
+        html += makeField('Subject', 'subject', data.subject, true);
+        html += makeField('Letter Content', 'letterContent', data.letterContent, true);
+        html += makeField('Signatory', 'signatory', data.signatory);
+        html += makeField('Designation', 'designation', data.designation);
+        html += makeField('Project', 'project', data.project);
+        html += makeField('CC', 'cc', data.cc, true);
+        html += makeField('Enclosures', 'enclosures', data.enclosures);
+        html += makeField('All References', 'allReferences', data.allReferences, true);
+      } else if (type === 'ncr') {
+        html += makeField('NCR Number', 'ncrNo', data.ncrNo);
+        html += makeField('Project', 'project', data.project);
+        html += makeField('Vehicle No', 'vehicleNo', data.vehicleNo);
+        html += makeField('Part Number', 'partNo', data.partNo);
+        html += makeField('Supplier', 'supplier', data.supplier);
+        html += makeField('Severity', 'severity', data.severity);
+        html += makeField('Description', 'ncrDesc', data.ncrDesc, true);
+        html += makeField('Corrective Action', 'correctiveAction', data.correctiveAction, true);
+      } else {
+        // Joint note
+        html += makeField('Note Number', 'noteNo', data.noteNo);
+        html += makeField('Subject', 'subject', data.subject, true);
+        html += makeField('Content', 'content', data.content, true);
+      }
+      
+      html += '</div>';
+      fields.innerHTML = html;
+      preview.style.display = 'block';
+      document.getElementById('uploadForm').style.display = 'none';
+    }
+
+    function makeField(label, key, value, multiline) {
+      const id = 'ext_' + key;
+      const val = esc(value || '');
+      if (multiline) {
+        return `<div class="form-group" style="grid-column:span 2"><label style="font-size:11px;font-weight:600">${label}</label><textarea id="${id}" rows="3" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;font-size:12px;resize:vertical" onchange="window._pendingUploadData['${key}']=this.value">${val}</textarea></div>`;
+      }
+      return `<div class="form-group"><label style="font-size:11px;font-weight:600">${label}</label><input id="${id}" value="${val}" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;font-size:12px" onchange="window._pendingUploadData['${key}']=this.value"></div>`;
+    }
+
+    function resetUploadForm() {
+      document.getElementById('extractedPreview').style.display = 'none';
+      document.getElementById('uploadForm').style.display = 'block';
+      document.getElementById('uploadForm').reset();
+      document.getElementById('uploadFileInfo').style.display = 'none';
+      window._pendingUploadData = null;
+      window._pendingUploadFile = null;
+      currentUploadFile = null;
+    }
+
+    async function confirmUploadSave() {
+      const data = window._pendingUploadData;
+      const file = window._pendingUploadFile;
+      if (!data || !file) return showToast('No data to save', 'error');
+
+      const btn = document.getElementById('confirmSaveBtn');
+      btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Saving...';
+
+      try {
+        const saveFormData = new FormData();
+        saveFormData.append('file', file);
+        saveFormData.append('data', JSON.stringify(data));
+
+        const saveRes = await authFetch('/api/save', { method: 'POST', body: saveFormData });
+        const saveResult = await saveRes.json();
+
+        if (saveResult.success) {
+          let msg = 'Document saved successfully!';
+          if (saveResult.drive && saveResult.drive.link) {
+            msg += ' (Google Drive: ✅)';
+          } else if (saveResult.drive && saveResult.drive.error) {
+            msg += ' (Drive: ' + saveResult.drive.error.substring(0, 50) + ')';
+          }
+          showToast(msg, 'success');
+          closeModal('uploadModal');
+          resetUploadForm();
+          loadAllData();
+        } else {
+          showToast('Save failed: ' + (saveResult.error || 'Unknown error'), 'error');
+        }
+      } catch (e) {
+        showToast('Error: ' + e.message, 'error');
+      }
+
+      btn.disabled = false; btn.innerHTML = '✅ Save to Sheet';
+    }
 
     // === UTILITY ===
     function closeModal(id) { document.getElementById(id).classList.remove('show'); }

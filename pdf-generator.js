@@ -152,56 +152,74 @@ function generateLetterPdf(data, outputPath) {
     }
     drawBEMLFooter(doc, W, H);
 
-    // ── REF NUMBER (left) + DATE (right) ──
-    y += 5;
+    // ── REF NUMBER (left) + DATE (right) per BEML format ──
+    y += 8;
     doc.font('Times-Bold').fontSize(10).fillColor('#000');
     doc.text(data.refNumber || '', L, y, { width: CW / 2 });
     doc.font('Times-Roman').fontSize(10);
     doc.text(data.date ? `Date: ${data.date}` : '', R - 180, y, { width: 180, align: 'right' });
-    y += 18;
+    y += 22;
 
     // ── TO ADDRESS BLOCK ──
     doc.font('Times-Roman').fontSize(10).fillColor('#000');
     doc.text('To,', L, y);
     y += 14;
     if (data.to) {
-      const toLines = data.to.split('\n');
+      // Handle both newline-separated and comma-separated addresses
+      let toLines = data.to.split('\n');
+      if (toLines.length === 1) toLines = data.to.split(',');
       toLines.forEach(line => {
-        if (line.trim()) {
-          doc.text(line.trim(), L, y, { width: CW });
+        const trimmed = line.trim();
+        if (trimmed) {
+          doc.text(trimmed, L, y, { width: CW });
           y += 13;
         }
       });
     }
     y += 4;
 
-    // ── KIND ATTENTION (bold, centered per BEML format) ──
+    // ── KIND ATTENTION (right-aligned per BEML format) ──
     if (data.kindAttn) {
       doc.font('Times-Bold').fontSize(10).fillColor('#000');
-      doc.text('Kind Attn: ' + data.kindAttn, L, y, { width: CW, align: 'center' });
+      doc.text('Kind Attn: ' + data.kindAttn, L, y, { width: CW, align: 'right' });
       y = doc.y + 8;
     }
 
-    // ── SUBJECT (bold italic, underlined per BEML format) ──
+    // ── SUBJECT (bold, underlined per BEML format) ──
     y += 2;
-    doc.font('Times-BoldItalic').fontSize(10).fillColor('#000');
-    doc.text('Subject: ' + (data.subject || ''), L, y, { width: CW });
+    doc.font('Times-Bold').fontSize(10).fillColor('#000');
+    doc.text('Subject: ' + (data.subject || ''), L, y, { width: CW, underline: true });
     y = doc.y + 10;
 
-    // ── DEAR SIR (no comma per actual BEML format) ──
+    // ── DEAR SIR (per actual BEML format) ──
     doc.font('Times-Roman').fontSize(10).fillColor('#000');
     doc.text('Dear Sir,', L, y);
     y = doc.y + 8;
 
-    // ── LETTER BODY (strip leading "Dear Sir/Madam," if present) ──
+    // ── LETTER BODY ──
     let body = data.letterContent || data.letterBody || '';
-    body = body.replace(/^(Dear\s+(?:Sir|Madam|Sir\/Madam)[,]?\s*\n?)/i, '').trim();
+    // Strip leading greetings
+    body = body.replace(/^(Dear\s+(?:Sir|Madam|Sir\/Madam|Team)[,]?\s*\n?)/i, '').trim();
+    // Strip trailing closings
+    body = body.replace(/\n*(Yours\s+(?:sincerely|faithfully|truly)[,]?\s*[\s\S]*)$/i, '').trim();
+    
     if (body) {
       const bodyLines = body.split('\n');
       bodyLines.forEach(line => {
-        if (line.trim()) {
-          doc.text(line.trim(), L, y, { width: CW, lineGap: 3, align: 'justify' });
-          y = doc.y + 2;
+        const trimmed = line.trim();
+        if (trimmed) {
+          // Check if line starts with a reference pattern like "(1)", "Ref:", "A.", "B."
+          const isRef = /^[\(\[].*[\)\]]\s*/.test(trimmed) || /^(?:Ref|Reference)\s*[:\.]/i.test(trimmed) || /^[A-Z]\.\s/.test(trimmed);
+          if (isRef) {
+            // Reference lines: slight left indent
+            doc.font('Times-Roman').fontSize(10).fillColor('#000');
+            doc.text(trimmed, L + 12, y, { width: CW - 12, lineGap: 2, align: 'left' });
+          } else {
+            // Regular body text: justified
+            doc.font('Times-Roman').fontSize(10).fillColor('#000');
+            doc.text(trimmed, L, y, { width: CW, lineGap: 3, align: 'justify' });
+          }
+          y = doc.y + 3;
         }
       });
       y += 6;
@@ -217,7 +235,7 @@ function generateLetterPdf(data, outputPath) {
 
     // ── SIGNATURE BLOCK ──
     if (data.signatory) {
-      doc.font('Times-Roman').fontSize(10).text(data.signatory, L, y);
+      doc.font('Times-Bold').fontSize(10).text(data.signatory, L, y);
       y = doc.y + 4;
     }
     if (data.designation) {
@@ -225,7 +243,7 @@ function generateLetterPdf(data, outputPath) {
       y = doc.y + 4;
     }
     if (data.project) {
-      doc.font('Times-Roman').fontSize(10).text(data.project, L, y);
+      doc.font('Times-Roman').fontSize(9).text(data.project, L, y);
       y = doc.y + 4;
     }
 
@@ -241,13 +259,14 @@ function generateLetterPdf(data, outputPath) {
     if (data.cc) {
       y += 4;
       doc.font('Times-Roman').fontSize(9).fillColor('#000');
-      const ccLines = data.cc.split('\n');
+      const ccLines = data.cc.split(/[;\n]/);
       ccLines.forEach((line, i) => {
-        if (line.trim()) {
+        const trimmed = line.trim();
+        if (trimmed) {
           if (i === 0) {
-            doc.text('Cc: ' + line.trim(), L, y, { width: CW });
+            doc.text('Cc: ' + trimmed, L, y, { width: CW });
           } else {
-            doc.text('    ' + line.trim(), L, y, { width: CW });
+            doc.text('    ' + trimmed, L, y, { width: CW });
           }
           y = doc.y + 2;
         }
