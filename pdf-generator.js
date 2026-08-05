@@ -288,41 +288,46 @@ function generateNCRPdf(data, outputPath) {
     const stream = fs.createWriteStream(outputPath);
     doc.pipe(stream);
     const W = A4_W, H = A4_H, LM = 40, RM = W - 40, CW = RM - LM;
-    let y = 12;
+    let y = 8;
 
-    // ── HEADER BOX (exact BEML NCR format) ──
-    const hdrH = 70;
-    doc.rect(LM, y, CW, hdrH).lineWidth(0.8).stroke('#000');
-
-    // BEML logo left
-    const logoPath = getAssetPath('beml-logo.jpg');
-    if (fs.existsSync(logoPath)) {
-      try { doc.image(logoPath, LM + 8, y + 6, { width: 55, height: 28, fit: 'contain' }); } catch (e) {}
+    // ── HEADER: Use official NCR header image if available ──
+    const ncrHdrPath = getAssetPath('ncr-header.png');
+    if (fs.existsSync(ncrHdrPath)) {
+      try {
+        doc.image(ncrHdrPath, 0, 0, { width: W, fit: [W, 80] });
+        y = 82;
+      } catch (e) {}
     }
-    doc.font('Times-Bold').fontSize(7).fillColor('#000');
-    doc.text('BHARAT EARTH MOVERS LTD.', LM + 8, y + 36, { width: 80 });
-    doc.font('Times-Roman').fontSize(6);
-    doc.text('Rolling Stock Division', LM + 8, y + 46, { width: 80 });
+    if (y === 8) {
+      // Fallback: draw header manually matching exact BEML NCR format
+      const hdrH = 75;
+      doc.rect(LM, y, CW, hdrH).lineWidth(0.8).stroke('#000');
+      const logoPath = getAssetPath('beml-logo.jpg');
+      if (fs.existsSync(logoPath)) {
+        try { doc.image(logoPath, LM + 8, y + 4, { width: 60, height: 35, fit: 'contain' }); } catch (e) {}
+      }
+      doc.font('Times-Bold').fontSize(9).fillColor('#000');
+      doc.text('BEML LIMITED', LM + 8, y + 42, { width: 80, align: 'center' });
+      doc.font('Times-Italic').fontSize(5.5).fillColor('#333');
+      doc.text('Beyond Possibilities', LM + 8, y + 53, { width: 80, align: 'center' });
+      doc.font('Times-Roman').fontSize(4.5).fillColor('#555');
+      doc.text('(A Govt. of India Mini Ratna Company', LM + 8, y + 61, { width: 80, align: 'center' });
+      doc.text('under Ministry of Defence)', LM + 8, y + 67, { width: 80, align: 'center' });
 
-    // Title center
-    doc.font('Times-Bold').fontSize(16).fillColor('#000');
-    doc.text('NON-CONFORMITY', LM + CW / 2 - 90, y + 6, { width: 180, align: 'center' });
-    doc.text('REPORT', LM + CW / 2 - 90, y + 24, { width: 180, align: 'center' });
+      doc.font('Times-Bold').fontSize(15).fillColor('#000');
+      doc.text('NON-CONFORMITY', LM + CW / 2 - 90, y + 8, { width: 180, align: 'center' });
+      doc.text('REPORT', LM + CW / 2 - 90, y + 26, { width: 180, align: 'center' });
 
-    // Distribution text
-    doc.font('Times-Roman').fontSize(6.5);
-    doc.text('OEM/ SBU-S&M / R&D/', RM - 140, y + 6, { width: 135, align: 'right' });
-    doc.text('PM/Purchase/ Quality', RM - 140, y + 16, { width: 135, align: 'right' });
+      doc.font('Times-Roman').fontSize(6).fillColor('#333');
+      doc.text('OEM/ SBU-S&M / R&D/', RM - 130, y + 8, { width: 125, align: 'right' });
+      doc.text('PM/Purchase/ Quality', RM - 130, y + 18, { width: 125, align: 'right' });
 
-    // NCR number red
-    doc.font('Times-Bold').fontSize(9).fillColor('#cc0000');
-    doc.text(data.ncrNo || '---', LM + 8, y + 54, { width: 200 });
-
-    // FM/RS/NCR right
-    doc.font('Times-Roman').fontSize(6.5).fillColor('#000');
-    doc.text('FM/RS/NCR/01/00', RM - 80, y + 54, { width: 75, align: 'right' });
-
-    y += hdrH + 4;
+      doc.font('Times-Bold').fontSize(9).fillColor('#cc0000');
+      doc.text(data.ncrNo || '---', LM + 8, y + 8, { width: 200 });
+      doc.font('Times-Roman').fontSize(6).fillColor('#333');
+      doc.text('FM/RS/NCR/01/00', RM - 100, y + hdrH - 12, { width: 95, align: 'right' });
+      y += hdrH + 4;
+    }
 
     // ── MAIN DATA TABLE (2-column format: label|value) ──
     const cL = LM, cM = LM + CW / 2, cR = RM;

@@ -2145,12 +2145,13 @@
       const fields = document.getElementById('extractedFields');
       const preview = document.getElementById('extractedPreview');
       
-      // Build editable fields based on document type
       let html = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">';
       
       if (type === 'letter') {
+        html += makeField('Organization', 'organization', data.organization);
         html += makeField('Ref Number', 'refNumber', data.refNumber);
         html += makeField('Date', 'date', data.date);
+        html += makeField('From', 'from', data.from);
         html += makeField('To', 'to', data.to, true);
         html += makeField('Kind Attention', 'kindAttn', data.kindAttn);
         html += makeField('Subject', 'subject', data.subject, true);
@@ -2161,20 +2162,38 @@
         html += makeField('CC', 'cc', data.cc, true);
         html += makeField('Enclosures', 'enclosures', data.enclosures);
         html += makeField('All References', 'allReferences', data.allReferences, true);
+        html += makeField('Remarks', 'remarks', data.remarks, true);
+        html += makeField('Letter Type', 'letterType', data.letterType);
+        html += makeField('Depot', 'depot', data.depot);
+        html += makeField('Status', 'status', data.status);
       } else if (type === 'ncr') {
+        html += makeField('Organization', 'organization', data.organization);
         html += makeField('NCR Number', 'ncrNo', data.ncrNo);
+        html += makeField('Date', 'date', data.date);
         html += makeField('Project', 'project', data.project);
-        html += makeField('Vehicle No', 'vehicleNo', data.vehicleNo);
+        html += makeField('Vehicle/Train No', 'vehicleNo', data.vehicleNo || data.trainNo);
+        html += makeField('Train Set', 'trainSet', data.trainSet);
         html += makeField('Part Number', 'partNo', data.partNo);
-        html += makeField('Supplier', 'supplier', data.supplier);
+        html += makeField('Item Description', 'itemDesc', data.itemDesc, true);
+        html += makeField('Supplier/Vendor', 'supplier', data.supplier || data.vendor);
+        html += makeField('OEM', 'oem', data.oem);
         html += makeField('Severity', 'severity', data.severity);
-        html += makeField('Description', 'ncrDesc', data.ncrDesc, true);
+        html += makeField('NCR Description', 'ncrDesc', data.ncrDesc, true);
+        html += makeField('Root Cause', 'rootCause', data.rootCause, true);
         html += makeField('Corrective Action', 'correctiveAction', data.correctiveAction, true);
+        html += makeField('Issued By', 'issuedBy', data.issuedBy);
+        html += makeField('Status', 'status', data.status);
       } else {
-        // Joint note
-        html += makeField('Note Number', 'noteNo', data.noteNo);
+        html += makeField('Organization', 'organization', data.organization);
+        html += makeField('Note Number', 'jointNoteNo', data.jointNoteNo || data.noteNo);
+        html += makeField('Date', 'date', data.date);
         html += makeField('Subject', 'subject', data.subject, true);
-        html += makeField('Content', 'content', data.content, true);
+        html += makeField('Parties', 'parties', data.parties);
+        html += makeField('Description', 'description', data.description, true);
+        html += makeField('Items Discussed', 'itemsDiscussed', data.itemsDiscussed, true);
+        html += makeField('Decisions', 'decisions', data.decisions, true);
+        html += makeField('Action Items', 'actionItems', data.actionItems, true);
+        html += makeField('Status', 'status', data.status);
       }
       
       html += '</div>';
@@ -2185,11 +2204,12 @@
 
     function makeField(label, key, value, multiline) {
       const id = 'ext_' + key;
-      const val = esc(value || '');
+      const val = value || '';
+      const safeVal = val.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
       if (multiline) {
-        return `<div class="form-group" style="grid-column:span 2"><label style="font-size:11px;font-weight:600">${label}</label><textarea id="${id}" rows="3" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;font-size:12px;resize:vertical" onchange="window._pendingUploadData['${key}']=this.value">${val}</textarea></div>`;
+        return `<div class="form-group" style="grid-column:span 2"><label style="font-size:11px;font-weight:600">${label}</label><textarea id="${id}" rows="3" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;font-size:12px;resize:vertical" onchange="window._pendingUploadData['${key}']=this.value">${safeVal}</textarea></div>`;
       }
-      return `<div class="form-group"><label style="font-size:11px;font-weight:600">${label}</label><input id="${id}" value="${val}" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;font-size:12px" onchange="window._pendingUploadData['${key}']=this.value"></div>`;
+      return `<div class="form-group"><label style="font-size:11px;font-weight:600">${label}</label><input id="${id}" value="${safeVal}" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;font-size:12px" onchange="window._pendingUploadData['${key}']=this.value"></div>`;
     }
 
     function resetUploadForm() {
@@ -2207,6 +2227,14 @@
       const file = window._pendingUploadFile;
       if (!data || !file) return showToast('No data to save', 'error');
 
+      // Read ALL current values from DOM to capture unsaved edits
+      document.querySelectorAll('#extractedFields input, #extractedFields textarea').forEach(el => {
+        const key = el.id.replace('ext_', '');
+        if (key && window._pendingUploadData.hasOwnProperty(key)) {
+          window._pendingUploadData[key] = el.value;
+        }
+      });
+
       const btn = document.getElementById('confirmSaveBtn');
       btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Saving...';
 
@@ -2220,8 +2248,9 @@
 
         if (saveResult.success) {
           let msg = 'Document saved successfully!';
+          if (saveResult.sheet && saveResult.sheet.sno) msg += ` (S.No: ${saveResult.sheet.sno})`;
           if (saveResult.drive && saveResult.drive.link) {
-            msg += ' (Google Drive: ✅)';
+            msg += ' (Drive: ✅)';
           } else if (saveResult.drive && saveResult.drive.error) {
             msg += ' (Drive: ' + saveResult.drive.error.substring(0, 50) + ')';
           }

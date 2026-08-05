@@ -500,6 +500,12 @@ async function appendToSheet(sheetName, data, columns) {
     console.log(`\n📝 appendToSheet: ${sheetName} (row ${sno})`);
     const filled = columns.filter((c, i) => row[i] && row[i] !== '').length;
     console.log(`   ${filled}/${columns.length} fields filled`);
+    // Log which fields have data and which are empty
+    columns.forEach((col, i) => {
+      if (row[i] && row[i] !== '') {
+        console.log(`   ✓ ${col}: ${String(row[i]).substring(0, 60)}`);
+      }
+    });
 
     await sheets.spreadsheets.values.append({
       spreadsheetId: SPREADSHEET_ID, range: `${sheetName}!A:${columnToLetter(columns.length)}`,
@@ -727,51 +733,62 @@ function parseLetterContent(text, org) {
 
   const extracted = { refNumber: '', allReferences: [], date: '', subject: '', from: '', to: '', kindAttn: '', enclosures: '', letterContent: '', remarks: '', cc: '', signatory: '', designation: '', project: '' };
 
-  // REF - improved to catch BEML formats like 1249/25/168/BEML/1234
-  for (let i = 0; i < Math.min(lines.length, 30); i++) {
-    const line = lines[i]; let m;
-    // Explicit "Our No:" or "Ref No:" patterns
-    m = line.match(/(?:Our|Ref(?:erence)?|Letter)\s*(?:No|Number)?\.?\s*[:\.]?\s*(.+)/i);
-    if (m && m[1]) {
-      let ref = m[1].trim().split(/\s{3,}/)[0].replace(/^[:\s]+/, '').trim();
-      if (ref.length >= 3 && !ref.match(/^date\s*:/i) && !ref.match(/^(dear|sir|madam)/i)) {
-        extracted.refNumber = ref;
+  // ── REF NUMBER ──
+  // Priority 1: First 5 lines, look for BEML-style ref (ORG/.../number)
+  for (let i = 0; i < Math.min(lines.length, 5); i++) {
+    const line = lines[i];
+    // Skip lines that are clearly not ref numbers
+    if (/^(date|subject|dear|to|from|kind|ref\s*\.?\s*:)/i.test(line)) continue;
+    // BEML-style: BEML/RS(3R)/PM/.../1742 or KMRCL/... or similar with slashes (allows spaces in segments)
+    let m = line.match(/^([A-Z][A-Z0-9\(\)]+(?:\s*\/\s*[A-Z0-9\(\)\-\. ]+){2,})$/i);
+    if (m && m[1] && (m[1].match(/\//g) || []).length >= 2) {
+      extracted.refNumber = m[1].trim();
+      break;
+    }
+    // Numeric ref: 1249/25/168/BEML/1234
+    m = line.match(/^(\d{2,6}\/\d{1,4}\/\d{1,5}\/[A-Z]+(?:\/\d{1,5})?)$/i);
+    if (m && m[1]) { extracted.refNumber = m[1].trim(); break; }
+    // Single-line pattern with 3+ slashes (but not the reference list header)
+    if (!line.match(/^\(/) && !line.match(/^ref/i) && (line.match(/\//g) || []).length >= 3) {
+      const m2 = line.match(/^[A-Z0-9][\w\s\(\)\/\.\-]+$/i);
+      if (m2 && line.length < 120 && line.length > 5) {
+        extracted.refNumber = line.trim();
         break;
       }
     }
-    // BEML-style reference: number/number/number/ORG
-    m = line.match(/(\d{3,6}\/\d{2,4}\/\d{1,5}\/[A-Z]+(?:\/\d{1,5})?)/i);
-    if (m && m[1]) { extracted.refNumber = m[1].trim(); break; }
-    // PDN ref
-    m = line.match(/PDN\s+ref\.?\s*[:\.]?\s*(.+)/i);
-    if (m && m[1]) { extracted.refNumber = m[1].trim().split(/\s{3,}/)[0].trim(); break; }
-    // Generic REF pattern with slashes
-    const ir = line.match(/([A-Z]{2,15}\s*\/\s*[A-Z0-9\/\-]+(?:\s*\/\s*[A-Z0-9]+)*(?:\s*\/\s*\d{2,4})?(?:\s*\/\s*\d{2,5})?)/);
-    if (ir && ir[1] && (ir[1].match(/\//g) || []).length >= 2) {
-      extracted.refNumber = ir[1].replace(/\s+/g, ' ').trim(); break;
-    }
-    // Your Ref
-    m = line.match(/Your\s+Ref\s*(?:No\.?)?\s*[:\.]?\s*(.+)/i);
-    if (m && m[1]) {
-      let ref = m[1].trim().split(/\s{3,}/)[0].replace(/^[:\s]+/, '').trim();
-      if (ref.length >= 3 && !ref.match(/^date\s*:/i)) { extracted.refNumber = ref; break; }
+  }
+
+  // Priority 2: "Ref.:" or "Our Ref:" or "Letter No:" patterns (skip reference LIST headers like "Ref. : (1)")
+  if (!extracted.refNumber) {
+    for (let i = 0; i < Math.min(lines.length, 20); i++) {
+      const line = lines[i];
+      // Skip reference list headers
+      if (/^Ref\.?\s*:\s*\(/.test(line)) continue;
+      if (/^Ref\.?\s*:\s*$/.test(line)) continue;
+      let m = line.match(/(?:Our|Ref(?:erence)?\.?\s*(?:No\.?)?)\s*[:\.]\s*(.+)/i);
+      if (m && m[1]) {
+        let ref = m[1].trim().split(/\s{3,}/)[0].replace(/^[:\s]+/, '').trim();
+        if (ref.length >= 3 && !ref.match(/^date\s*:/i) && !ref.match(/^\(/) && !ref.match(/^(dear|sir|madam)/i)) {
+          extracted.refNumber = ref;
+          break;
+        }
+      }
+      m = line.match(/Letter\s+No\.?\s*[:\.]\s*(.+)/i);
+      if (m && m[1]) {
+        let ref = m[1].trim().split(/\s{3,}/)[0].trim();
+        if (ref.length >= 3) { extracted.refNumber = ref; break; }
+      }
     }
   }
-  // Broader fallback: scan full text for ref-like patterns
+
+  // Priority 3: Broader fallback
   if (!extracted.refNumber) {
-    const ms = fullText.match(/(\d{3,6}\/\d{2,4}\/\d{1,5}\/[A-Z]+(?:\/\d{1,5})?)/i);
+    const ms = fullText.match(/([A-Z]{2,15}\s*\/\s*[A-Z0-9\(\)\/\-]+(?:\s*\/\s*[A-Z0-9\(\)]+){2,})/);
     if (ms) extracted.refNumber = ms[1].replace(/\s+/g, ' ').trim();
   }
   if (!extracted.refNumber) {
-    const ms = fullText.match(/([A-Z]{2,15}\s*\/\s*\d{2,4}[\-\/]\d{2,4}\s*\/\s*[A-Z]{2,15}\s*\/\s*\d{2,5})/);
+    const ms = fullText.match(/(\d{2,6}\/\d{1,4}\/\d{1,5}\/[A-Z]+(?:\/\d{1,5})?)/i);
     if (ms) extracted.refNumber = ms[1].replace(/\s+/g, ' ').trim();
-  }
-  if (!extracted.refNumber) {
-    const all = fullText.match(/([A-Z]{2,15}\s*\/\s*[A-Z0-9\/\-]+(?:\s*\/\s*[A-Z0-9]+)*(?:\s*\/\s*\d{2,4})?(?:\s*\/\s*\d{2,5})?)/g);
-    if (all) {
-      const v = all.filter(r => (r.match(/\//g) || []).length >= 2);
-      if (v.length) extracted.refNumber = v.sort((a, b) => b.length - a.length)[0].replace(/\s+/g, ' ').trim();
-    }
   }
 
   // DATE - improved to catch BEML formats
@@ -1065,6 +1082,8 @@ function parseLetterContent(text, org) {
     remarks: remarks || '', fileName: '',
     cc: cc || '', signatory: signatory || '',
     designation: designation || '', project: project || '',
+    depot: '', priority: 'normal', replyType: 'response',
+    techDetails: '', replyToRef: '', attachmentLink: '',
     uploadDate: new Date().toISOString().split('T')[0],
     status: 'Open'
   };
