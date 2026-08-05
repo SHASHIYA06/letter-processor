@@ -332,6 +332,13 @@
 
   <div class="toast" id="toast"></div>
 
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script>
+    // Configure pdf.js worker
+    if (typeof pdfjsLib !== 'undefined') {
+      pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    }
+  </script>
   <script>
     // Global error handler - prevents blank screens
     window.onerror = function(msg, url, line, col, error) {
@@ -2072,6 +2079,30 @@
       currentUploadFile = file;
     }
 
+    // Client-side PDF to images conversion using pdf.js
+    async function pdfToImages(file, maxPages = 3) {
+      if (typeof pdfjsLib === 'undefined') {
+        console.warn('pdf.js not loaded');
+        return [];
+      }
+      const arrayBuffer = await file.arrayBuffer();
+      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+      const numPages = Math.min(pdf.numPages, maxPages);
+      const images = [];
+      for (let i = 1; i <= numPages; i++) {
+        const page = await pdf.getPage(i);
+        const viewport = page.getViewport({ scale: 2.0 });
+        const canvas = document.createElement('canvas');
+        canvas.width = viewport.width;
+        canvas.height = viewport.height;
+        const ctx = canvas.getContext('2d');
+        await page.render({ canvasContext: ctx, viewport }).promise;
+        const blob = await new Promise(r => canvas.toBlob(r, 'image/png'));
+        images.push(new File([blob], `page-${i}.png`, { type: 'image/png' }));
+      }
+      return images;
+    }
+
     document.getElementById('uploadForm').addEventListener('submit', async e => {
       e.preventDefault();
       const type = document.getElementById('uploadType').value;
@@ -2080,12 +2111,10 @@
       console.log('Upload attempt:', { type, org, file: file ? file.name : 'none' });
       if (!file) return showToast('Select a file', 'error');
 
-      // Validate file size
       if (file.size > 100 * 1024 * 1024) {
         return showToast('File too large (max 100MB)', 'error');
       }
 
-      // Validate file type
       const allowedExts = ['.pdf', '.jpg', '.jpeg', '.png', '.gif', '.tiff', '.tif', '.doc', '.docx', '.txt', '.bmp', '.xlsx', '.xls'];
       const ext = '.' + file.name.split('.').pop().toLowerCase();
       if (!allowedExts.includes(ext)) {
@@ -2101,39 +2130,85 @@
       const iv = setInterval(() => { progress = Math.min(progress + 10, 90); document.getElementById('uploadProgressBar').style.width = progress + '%'; }, 500);
 
       try {
+        // Step 1: Try server-side text extraction first (fast for text-based PDFs)
         const formData = new FormData();
         formData.append('organization', org);
         formData.append('type', type);
         formData.append('file', file);
 
-        console.log('Fetching /api/extract...');
+        console.log('Step 1: Server-side text extraction...');
         const extractRes = await authFetch('/api/extract', { method: 'POST', body: formData });
-        console.log('Extract response status:', extractRes.status);
-        
         if (!extractRes.ok) {
           const errorText = await extractRes.text();
           throw new Error(`Server error ${extractRes.status}: ${errorText}`);
         }
-        
         const extractData = await extractRes.json();
+
+        let finalData = extractData.data || {};
+
+        // Step 2: If text extraction got little content and file is PDF, try client-side OCR
+        const hasGoodText = finalData.refNumber || finalData.subject || (finalData.letterContent && finalData.letterContent.length > 50);
+        if (!hasGoodText && ext === '.pdf' && typeof pdfjsLib !== 'undefined') {
+          console.log('Step 2: Low text content, trying client-side OCR...');
+          document.getElementById('uploadProgressText').textContent = 'Converting PDF to images for OCR...';
+          
+          try {
+            const images = await pdfToImages(file, 3);
+            if (images.length > 0) {
+              document.getElementById('uploadProgressText').textContent = `OCR processing ${images.length} pages...`;
+              
+              const ocrFormData = new FormData();
+              images.forEach(img => ocrFormData.append('images', img));
+              ocrFormData.append('organization', org);
+              ocrFormData.append('type', type);
+
+              const ocrRes = await authFetch('/api/ocr-images', { method: 'POST', body: ocrFormData });
+              if (ocrRes.ok) {
+                const ocrResult = await ocrRes.json();
+                if (ocrResult.success && ocrResult.text) {
+                  // Parse the OCR text using server
+                  const parseRes = await authFetch('/api/parse-text', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text: ocrResult.text, organization: org, type: type })
+                  });
+                  if (parseRes.ok) {
+                    const parsed = await parseRes.json();
+                    if (parsed.success && parsed.data) {
+                      // Merge: keep server-extracted fields, fill in blanks from OCR
+                      for (const [k, v] of Object.entries(parsed.data)) {
+                        if (v && (!finalData[k] || finalData[k] === '')) {
+                          finalData[k] = v;
+                        }
+                      }
+                      console.log('OCR enhanced extraction:', Object.keys(finalData).filter(k => finalData[k]).length, 'fields filled');
+                    }
+                  }
+                }
+              }
+            }
+          } catch (ocrErr) {
+            console.warn('Client-side OCR failed:', ocrErr.message);
+          }
+        }
 
         clearInterval(iv);
         document.getElementById('uploadProgressBar').style.width = '100%';
         document.getElementById('uploadProgressText').textContent = 'Extraction complete. Review below.';
 
-        if (extractData.success) {
-          // Store extracted data for saving later
-          window._pendingUploadData = { ...extractData.data, docType: type, organization: org, fileName: file.name, uploadDate: new Date().toISOString().split('T')[0], status: document.getElementById('uploadStatus').value || 'Draft' };
+        if (finalData.refNumber || finalData.subject || finalData.date) {
+          window._pendingUploadData = { ...finalData, docType: type, organization: org, fileName: file.name, uploadDate: new Date().toISOString().split('T')[0], status: document.getElementById('uploadStatus').value || 'Draft' };
           window._pendingUploadFile = file;
-          
-          // Show preview with editable fields
-          showExtractedPreview(extractData.data, type);
+          showExtractedPreview(finalData, type);
         } else {
-          showToast('Extraction failed: ' + (extractData.error || 'Unknown error'), 'error');
+          showToast('Could not extract data. Please enter manually.', 'warning');
+          window._pendingUploadData = { docType: type, organization: org, fileName: file.name, uploadDate: new Date().toISOString().split('T')[0], status: document.getElementById('uploadStatus').value || 'Draft' };
+          window._pendingUploadFile = file;
+          showExtractedPreview({}, type);
         }
-      } catch (e) { 
-        console.error('Upload error:', e); 
-        showToast('Error: ' + e.message, 'error'); 
+      } catch (e) {
+        console.error('Upload error:', e);
+        showToast('Error: ' + e.message, 'error');
       }
 
       clearInterval(iv);

@@ -29,7 +29,7 @@ try {
   mammoth = { extractRawText: async () => ({ value: '' }) };
 }
 
-// Load Tesseract and child_process only locally (too slow for Vercel)
+// Load Tesseract and child_process
 if (!isVercel) {
   try {
     const tesseractModule = await import('tesseract.js');
@@ -41,9 +41,15 @@ if (!isVercel) {
   const childProcess = await import('child_process');
   execSync = childProcess.execSync;
 } else {
-  // On Vercel: Tesseract is too slow (exceeds 60s timeout)
-  // OCR only works locally; Vercel uses pdf-parse for text-based PDFs
-  Tesseract = { recognize: async () => { throw new Error('OCR not available on Vercel - use locally for scanned PDFs'); } };
+  // On Vercel: Load Tesseract for /api/ocr-images (client sends pre-converted images, fast OCR)
+  try {
+    const tesseractModule = await import('tesseract.js');
+    Tesseract = tesseractModule.default;
+    console.log('✅ Tesseract.js loaded on Vercel for image OCR');
+  } catch (e) {
+    console.log('⚠️  Tesseract.js not available on Vercel:', e.message);
+    Tesseract = { recognize: async () => { throw new Error('Tesseract not available'); } };
+  }
   execSync = () => { throw new Error('execSync not available on Vercel'); };
 }
 
@@ -675,7 +681,7 @@ async function extractTextFromPDF(filePath) {
       console.log('⚠️  OCR failed:', e.message);
     }
   } else {
-    console.log('⚠️  Scanned PDF detected on Vercel - OCR not available. Use locally for scanned PDFs.');
+    console.log('⚠️  Scanned PDF on Vercel - client-side OCR will handle this');
   }
   // Return whatever text pdfParse got, even if short
   return data.text || '';
@@ -1874,6 +1880,66 @@ app.post('/api/extract', authenticateToken, upload.single('file'), async (req, r
     res.json({ success: true, data: parsed, rawText: text.substring(0, 5000) });
   } catch (err) {
     console.error('❌ Extraction error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// OCR images endpoint - accepts images from client-side PDF conversion
+app.post('/api/ocr-images', authenticateToken, upload.array('images', 10), async (req, res) => {
+  try {
+    if (!req.files || req.files.length === 0) {
+      return res.status(400).json({ success: false, error: 'No images uploaded' });
+    }
+    console.log(`\n🖼️  OCR: Processing ${req.files.length} images...`);
+
+    let fullText = '';
+    for (const file of req.files) {
+      try {
+        // Write buffer to tmp file for Tesseract
+        const tmpDir = '/tmp';
+        const tmpPath = path.join(tmpDir, `ocr_${Date.now()}_${Math.random().toString(36).slice(2)}.png`);
+        fs.writeFileSync(tmpPath, file.buffer);
+        
+        const result = await Tesseract.recognize(tmpPath, 'eng');
+        fullText += result.data.text + '\n\n';
+        console.log(`  ✅ OCR page: ${result.data.text.length} chars`);
+        
+        // Cleanup
+        try { fs.unlinkSync(tmpPath); } catch {}
+      } catch (e) {
+        console.log(`  ⚠️  OCR page failed:`, e.message);
+      }
+    }
+
+    console.log(`📝 OCR complete: ${fullText.length} chars total`);
+    res.json({ success: true, text: fullText, pages: req.files.length });
+  } catch (err) {
+    console.error('❌ OCR error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Parse text endpoint - parses OCR text into structured fields
+app.post('/api/parse-text', authenticateToken, async (req, res) => {
+  try {
+    const { text, organization, type } = req.body;
+    if (!text) return res.status(400).json({ success: false, error: 'No text provided' });
+
+    console.log(`\n🔍 Parsing ${text.length} chars for ${organization} (${type})...`);
+
+    let parsed;
+    if (type === 'ncr') {
+      parsed = parseNCRContent(text);
+    } else if (type === 'joint_note') {
+      parsed = parseJointNoteContent(text);
+    } else {
+      parsed = parseLetterContent(text, organization || 'BEML');
+    }
+
+    console.log(`✅ Parsed: ref=${parsed.refLetterNumber || parsed.refNumber || '(none)'}, subject=${(parsed.subject || '').substring(0, 40)}`);
+    res.json({ success: true, data: parsed });
+  } catch (err) {
+    console.error('❌ Parse error:', err);
     res.status(500).json({ success: false, error: err.message });
   }
 });
