@@ -204,7 +204,7 @@ async function initGoogleAuth() {
         const credentials = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT);
         auth = new google.auth.GoogleAuth({
           credentials,
-          scopes: ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
+          scopes: ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive', 'https://www.googleapis.com/auth/cloud-vision']
         });
         sheets = google.sheets({ version: 'v4', auth });
         drive = google.drive({ version: 'v3', auth });
@@ -220,7 +220,7 @@ async function initGoogleAuth() {
       const credentials = JSON.parse(fs.readFileSync(credentialsPath, 'utf8'));
       auth = new google.auth.GoogleAuth({
         credentials,
-        scopes: ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
+        scopes: ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive', 'https://www.googleapis.com/auth/cloud-vision']
       });
       sheets = google.sheets({ version: 'v4', auth });
       drive = google.drive({ version: 'v3', auth });
@@ -1884,40 +1884,38 @@ app.post('/api/extract', authenticateToken, upload.single('file'), async (req, r
   }
 });
 
-// OCR images endpoint - uses Google Cloud Vision API for fast OCR
+// OCR images endpoint - uses ocr.space free API for fast OCR (no auth required)
 app.post('/api/ocr-images', authenticateToken, upload.array('images', 10), async (req, res) => {
   try {
     if (!req.files || req.files.length === 0) {
       return res.status(400).json({ success: false, error: 'No images uploaded' });
     }
-    console.log(`\n🖼️  OCR: Processing ${req.files.length} images with Google Cloud Vision...`);
-
-    // Use Google Cloud Vision API with OAuth2 credentials
-    const vision = await import('@google-cloud/vision');
-    
-    // Try service account first (local), fallback to OAuth2 (Vercel)
-    let authOptions = {};
-    const saPath = path.join(__dirname, 'credentials', 'service-account.json');
-    if (fs.existsSync(saPath)) {
-      authOptions.credentials = JSON.parse(fs.readFileSync(saPath, 'utf8'));
-      console.log('  Using service account credentials');
-    } else if (sheets) {
-      // Use the OAuth2 client that's already authenticated for Sheets/Drive
-      authOptions.authClient = oauth2Client;
-      console.log('  Using OAuth2 credentials');
-    } else {
-      return res.status(500).json({ success: false, error: 'No Google credentials available for OCR' });
-    }
-    
-    const imageAnnotator = new vision.ImageAnnotatorClient(authOptions);
+    console.log(`\n🖼️  OCR: Processing ${req.files.length} images with ocr.space...`);
 
     let fullText = '';
     for (const file of req.files) {
       try {
-        const [result] = await imageAnnotator.textDetection({ image: { content: file.buffer } });
-        const text = result.fullTextAnnotation ? result.fullTextAnnotation.text : '';
-        fullText += text + '\n\n';
-        console.log(`  ✅ OCR page: ${text.length} chars`);
+        // Convert buffer to base64
+        const base64Image = file.buffer.toString('base64');
+        
+        // Call ocr.space free API
+        const response = await fetch('https://api.ocr.space/parse/image', {
+          method: 'POST',
+          headers: {
+            'apikey': 'K85470644388957', // Free API key from ocr.space
+            'Content-Type': 'application/x-www-form-urlencoded'
+          },
+          body: `base64Image=data:image/png;base64,${base64Image}&language=eng&OCREngine=2`
+        });
+        
+        const result = await response.json();
+        if (result.ParsedResults && result.ParsedResults[0]) {
+          const text = result.ParsedResults[0].ParsedText || '';
+          fullText += text + '\n\n';
+          console.log(`  ✅ OCR page: ${text.length} chars`);
+        } else {
+          console.log(`  ⚠️  No text found on page`);
+        }
       } catch (e) {
         console.log(`  ⚠️  OCR page failed:`, e.message);
       }
