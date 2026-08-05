@@ -676,16 +676,16 @@ async function extractTextFromScannedPDF(filePath) {
   try {
     let files = [];
 
-    // Strategy 1: Try pdftoppm (local development)
+    // Strategy 1: Try pdftoppm (local development) - faster
     try {
-      execSync(`pdftoppm -png -r 300 "${filePath}" "${path.join(tmpDir, 'page')}"`, { timeout: 60000, stdio: 'pipe' });
+      execSync(`pdftoppm -png -r 200 "${filePath}" "${path.join(tmpDir, 'page')}"`, { timeout: 30000, stdio: 'pipe' });
       files = fs.readdirSync(tmpDir).filter(f => f.endsWith('.png')).sort();
       console.log(`✅ pdftoppm produced ${files.length} images`);
     } catch (e) {
       console.log('⚠️  pdftoppm not available, trying pdfjs-dist + sharp...');
     }
 
-    // Strategy 2: Use pdfjs-dist + sharp (works on Vercel)
+    // Strategy 2: Use pdfjs-dist + sharp (works on Vercel) - optimized
     if (files.length === 0) {
       try {
         const pdfjsLib = await import('pdfjs-dist/legacy/build/pdf.mjs');
@@ -694,13 +694,13 @@ async function extractTextFromScannedPDF(filePath) {
 
         const data = new Uint8Array(fs.readFileSync(filePath));
         const pdfDoc = await pdfjsLib.getDocument({ data }).promise;
-        console.log(`📄 PDF has ${pdfDoc.numPages} pages, converting to images...`);
+        const totalPages = Math.min(pdfDoc.numPages, 3); // Limit to 3 pages for speed
+        console.log(`📄 PDF has ${pdfDoc.numPages} pages, converting first ${totalPages}...`);
 
-        for (let pageNum = 1; pageNum <= pdfDoc.numPages; pageNum++) {
+        for (let pageNum = 1; pageNum <= totalPages; pageNum++) {
           const page = await pdfDoc.getPage(pageNum);
-          const viewport = page.getViewport({ scale: 2.0 }); // 2x for better OCR
+          const viewport = page.getViewport({ scale: 1.5 }); // Reduced from 2.0 to 1.5 for speed
 
-          // Render to SVG using pdfjs-dist
           const opList = await page.getOperatorList();
           const svgFactory = new pdfjsLib.SVGGraphics(page.commonObjs, page.objs);
           const svg = await svgFactory.getSVG({
@@ -709,13 +709,11 @@ async function extractTextFromScannedPDF(filePath) {
             annotationStorage: pdfDoc.annotationStorage
           });
 
-          // Convert SVG string to buffer
           const svgString = svg.toString();
           const svgBuffer = Buffer.from(svgString, 'utf-8');
 
-          // Convert SVG to PNG using sharp
           const pngBuffer = await sharp(svgBuffer)
-            .resize({ width: 2480 }) // A4 at 300 DPI
+            .resize({ width: 1600 }) // Reduced from 2480 to 1600 for speed
             .png()
             .toBuffer();
 
@@ -742,11 +740,11 @@ async function extractTextFromScannedPDF(filePath) {
       }
     }
 
-    // OCR all converted images
+    // OCR converted images (limit to first 3 pages)
     if (files.length > 0) {
       let fullText = '';
-      for (let i = 0; i < files.length; i++) {
-        console.log(`🔍 OCR page ${i + 1}/${files.length}...`);
+      for (let i = 0; i < Math.min(files.length, 3); i++) {
+        console.log(`🔍 OCR page ${i + 1}/${Math.min(files.length, 3)}...`);
         const result = await Tesseract.recognize(files[i], 'eng');
         fullText += result.data.text + '\n\n';
       }
