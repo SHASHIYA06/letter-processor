@@ -1884,28 +1884,27 @@ app.post('/api/extract', authenticateToken, upload.single('file'), async (req, r
   }
 });
 
-// OCR images endpoint - accepts images from client-side PDF conversion
+// OCR images endpoint - uses Google Cloud Vision API for fast OCR
 app.post('/api/ocr-images', authenticateToken, upload.array('images', 10), async (req, res) => {
   try {
     if (!req.files || req.files.length === 0) {
       return res.status(400).json({ success: false, error: 'No images uploaded' });
     }
-    console.log(`\n🖼️  OCR: Processing ${req.files.length} images...`);
+    console.log(`\n🖼️  OCR: Processing ${req.files.length} images with Google Cloud Vision...`);
+
+    // Use Google Cloud Vision API
+    const vision = await import('@google-cloud/vision');
+    const imageAnnotator = new vision.ImageAnnotatorClient({
+      credentials: JSON.parse(fs.readFileSync(path.join(__dirname, 'credentials', 'service-account.json'), 'utf8'))
+    });
 
     let fullText = '';
     for (const file of req.files) {
       try {
-        // Write buffer to tmp file for Tesseract
-        const tmpDir = '/tmp';
-        const tmpPath = path.join(tmpDir, `ocr_${Date.now()}_${Math.random().toString(36).slice(2)}.png`);
-        fs.writeFileSync(tmpPath, file.buffer);
-        
-        const result = await Tesseract.recognize(tmpPath, 'eng');
-        fullText += result.data.text + '\n\n';
-        console.log(`  ✅ OCR page: ${result.data.text.length} chars`);
-        
-        // Cleanup
-        try { fs.unlinkSync(tmpPath); } catch {}
+        const [result] = await imageAnnotator.textDetection({ image: { content: file.buffer } });
+        const text = result.fullTextAnnotation ? result.fullTextAnnotation.text : '';
+        fullText += text + '\n\n';
+        console.log(`  ✅ OCR page: ${text.length} chars`);
       } catch (e) {
         console.log(`  ⚠️  OCR page failed:`, e.message);
       }
