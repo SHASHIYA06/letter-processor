@@ -734,25 +734,27 @@ function parseLetterContent(text, org) {
   const extracted = { refNumber: '', allReferences: [], date: '', subject: '', from: '', to: '', kindAttn: '', enclosures: '', letterContent: '', remarks: '', cc: '', signatory: '', designation: '', project: '' };
 
   // ── REF NUMBER ──
-  // Priority 1: First 5 lines, look for BEML-style ref (ORG/.../number)
-  for (let i = 0; i < Math.min(lines.length, 5); i++) {
+  // Priority 1: First 10 lines, look for BEML-style ref (ORG/.../number)
+  for (let i = 0; i < Math.min(lines.length, 10); i++) {
     const line = lines[i];
     // Skip lines that are clearly not ref numbers
-    if (/^(date|subject|dear|to|from|kind|ref\s*\.?\s*:)/i.test(line)) continue;
-    // BEML-style: BEML/RS(3R)/PM/.../1742 or KMRCL/... or similar with slashes (allows spaces in segments)
-    let m = line.match(/^([A-Z][A-Z0-9\(\)]+(?:\s*\/\s*[A-Z0-9\(\)\-\. ]+){2,})$/i);
+    if (/^(date|subject|dear|to|from|kind|ref\s*\.?\s*:|schedule|developed|mission|beml\s+limit)/i.test(line)) continue;
+    // Strip trailing date/info: "BEML/RS(3R)/PM/Door/1778 Dt: 05.06.2026" -> "BEML/RS(3R)/PM/Door/1778"
+    const cleanLine = line.replace(/\s+Dt[:\s].*$/i, '').replace(/\s+Dated?\s*[:\.].*$/i, '').replace(/\s+Date\s*[:\.].*$/i, '').trim();
+    // BEML-style: BEML/RS(3R)/PM/.../1742 or KMRCL/... or similar with slashes
+    let m = cleanLine.match(/^([A-Z][A-Z0-9\(\)]+(?:\s*\/\s*[A-Z0-9\(\)\-\. ]+){2,})$/i);
     if (m && m[1] && (m[1].match(/\//g) || []).length >= 2) {
       extracted.refNumber = m[1].trim();
       break;
     }
     // Numeric ref: 1249/25/168/BEML/1234
-    m = line.match(/^(\d{2,6}\/\d{1,4}\/\d{1,5}\/[A-Z]+(?:\/\d{1,5})?)$/i);
+    m = cleanLine.match(/^(\d{2,6}\/\d{1,4}\/\d{1,5}\/[A-Z]+(?:\/\d{1,5})?)$/i);
     if (m && m[1]) { extracted.refNumber = m[1].trim(); break; }
     // Single-line pattern with 3+ slashes (but not the reference list header)
-    if (!line.match(/^\(/) && !line.match(/^ref/i) && (line.match(/\//g) || []).length >= 3) {
-      const m2 = line.match(/^[A-Z0-9][\w\s\(\)\/\.\-]+$/i);
-      if (m2 && line.length < 120 && line.length > 5) {
-        extracted.refNumber = line.trim();
+    if (!cleanLine.match(/^\(/) && !cleanLine.match(/^ref/i) && (cleanLine.match(/\//g) || []).length >= 3) {
+      const m2 = cleanLine.match(/^[A-Z0-9][\w\s\(\)\/\.\-]+$/i);
+      if (m2 && cleanLine.length < 120 && cleanLine.length > 5) {
+        extracted.refNumber = cleanLine.trim();
         break;
       }
     }
@@ -795,10 +797,10 @@ function parseLetterContent(text, org) {
   for (let i = 0; i < Math.min(lines.length, 30); i++) {
     const line = lines[i]; let m;
     // "Date: 12.05.2025" or "Date: 12/05/2025" or "Date: 12-05-2025"
-    m = line.match(/(?:Date|Dated?)\s*[:\.]?\s*(\d{1,2}[\.\/\-]\d{1,2}[\.\/\-]\d{2,4})/i);
+    m = line.match(/(?:Date|Dated?|Dt)\s*[:\.]?\s*(\d{1,2}[\.\/\-]\d{1,2}[\.\/\-]\d{2,4})/i);
     if (m && m[1]) { extracted.date = m[1].trim(); break; }
     // "Dated: 12th May 2025"
-    m = line.match(/(?:Date|Dated?)\s*[:\.]?\s*(\d{1,2})(?:st|nd|rd|th)?/i);
+    m = line.match(/(?:Date|Dated?|Dt)\s*[:\.]?\s*(\d{1,2})(?:st|nd|rd|th)?/i);
     if (m && m[1]) {
       for (let j = i + 1; j < Math.min(i + 4, lines.length); j++) {
         const my = lines[j].match(/((?:of\s+)?(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s*,?\s*\d{2,4})/i);
@@ -1040,10 +1042,21 @@ function parseLetterContent(text, org) {
     if (l.match(/Yours\s+(sincerely|faithfully|truly)/i)) {
       for (let j = i + 1; j < Math.min(i + 6, lines.length); j++) {
         const n = lines[j];
-        if (n.match(/for\s+BEML|BEML\s+Limited|Manager|General\s+Manager|Senior|Chief|Director/i) && !signatory) {
+        // Skip "for BEML Limited" - we want the actual person's name
+        if (/^for\s+(BEML|KMRCL|Metro)/i.test(n)) continue;
+        // Name: "Shri. Name" or "Mr. Name" or similar
+        if (!signatory && n.match(/^(Shri|Smt|Mr|Mrs|Ms|Dr)\.?\s+/i)) {
           signatory = n.trim().substring(0, 100);
         }
-        if (n.match(/Manager|Engineer|Officer|Director|Chief|General|Senior|Quality|Head/i) && !designation) {
+        // Also catch lines that look like names (Title Case, no special keywords) before designation
+        if (!signatory && !n.match(/^(for|Yours|Kind|Dear|Subject|Ref|Date|Encl|Cc)/i) && n.match(/^[A-Z][a-z]+(\s+[A-Z][a-z]+)+/) && n.length < 60) {
+          // Check if next line is a designation
+          const nextLine = lines[j + 1] || '';
+          if (nextLine.match(/Manager|Engineer|Officer|Director|Chief|General|Senior|Quality|Head/i)) {
+            signatory = n.trim();
+          }
+        }
+        if (!designation && n.match(/Manager|Engineer|Officer|Director|Chief|General|Senior|Quality|Head/i)) {
           designation = n.trim().substring(0, 100);
         }
       }
