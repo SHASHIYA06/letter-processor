@@ -690,7 +690,7 @@ async function extractTextFromScannedPDF(filePath) {
     let fullText = '';
     for (let i = 0; i < files.length; i++) {
       console.log(`🔍 OCR page ${i + 1}/${files.length}...`);
-      const result = await Tesseract.recognize(files[i], 'eng');
+      const result = await Tesseract.recognize(path.join(tmpDir, files[i]), 'eng');
       fullText += result.data.text + '\n\n';
     }
     return fullText;
@@ -2937,6 +2937,117 @@ For BEML Limited`;
 
     res.json({ success: true, replyData, aiContent: aiReply });
   } catch (e) { res.status(500).json({ success: false, error: e.message }); }
+});
+
+// Bulk re-parse: fix empty fields for existing records
+app.post('/api/bulk-reparse', authenticateToken, async (req, res) => {
+  if (!sheets) return res.json({ success: true, local: true, message: 'No sheets configured' });
+  try {
+    const { sheetName = 'BEML Letters' } = req.body;
+    console.log(`🔄 Bulk re-parse: ${sheetName}`);
+
+    // Read all rows
+    const result = await sheets.spreadsheets.values.get({
+      spreadsheetId: SPREADSHEET_ID,
+      range: `${sheetName}!A1:Z`
+    });
+    const rows = result.data.values || [];
+    if (rows.length < 2) return res.json({ success: true, message: 'No data rows' });
+
+    const headers = rows[0];
+    const fileNameIdx = headers.indexOf('File Name');
+    if (fileNameIdx === -1) return res.status(400).json({ success: false, error: 'No File Name column' });
+
+    let fixed = 0, skipped = 0, failed = 0;
+    const updates = [];
+
+    for (let i = 1; i < rows.length; i++) {
+      const r = rows[i];
+      const fileName = r[fileNameIdx] || '';
+      if (!fileName) { skipped++; continue; }
+
+      // Find the actual file
+      const filePath = path.join(uploadsDir, fileName);
+      if (!fs.existsSync(filePath)) { skipped++; continue; }
+
+      // Check if fields are already populated
+      const hasRef = r[headers.indexOf('Ref. Letter Number')] && r[headers.indexOf('Ref. Letter Number')].trim();
+      const hasSubject = r[headers.indexOf('Subject')] && r[headers.indexOf('Subject')].trim();
+      const hasContent = r[headers.indexOf('Letter Content')] && r[headers.indexOf('Letter Content')].trim();
+
+      if (hasRef && hasSubject && hasContent) { skipped++; continue; }
+
+      // Re-extract and re-parse
+      try {
+        let extractedText = '';
+        try {
+          extractedText = await extractTextFromPDF(filePath);
+        } catch (ocrErr) {
+          console.log(`⚠️ OCR failed for row ${i + 1}:`, ocrErr.message);
+          failed++;
+          continue;
+        }
+
+        if (!extractedText || extractedText.trim().length < 20) {
+          console.log(`⚠️ Insufficient text for row ${i + 1}`);
+          skipped++;
+          continue;
+        }
+
+        const org = detectOrganization(fileName, '');
+        const parsed = parseLetterContent(extractedText, org);
+
+        // Update empty fields only
+        const rowUpdate = [];
+        for (let j = 0; j < headers.length; j++) {
+          const header = headers[j];
+          const val = r[j] || '';
+          if (val.trim()) { rowUpdate.push(val); continue; }
+
+          // Map header to parsed field
+          let newVal = '';
+          if (header === 'Ref. Letter Number') newVal = parsed.refLetterNumber || '';
+          else if (header === 'All References') newVal = parsed.allReferences || '';
+          else if (header === 'Date') newVal = parsed.date || '';
+          else if (header === 'From') newVal = parsed.from || '';
+          else if (header === 'To (Addressee)') newVal = parsed.to || '';
+          else if (header === 'Kind Attention') newVal = parsed.kindAttn || '';
+          else if (header === 'Subject') newVal = parsed.subject || '';
+          else if (header === 'Letter Content') newVal = parsed.body || '';
+          else if (header === 'Signatory') newVal = parsed.signatory || '';
+          else if (header === 'Designation') newVal = parsed.designation || '';
+          else if (header === 'Cc') newVal = parsed.cc || '';
+          else if (header === 'Enclosures') newVal = parsed.enclosures || '';
+
+          rowUpdate.push(newVal);
+        }
+
+        updates.push({ rowIndex: i + 1, row: rowUpdate });
+        fixed++;
+        console.log(`✅ Row ${i + 1}: ref=${parsed.refLetterNumber || '(none)'}, subject=${(parsed.subject || '').substring(0, 40)}`);
+      } catch (e) {
+        console.log(`❌ Row ${i + 1} error:`, e.message);
+        failed++;
+      }
+    }
+
+    // Apply all updates in batch
+    for (const u of updates) {
+      const range = `${sheetName}!A${u.rowIndex}:${columnToLetter(headers.length)}${u.rowIndex}`;
+      await sheets.spreadsheets.values.update({
+        spreadsheetId: SPREADSHEET_ID,
+        range,
+        valueInputOption: 'RAW',
+        requestBody: { values: [u.row] }
+      });
+    }
+
+    console.log(`✅ Bulk re-parse complete: fixed=${fixed}, skipped=${skipped}, failed=${failed}`);
+    res.json({ success: true, fixed, skipped, failed, total: rows.length - 1 });
+  } catch (err) {
+    console.error('❌ Bulk re-parse error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
 });
 
 // Global error handling middleware
