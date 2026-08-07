@@ -2161,7 +2161,49 @@ app.post('/api/save', authenticateToken, upload.single('file'), async (req, res)
         console.log('⚠️  Uploaded file not found, skipping OCR');
       } else {
         try {
-          const text = await extractText(filePath);
+          let text = await extractText(filePath);
+          
+          // If pdf-parse returned little text (scanned PDF), try Vision API OCR
+          const hasGoodText = text && text.length > 100 && (text.includes('/') || text.match(/\d{2}[\.\/-]\d{2}[\.\/-]\d{2,4}/));
+          if (!hasGoodText && filePath.toLowerCase().endsWith('.pdf')) {
+            console.log('⚠️  Low text from pdf-parse, trying Vision API OCR...');
+            try {
+              const { execSync } = await import('child_process');
+              const tmpImg = `/tmp/save_ocr_${Date.now()}`;
+              execSync(`pdftoppm -png -r 200 "${filePath}" "${tmpImg}"`, { timeout: 30000 });
+              const imgFiles = fs.readdirSync('/tmp').filter(f => f.startsWith(path.basename(tmpImg)) && f.endsWith('.png')).sort();
+              
+              if (imgFiles.length > 0 && oauth2Client?.credentials?.access_token) {
+                // Refresh token if needed
+                if (oauth2Client.credentials.expiry_date && Date.now() > oauth2Client.credentials.expiry_date - 60000) {
+                  try { const { credentials } = await oauth2Client.refreshAccessToken(); oauth2Client.setCredentials(credentials); } catch {}
+                }
+                const accessToken = oauth2Client.credentials.access_token;
+                const httpsMod = await import('https');
+                let ocrText = '';
+                for (const imgF of imgFiles) {
+                  const imgBuf = fs.readFileSync(path.join('/tmp', imgF));
+                  const base64Img = imgBuf.toString('base64');
+                  const body = JSON.stringify({ requests: [{ image: { content: base64Img }, features: [{ type: 'TEXT_DETECTION', maxResults: 1 }] }] });
+                  const result = await new Promise((resolve, reject) => {
+                    const r = httpsMod.default.request({ hostname: 'vision.googleapis.com', path: '/v1/images:annotate', method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + accessToken, 'Content-Length': Buffer.byteLength(body) } }, (res) => { let d = ''; res.on('data', c => d += c); res.on('end', () => { try { resolve(JSON.parse(d)); } catch(e) { reject(e); } }); });
+                    r.on('error', reject); r.write(body); r.end();
+                  });
+                  ocrText += (result.responses?.[0]?.fullTextAnnotation?.text || '') + '\n\n';
+                  try { fs.unlinkSync(path.join('/tmp', imgF)); } catch {}
+                }
+                if (ocrText.length > 100) {
+                  text = ocrText;
+                  console.log(`  ✅ Vision API OCR: ${ocrText.length} chars from ${imgFiles.length} pages`);
+                }
+              }
+              // Cleanup
+              try { fs.readdirSync('/tmp').filter(f => f.startsWith(path.basename(tmpImg))).forEach(f => fs.unlinkSync(path.join('/tmp', f))); } catch {}
+            } catch (ocrErr) {
+              console.log('  ⚠️ Vision API OCR failed:', ocrErr.message?.substring(0, 100));
+            }
+          }
+          
           let parsed;
           if (docType === 'ncr') parsed = parseNCRContent(text);
           else if (docType === 'joint_note') parsed = parseJointNoteContent(text);
