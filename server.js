@@ -1056,14 +1056,14 @@ function parseLetterContent(text, org) {
     if (m && m[1] && m[1].trim().length > 2) { extracted.kindAttn = m[1].trim().substring(0, 200); break; }
   }
 
-  // ENCLOSURES - improved
+  // ENCLOSURES - improved, search entire document
   const ann = fullText.match(/Annexure[\s\-]*(?:I{1,3}|IV|V|VI{0,3})\b/gi);
   if (ann) extracted.enclosures = [...new Set(ann.map(a => a.replace(/\s+/g, '-')))].join(', ');
   if (!extracted.enclosures) {
-    for (let i = 0; i < Math.min(lines.length, 40); i++) {
+    for (let i = 0; i < lines.length; i++) {
       const l = lines[i];
       const m = l.match(/(?:Enclosures?|Encl\.?|Enc\.?)\s*[:\.]?\s*(.+)/i);
-      if (m && m[1] && m[1].trim().length > 2) {
+      if (m && m[1] && m[1].trim().length > 1) {
         extracted.enclosures = m[1].trim().substring(0, 300);
         break;
       }
@@ -1156,11 +1156,29 @@ function parseLetterContent(text, org) {
     if (rmMatch) remarks = rmMatch[1].trim().replace(/\n/g, ' ').substring(0, 300);
   }
 
-  // CC - extract "CC:" or "Copy to:" block
+  // CC - extract "CC:" or "Copy to:" block - search from end of document
   let cc = '';
-  const ccBlock = fullText.match(/(?:CC|Copy\s+to|Copies?\s+to)[:\.]?\s*\n?([\s\S]*?)(?:\n\n|Annexure|Enclosures?|Yours|Thank|With\s+regard|$)/i);
-  if (ccBlock) cc = ccBlock[1].trim().replace(/\n/g, '; ').substring(0, 300);
-  if (!cc && ccMatch) cc = remarks; // fallback: use CC from remarks
+  // Search from the end for CC block (it's typically at the very bottom)
+  for (let i = lines.length - 1; i >= Math.max(0, lines.length - 20); i--) {
+    const l = lines[i];
+    const ccMatch2 = l.match(/(?:Cc|CC|Copy\s+to|Copies?\s+to)[:\.]?\s*(.+)/i);
+    if (ccMatch2) {
+      // Found CC line - collect this line and subsequent numbered items
+      const ccParts = [];
+      if (ccMatch2[1] && ccMatch2[1].trim().length > 1) ccParts.push(ccMatch2[1].trim());
+      for (let j = i + 1; j < Math.min(i + 10, lines.length); j++) {
+        if (lines[j].match(/^\d+\.\s+/) || lines[j].match(/^Shri|Smt|Mr|Mrs|Ms|Dr/i)) {
+          ccParts.push(lines[j].trim());
+        } else break;
+      }
+      if (ccParts.length) { cc = ccParts.join('; '); break; }
+    }
+  }
+  // Fallback: regex on full text
+  if (!cc) {
+    const ccBlock = fullText.match(/(?:CC|Copy\s+to|Copies?\s+to)[:\.]?\s*\n?([\s\S]*?)(?:\n\n|Annexure|Enclosures?|Yours|Thank|With\s+regard|$)/i);
+    if (ccBlock) cc = ccBlock[1].trim().replace(/\n/g, '; ').substring(0, 300);
+  }
 
   // SIGNATORY - look for name/designation near closing
   let signatory = '', designation = '';
@@ -1205,8 +1223,13 @@ function parseLetterContent(text, org) {
 
   // PROJECT - look for project identifiers
   let project = '';
-  const projMatch = fullText.match(/(?:Project|Contract|Work\s+Order)\s*(?:No\.?|Number)?\s*[:\.]?\s*([A-Z0-9\/\-]+)/i);
-  if (projMatch) project = projMatch[1].trim().substring(0, 50);
+  // Look for project names like "KMRCL RS-3R" or "BMRCL RS-3R" in the letter content
+  const projNameMatch = fullText.match(/\b(KMRCL|BMRCL|DMCRL|MMRCL|CMRCL|KMRC|BMRC)\s*(RS[\s\-]*(?:3R|2R|1R))?/i);
+  if (projNameMatch) project = projNameMatch[0].trim();
+  if (!project) {
+    const projMatch = fullText.match(/(?:Project|Contract|Work\s+Order)\s*(?:No\.?|Number)?\s*[:\.]?\s*([A-Z0-9\/\-\s]+?)(?:\s{2,}|\n|$)/i);
+    if (projMatch) project = projMatch[1].trim().substring(0, 50);
+  }
   if (!project) {
     const trainMatch = fullText.match(/\b(RS[13]R|RS\s+[13]R|KMRC|BMRC|Metro)\b/i);
     if (trainMatch) project = trainMatch[1].trim();
