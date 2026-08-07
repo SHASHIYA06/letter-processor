@@ -294,16 +294,25 @@ function generateNCRPdf(data, outputPath) {
     let y = 10;
 
     // ── HEADER: Match exact BEML NCR format from reference ──
-    // BEML Logo on left (embedded as base64 for Vercel compatibility)
-    try {
-      const logoBuffer = Buffer.from(BEML_LOGO_B64, 'base64');
-      doc.image(logoBuffer, LM, y, { width: 90, height: 55, fit: 'contain' });
-    } catch (e) {
-      // Fallback to file path
-      const logoPath = getAssetPath('beml-logo.jpg');
-      if (fs.existsSync(logoPath)) {
-        try { doc.image(logoPath, LM, y, { width: 90, height: 55, fit: 'contain' }); } catch (e2) {}
+    // BEML Logo on left - try multiple sources
+    const logoCandidates = [
+      path.join(__dirname, 'assets', 'beml-logo.png'),
+      path.join(__dirname, 'assets', 'beml-logo.jpg'),
+      path.join('/var/task', 'assets', 'beml-logo.png'),
+      path.join(process.cwd(), 'assets', 'beml-logo.png'),
+    ];
+    let logoUsed = false;
+    for (const lp of logoCandidates) {
+      if (fs.existsSync(lp)) {
+        try { doc.image(lp, LM, y, { width: 90, height: 55 }); logoUsed = true; break; } catch (e) {}
       }
+    }
+    // Fallback: embedded PNG base64 for Vercel
+    if (!logoUsed) {
+      try {
+        const logoBuf = Buffer.from(BEML_LOGO_PNG_B64, 'base64');
+        doc.image(logoBuf, LM, y, { width: 90, height: 55 });
+      } catch (e) { console.log('⚠️ NCR logo failed:', e.message?.substring(0, 80)); }
     }
     
     // Company name in blue (matching reference: Hindi + English)
