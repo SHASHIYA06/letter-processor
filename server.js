@@ -920,12 +920,19 @@ function parseLetterContent(text, org) {
     if (ms) extracted.refNumber = ms[1].replace(/\s+/g, ' ').trim();
   }
 
-  // DATE - improved to catch BEML formats
+  // DATE - improved to catch BEML and KMRCL formats
   for (let i = 0; i < Math.min(lines.length, 30); i++) {
     const line = lines[i]; let m;
-    // "Date: 12.05.2025" or "Date: 12/05/2025" or "Date: 12-05-2025"
+    // "Date: 12.05.2025" or "Date: 12/05/2025" or "Date: 12-05-2025" (same line)
     m = line.match(/(?:Date|Dated?|Dt)\s*[:\.]?\s*(\d{1,2}[\.\/\-]\d{1,2}[\.\/\-]\d{2,4})/i);
     if (m && m[1]) { extracted.date = m[1].trim(); break; }
+    // "Date:\n19.11.2024" (date on NEXT line - common in KMRCL letters)
+    m = line.match(/^(?:Date|Dated?|Dt)\s*[:\.]?\s*$/i);
+    if (m && i + 1 < lines.length) {
+      const nextLine = lines[i + 1];
+      const dm = nextLine.match(/(\d{1,2}[\.\/\-]\d{1,2}[\.\/\-]\d{2,4})/);
+      if (dm) { extracted.date = dm[1].trim(); break; }
+    }
     // "Dated: 12th May 2025"
     m = line.match(/(?:Date|Dated?|Dt)\s*[:\.]?\s*(\d{1,2})(?:st|nd|rd|th)?/i);
     if (m && m[1]) {
@@ -935,14 +942,15 @@ function parseLetterContent(text, org) {
       }
       if (extracted.date) break;
     }
-    // Standalone date pattern: "12.05.2025" or "12/05/2025" (within first 15 lines)
+    // Standalone date pattern: "19.11.2024" or "12/05/2025" (within first 15 lines)
+    // Must be a valid date (not a ref number like 1149-24-1121)
     if (i < 15) {
-      m = line.match(/(\d{1,2}[\.\/\-]\d{1,2}[\.\/\-]\d{2,4})/);
+      m = line.match(/^(\d{1,2}[\.\/\-]\d{1,2}[\.\/\-]\d{2,4})$/);
       if (m && m[1]) { extracted.date = m[1].trim(); break; }
     }
   }
   // Broader fallback
-  if (!extracted.date) { for (const l of lines.slice(0, 15)) { const m = l.match(/(\d{1,2}[\.\/\-]\d{1,2}[\.\/\-]\d{2,4})/); if (m) { extracted.date = m[1]; break; } } }
+  if (!extracted.date) { for (const l of lines.slice(0, 15)) { const m = l.match(/^(\d{1,2}[\.\/\-]\d{1,2}[\.\/\-]\d{2,4})$/); if (m) { extracted.date = m[1]; break; } } }
   // Fallback: "May 12, 2025" or "12 May 2025"
   if (!extracted.date) { for (const l of lines.slice(0, 15)) { const m = l.match(/((?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+\d{1,2},?\s*\d{2,4})/i); if (m) { extracted.date = m[1].trim(); break; } } }
 
@@ -962,9 +970,19 @@ function parseLetterContent(text, org) {
       extracted.subject = s.replace(/\s+/g, ' ').substring(0, 500);
       break;
     }
-    // "Sub:" or "Sub." or "Sub "
+    // "Sub:" or "Sub." or "Sub " - with continuation lines
     m = line.match(/Sub\.?\s*[:\.—–\-]\s*(.+)/i);
-    if (m && m[1]) { extracted.subject = m[1].trim().substring(0, 500); break; }
+    if (m && m[1]) {
+      let s = m[1].trim();
+      // Capture continuation lines (up to 3 lines after)
+      for (let j = i + 1; j < Math.min(i + 4, lines.length); j++) {
+        const n = lines[j];
+        if (n.match(/^(dear|hello|with|the |our |we |thank|please|refer|enclos|attach|kind attn|ref\b|date\b|contract\s+no)/i) || n.length === 0) break;
+        s += ' ' + n.trim();
+      }
+      extracted.subject = s.replace(/\s+/g, ' ').substring(0, 500);
+      break;
+    }
     // BEML format: "RE:" for subject
     if (i < 20) {
       m = line.match(/^(?:RE|Ref)\s*[:\.]\s*(.+)/i);
@@ -974,29 +992,43 @@ function parseLetterContent(text, org) {
     }
   }
 
-  // FROM - improved to catch BEML format
-  for (let i = 0; i < Math.min(lines.length, 20); i++) {
-    const line = lines[i];
-    // "From: BEML Limited, Bangalore"
-    const m = line.match(/^(?:From|Sender)\s*[:\.]\s*(.+)/i);
-    if (m && m[1] && m[1].trim().length > 2) {
-      extracted.from = m[1].trim().replace(/\s+/g, ' ').substring(0, 150);
-      break;
+  // FROM - improved to catch BEML and KMRCL/MYCEL formats
+  // For KMRCL/MYCEL letters: sender org is in right-side header, addressee is on left
+  // First check if this is a KMRCL/MYCEL letter by scanning first 25 lines
+  const headerText25 = lines.slice(0, Math.min(25, lines.length)).join('\n');
+  const isKMRCLLetter = /\b(MYCEL|KMRCL)\b/.test(headerText25) && /\b(BEML|Bharat Earth)\b/i.test(headerText25);
+  
+  if (isKMRCLLetter) {
+    // KMRCL/MYCEL letter: sender is MYCEL (right-side header), not BEML (addressee)
+    for (let i = 0; i < Math.min(lines.length, 25); i++) {
+      const line = lines[i];
+      if (line.match(/\b(MYCEL)\b/) && !line.match(/KMRCL.*Munshi/i)) {
+        extracted.from = 'MYCEL';
+        break;
+      }
     }
-    // BEML-specific: look for "BEML Limited" or similar org names
-    if (/^(BEML|Beml)\s+(Limited|Ltd)/i.test(line)) {
-      extracted.from = line.trim().substring(0, 150);
-      break;
+    if (!extracted.from) {
+      // Try to find signatory name from closing and use their org
+      for (let i = lines.length - 1; i >= Math.max(0, lines.length - 15); i--) {
+        if (lines[i].match(/\/MYCEL/i)) { extracted.from = 'MYCEL'; break; }
+      }
     }
-  }
-  // Fallback: search for common sender patterns in header area
-  if (!extracted.from) {
-    const headerLines = lines.slice(0, 20).join(' ');
-    // Try to find department/division info
-    const deptMatch = headerLines.match(/((?:General|Commercial|Technical|Quality|Purchase|Engineering|Projects?|Design)\s+(?:Manager|Manager|Dept|Division|Group|Team))/i);
-    if (deptMatch) { extracted.from = deptMatch[1].trim().substring(0, 150); }
-    else {
-      // Look for BEML, Televic, KMRCL etc
+  } else {
+    // BEML or other letter: use standard From detection
+    for (let i = 0; i < Math.min(lines.length, 20); i++) {
+      const line = lines[i];
+      const m = line.match(/^(?:From|Sender)\s*[:\.]\s*(.+)/i);
+      if (m && m[1] && m[1].trim().length > 2) {
+        extracted.from = m[1].trim().replace(/\s+/g, ' ').substring(0, 150);
+        break;
+      }
+      if (/^(BEML|Beml)\s+(Limited|Ltd)/i.test(line)) {
+        extracted.from = line.trim().substring(0, 150);
+        break;
+      }
+    }
+    if (!extracted.from) {
+      const headerLines = lines.slice(0, 20).join(' ');
       for (const pat of [/\b(BEML\s+Limited)\b/i, /\b(BEML)\b/i, /\b(Televic\s+Rail\s*N\.?V\.?)\b/i, /\b(KMRCL)\b/i, /\b(BMRCL)\b/i, /\b(FORTUNA\s+IMPEX)\b/i]) {
         const m = headerLines.match(pat);
         if (m) { extracted.from = m[1]; break; }
@@ -1057,16 +1089,23 @@ function parseLetterContent(text, org) {
   }
 
   // ENCLOSURES - improved, search entire document
-  const ann = fullText.match(/Annexure[\s\-]*(?:I{1,3}|IV|V|VI{0,3})\b/gi);
+  const ann = fullText.match(/Annexure[\s\-]*(?:I{1,3}|IV|V|VI{0,3}|[\w\-]+)\b/gi);
   if (ann) extracted.enclosures = [...new Set(ann.map(a => a.replace(/\s+/g, '-')))].join(', ');
   if (!extracted.enclosures) {
     for (let i = 0; i < lines.length; i++) {
       const l = lines[i];
-      // Must start with Encl/Enclosures (not match "enc" inside "Defence")
+      // "Encl: Annexure-A" or "Encl. Annexure-A" (KMRCL format)
       const m = l.match(/^(?:Enclosures?|Encl\.?|Enc\.?)\s*[:\.]?\s*(.+)/i);
       if (m && m[1] && m[1].trim().length > 0) {
         extracted.enclosures = m[1].trim().substring(0, 300);
         break;
+      }
+      // "Encl:" alone on a line - check next line for content
+      if (/^(?:Enclosures?|Encl\.?|Enc\.?)\s*[:\.]?\s*$/i.test(l)) {
+        if (i + 1 < lines.length && lines[i + 1].trim().length > 0) {
+          extracted.enclosures = lines[i + 1].trim().substring(0, 300);
+          break;
+        }
       }
       // "Enclosures: 1. ... 2. ..."
       if (/^Enclosures?\s*[:\.]?\s*$/.test(l)) {
@@ -1083,7 +1122,23 @@ function parseLetterContent(text, org) {
   // ALL REFERENCES
   const allRefs = [];
   if (extracted.refNumber && extracted.refNumber !== 'N/A') allRefs.push(extracted.refNumber);
-  const refPatterns = [/Ref(?:erence)?\s*[:\.]?\s*(?:\(I\)\s*)?([A-Z][A-Z0-9\/\-\(\)\s]{5,})/gi, /Your\s+Ref\s*[:\.]?\s*([A-Z][A-Z0-9\/\-\(\)\s]{5,})/gi, /Letter\s+No\.?\s*[:\.]?\s*([A-Z][A-Z0-9\/\-\(\)\s]{5,})/gi, /GC\/KMRCL\s+Letter\s+No\.?\s*[:\.]?\s*([0-9\-]+)/gi];
+  // Look for numbered reference lists: "1. BEML's letter no ... 2. GC Letter No. ..."
+  const refListMatch = fullText.match(/(?:Ref|References?)\s*[:\.]?\s*\n([\s\S]*?)(?:\nDear|\nSub|\nContract|\nAttn|\nKMRC|\n\n)/i);
+  if (refListMatch) {
+    const refItems = refListMatch[1].match(/\d+\.\s+(.+?)(?:\n\d+\.|$)/gi);
+    if (refItems) {
+      for (const item of refItems) {
+        const cleaned = item.replace(/^\d+\.\s+/, '').replace(/\s+/g, ' ').trim();
+        // Extract just the reference number part (before "dated")
+        const refPart = cleaned.split(/\s+dated\s+/i)[0].trim();
+        if (refPart.length >= 5 && refPart.length <= 80 && !allRefs.some(x => x.includes(refPart) || refPart.includes(x))) {
+          allRefs.push(refPart);
+        }
+      }
+    }
+  }
+  // Broader patterns for other reference formats
+  const refPatterns = [/Letter\s+No\.?\s*[:\.]\s*([A-Z][A-Z0-9\/\-\(\)\s]{5,})/gi, /GC\/KMRCL\s+Letter\s+No\.?\s*[:\.]\s*([0-9\-]+)/gi];
   for (const p of refPatterns) { let m; while ((m = p.exec(fullText)) !== null) { const r = m[1].trim().split(/\s{3,}/)[0].trim(); if (r.length >= 5 && r.length <= 80 && !allRefs.some(x => x.includes(r) || r.includes(x))) allRefs.push(r); } }
 
   // LETTER CONTENT - improved to find body text
@@ -1164,12 +1219,16 @@ function parseLetterContent(text, org) {
     const l = lines[i];
     const ccMatch2 = l.match(/(?:Cc|CC|Copy\s+to|Copies?\s+to)[:\.]?\s*(.+)/i);
     if (ccMatch2) {
-      // Found CC line - collect this line and subsequent numbered items
+      // Found CC line - collect this line and subsequent items
+      // Stop at: Page X of Y, Annexure, empty lines, or end of document
       const ccParts = [];
       if (ccMatch2[1] && ccMatch2[1].trim().length > 1) ccParts.push(ccMatch2[1].trim());
       for (let j = i + 1; j < Math.min(i + 10, lines.length); j++) {
-        if (lines[j].match(/^\d+\.\s+/) || lines[j].match(/^Shri|Smt|Mr|Mrs|Ms|Dr/i)) {
-          ccParts.push(lines[j].trim());
+        const ccLine = lines[j];
+        // Stop at page numbers, annexure headers, or empty lines
+        if (ccLine.match(/^Page\s+\d+\s+of\s+\d+/i) || ccLine.match(/^Annexure/i) || ccLine.length === 0) break;
+        if (ccLine.match(/^\d+\.\s+/) || ccLine.match(/^Shri|Smt|Mr|Mrs|Ms|Dr|GGM|DPM|PD|PM\b/i) || ccLine.match(/KMRCL|MYCEL|BMRCL|BEML/i)) {
+          ccParts.push(ccLine.trim());
         } else break;
       }
       if (ccParts.length) { cc = ccParts.join('; '); break; }
@@ -1177,47 +1236,64 @@ function parseLetterContent(text, org) {
   }
   // Fallback: regex on full text
   if (!cc) {
-    const ccBlock = fullText.match(/(?:CC|Copy\s+to|Copies?\s+to)[:\.]?\s*\n?([\s\S]*?)(?:\n\n|Annexure|Enclosures?|Yours|Thank|With\s+regard|$)/i);
+    const ccBlock = fullText.match(/(?:CC|Copy\s+to|Copies?\s+to)[:\.]?\s*\n?([\s\S]*?)(?:\n\n|Annexure|Page\s+\d+|Enclosures?|Yours|Thank|With\s+regard|$)/i);
     if (ccBlock) cc = ccBlock[1].trim().replace(/\n/g, '; ').substring(0, 300);
   }
 
   // SIGNATORY - look for name/designation near closing
+  // Search entire document for "Yours faithfully/sincerely" (not just last 15 lines)
   let signatory = '', designation = '';
-  for (let i = Math.max(0, lines.length - 15); i < lines.length; i++) {
+  for (let i = 0; i < lines.length; i++) {
     const l = lines[i];
     if (l.match(/Yours\s+(sincerely|faithfully|truly)/i)) {
-      for (let j = i + 1; j < Math.min(i + 6, lines.length); j++) {
+      for (let j = i + 1; j < Math.min(i + 8, lines.length); j++) {
         const n = lines[j];
         // Skip "for BEML Limited" - we want the actual person's name
         if (/^for\s+(BEML|KMRCL|Metro)/i.test(n)) continue;
+        // Skip signature-like scribbles (e.g. "M..", ".")
+        if (/^[\.M\s]+$/.test(n) && n.length < 5) continue;
+        // Stop if we hit enclosures/CC/page number (signatory block ended)
+        if (n.match(/^(Encl|Enclosure|CC|Cc|Page\s+\d)/i)) break;
+        // Name in parentheses: "(Srikant Sahoo)" - KMRCL format
+        if (!signatory && /^\(([^)]+)\)$/.test(n)) {
+          signatory = n.replace(/^\(|\)$/g, '').trim();
+          // Check next line for designation
+          if (j + 1 < lines.length) {
+            const nextL = lines[j + 1];
+            if (nextL.match(/Manager|Engineer|Officer|Director|Chief|General|Senior|Quality|Head|PM|GM|DPM|PD/i) || nextL.match(/\/(MYCEL|KMRCL|BEML|BMRCL)/i)) {
+              designation = nextL.trim();
+            }
+          }
+          break;
+        }
         // Name: "Shri. Name" or "Mr. Name" or similar
         if (!signatory && n.match(/^(Shri|Smt|Mr|Mrs|Ms|Dr)\.?\s+/i)) {
           signatory = n.trim().substring(0, 100);
         }
         // Also catch lines that look like names (Title Case, no special keywords) before designation
-        if (!signatory && !n.match(/^(for|Yours|Kind|Dear|Subject|Ref|Date|Encl|Cc)/i) && n.match(/^[A-Z][a-z]+(\s+[A-Z][a-z]+)+/) && n.length < 60) {
+        if (!signatory && !n.match(/^(for|Yours|Kind|Dear|Subject|Ref|Date|Encl|Cc|Page)/i) && n.match(/^[A-Z][a-z]+(\s+[A-Z][a-z]+)+/) && n.length < 60) {
           // Check if next line is a designation
           const nextLine = lines[j + 1] || '';
-          if (nextLine.match(/Manager|Engineer|Officer|Director|Chief|General|Senior|Quality|Head/i)) {
+          if (nextLine.match(/Manager|Engineer|Officer|Director|Chief|General|Senior|Quality|Head|PM|GM/i)) {
             signatory = n.trim();
           }
         }
-        if (!designation && n.match(/Manager|Engineer|Officer|Director|Chief|General|Senior|Quality|Head/i)) {
+        // Designation: "PM (RS)/MYCEL" or "Chief Maintenance Engineer"
+        if (!designation && (n.match(/Manager|Engineer|Officer|Director|Chief|General|Senior|Quality|Head/i) || n.match(/\bPM\b|\bGM\b|\bDPM\b|\bPD\b/) || n.match(/\/(MYCEL|KMRCL|BEML|BMRCL)/i))) {
           designation = n.trim().substring(0, 100);
         }
       }
       break;
     }
   }
+  // Fallback: search for name + designation pattern in entire document
   if (!signatory) {
-    for (let i = lines.length - 10; i < lines.length; i++) {
-      if (lines[i] && lines[i].match(/^[A-Z][a-z]+\s+[A-Z][a-z]+/) && i + 1 < lines.length) {
-        const next = lines[i + 1] || '';
-        if (next.match(/Manager|Engineer|Officer|Director|Chief|General|Senior|Quality|Head/i)) {
-          signatory = lines[i].trim();
-          designation = next.trim();
-          break;
-        }
+    for (let i = 0; i < lines.length; i++) {
+      // "(Name)" format
+      if (/^\(([^)]+)\)$/.test(lines[i])) {
+        signatory = lines[i].replace(/^\(|\)$/g, '').trim();
+        if (i + 1 < lines.length) designation = lines[i + 1].trim();
+        break;
       }
     }
   }
