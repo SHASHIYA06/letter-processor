@@ -310,7 +310,7 @@ function generateNCRPdf(data, outputPath) {
     // Fallback: embedded PNG base64 for Vercel
     if (!logoUsed) {
       try {
-        const logoBuf = Buffer.from(BEML_LOGO_PNG_B64, 'base64');
+        const logoBuf = Buffer.from(BEML_LOGO_B64, 'base64');
         doc.image(logoBuf, LM, y, { width: 90, height: 55 });
       } catch (e) { console.log('⚠️ NCR logo failed:', e.message?.substring(0, 80)); }
     }
