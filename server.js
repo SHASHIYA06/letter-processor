@@ -1010,9 +1010,9 @@ function parseLetterContent(text, org) {
         const fromParts = [line.trim()];
         for (let j = i + 1; j < Math.min(i + 5, lines.length); j++) {
           const next = lines[j];
-          // Stop at address lines, phone, or non-org content
-          if (next.match(/^KMRCL.*Munshi|^Kolkata|^Tel|^E[\s:]?mail|^\d{3}|^Bangalore|^PB No|^\+91/i)) break;
-          if (next.match(/General\s+Consultants|Kolkata\s+East\s+West\s+Metro|Metro\s+Rail/i)) {
+          // Stop at address/phone lines (but NOT "Kolkata East West Metro" which is org name)
+          if (next.match(/^KMRCL.*Munshi|^Tel|^E[\s:]?mail|^\d{3}|^Bangalore|^PB No|^\+91|^Kolkata\s*-\s*\d/i)) break;
+          if (next.match(/General\s+Consultants|Kolkata\s+East\s+West\s+Metro|Metro\s+Rail|East\s+West/i)) {
             fromParts.push(next.trim());
           }
         }
@@ -1088,8 +1088,8 @@ function parseLetterContent(text, org) {
       const a = [line.trim().replace(/,$/, '')];
       for (let j = i + 1; j < Math.min(i + 6, lines.length); j++) {
         const l = lines[j];
-        // Stop at Attn, Contract, Subject, or empty lines
-        if (l.match(/^(attn|contract|sub\b|dear|ref\b|date\b)/i) || l.length === 0) break;
+        // Stop at Attn, Contract, Subject, email, or empty lines
+        if (l.match(/^(attn|contract|sub\b|dear|ref\b|date\b|e[\s]?mail)/i) || l.length === 0) break;
         a.push(l.trim().replace(/,$/, ''));
       }
       if (a.length) { extracted.to = a.join(', ').replace(/\s+/g, ' ').substring(0, 300); break; }
