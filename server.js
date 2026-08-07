@@ -1922,22 +1922,69 @@ app.post('/api/ocr-images', authenticateToken, upload.array('images', 10), async
       return null;
     }
 
-    // Try Google Cloud Vision API first (fast, accurate)
+    // Try Google Cloud Vision REST API first (fast, accurate)
     try {
-      const vision = await import('@google-cloud/vision');
-      const imageAnnotator = new vision.ImageAnnotatorClient({ authClient: oauth2Client });
+      // Refresh token if needed
+      if (oauth2Client && oauth2Client.credentials && oauth2Client.credentials.expiry_date && Date.now() > oauth2Client.credentials.expiry_date - 60000) {
+        try {
+          const { credentials } = await oauth2Client.refreshAccessToken();
+          oauth2Client.setCredentials(credentials);
+          console.log('  🔄 OAuth token refreshed for Vision API');
+        } catch (refreshErr) {
+          console.log('  ⚠️ Token refresh failed:', refreshErr.message);
+        }
+      }
+      
+      const accessToken = oauth2Client?.credentials?.access_token;
+      if (!accessToken) throw new Error('No access token available');
+      
+      const https = await import('https');
       
       for (const file of req.files) {
         const imageBuffer = getFileBuffer(file);
         if (!imageBuffer) continue;
-        const [result] = await imageAnnotator.textDetection({ image: { content: imageBuffer } });
-        const text = result.fullTextAnnotation ? result.fullTextAnnotation.text : '';
+        
+        const base64Image = imageBuffer.toString('base64');
+        const requestBody = JSON.stringify({
+          requests: [{
+            image: { content: base64Image },
+            features: [{ type: 'TEXT_DETECTION', maxResults: 1 }]
+          }]
+        });
+        
+        const result = await new Promise((resolve, reject) => {
+          const req2 = https.default.request({
+            hostname: 'vision.googleapis.com',
+            path: '/v1/images:annotate',
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': 'Bearer ' + accessToken,
+              'Content-Length': Buffer.byteLength(requestBody)
+            }
+          }, (res2) => {
+            let data = '';
+            res2.on('data', (chunk) => data += chunk);
+            res2.on('end', () => {
+              try {
+                const parsed = JSON.parse(data);
+                if (parsed.error) reject(new Error(parsed.error.message));
+                else resolve(parsed);
+              } catch (e) { reject(e); }
+            });
+          });
+          req2.on('error', reject);
+          req2.write(requestBody);
+          req2.end();
+        });
+        
+        const text = result.responses?.[0]?.fullTextAnnotation?.text || '';
         fullText += text + '\n\n';
       }
-      ocrMethod = 'Google Cloud Vision';
-      console.log(`  ✅ Used Google Cloud Vision`);
+      ocrMethod = 'Google Cloud Vision (REST)';
+      console.log(`  ✅ Used Google Cloud Vision REST API`);
     } catch (visionErr) {
-      console.log(`  ⚠️  Vision API failed:`, visionErr.message.substring(0, 100));
+      console.log(`  ⚠️  Vision API failed:`, visionErr.message.substring(0, 150));
       
       // Fallback to Tesseract.js (local only)
       if (!isVercel) {
