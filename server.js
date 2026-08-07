@@ -865,7 +865,9 @@ function parseLetterContent(text, org) {
   for (let i = 0; i < Math.min(lines.length, 20); i++) {
     const line = lines[i];
     // Skip lines that are clearly not ref numbers
-    if (/^(date|subject|dear|to|from|kind|ref\s*\.?\s*:|schedule|developed|mission|beml\s+limit)/i.test(line)) continue;
+    if (/^(date|subject|dear|to|from|kind|ref\s*\.?\s*:|schedule|developed|mission|beml\s+limit|our\s+ref)/i.test(line)) continue;
+    // Skip designation/org patterns like "DPM/RS-DSM/MYCEL" or "PM (RS)/MYCEL"
+    if (/\b(PM|GM|DPM|PD|GGM)\b.*\//i.test(line) || /\/(MYCEL|KMRCL|BEML|BMRCL)\b/i.test(line)) continue;
     // Strip trailing date/info: "BEML/RS(3R)/PM/Door/1778 Dt: 05.06.2026" -> "BEML/RS(3R)/PM/Door/1778"
     const cleanLine = line.replace(/\s+Dt[:\s].*$/i, '').replace(/\s+Dated?\s*[:\.].*$/i, '').replace(/\s+Date\s*[:\.].*$/i, '').trim();
     // BEML-style: BEML/RS(3R)/PM/.../1742 or KMRCL/... or similar with slashes
