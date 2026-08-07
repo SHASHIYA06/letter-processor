@@ -1085,12 +1085,12 @@ function parseLetterContent(text, org) {
     }
     // KMRCL format: "BEML Limited," as addressee (no "To:" prefix)
     if (isKMRCLLetter && /^(BEML|Bharat Earth)\s+(Limited|Ltd)/i.test(line)) {
-      const a = [line.trim()];
+      const a = [line.trim().replace(/,$/, '')];
       for (let j = i + 1; j < Math.min(i + 6, lines.length); j++) {
         const l = lines[j];
         // Stop at Attn, Contract, Subject, or empty lines
         if (l.match(/^(attn|contract|sub\b|dear|ref\b|date\b)/i) || l.length === 0) break;
-        a.push(l.trim());
+        a.push(l.trim().replace(/,$/, ''));
       }
       if (a.length) { extracted.to = a.join(', ').replace(/\s+/g, ' ').substring(0, 300); break; }
     }
@@ -1247,10 +1247,13 @@ function parseLetterContent(text, org) {
       // Clean first line: extract just the CC entry name (before any long description)
       let firstEntry = ccMatch2[1].trim();
       // For entries like "GGM(Electrical-1)/KMRCL- This has reference to..." extract just the name
-      const nameMatch = firstEntry.match(/^([\w\s\/\(\)]+?(?:\/[\w\-]+)?)/);
+      // Match up to the first long dash or "This has" or "This is"
+      const nameMatch = firstEntry.match(/^([\w\s\/\(\)\-]+?(?:\/[\w\-]+)?)\s*[-–—]?\s*(?:This|The|It|Ref|Note|As|With|In|For|Please|Kindly)?/i);
       if (nameMatch && nameMatch[1].trim().length > 3) {
-        firstEntry = nameMatch[1].trim().replace(/-\s*$/, '').trim();
+        firstEntry = nameMatch[1].trim().replace(/[-–—]\s*$/, '').replace(/,\s*$/, '').trim();
       }
+      // Further clean: remove trailing descriptions after dash
+      firstEntry = firstEntry.split(/\s*[-–—]\s*This\b/i)[0].split(/\s*[-–—]\s*The\b/i)[0].trim();
       if (firstEntry.length > 1) ccParts.push(firstEntry);
       
       for (let j = i + 1; j < Math.min(i + 10, lines.length); j++) {
@@ -1261,8 +1264,9 @@ function parseLetterContent(text, org) {
         if (ccLine.match(/^\d+\.\s+/) || ccLine.match(/^(Shri|Smt|Mr|Mrs|Ms|Dr|GGM|DPM|PD|PM|GM)\b/i) || ccLine.match(/\/(MYCEL|KMRCL|BEML|BMRCL)\b/i) || ccLine.match(/^[A-Z][A-Z\/\-\(\)]{2,}/)) {
           // Clean: extract just the name/title part
           let cleaned = ccLine.trim();
-          const nm = cleaned.match(/^([\w\s\/\(\)]+?(?:\/[\w\-]+)?)/);
-          if (nm && nm[1].trim().length > 3) cleaned = nm[1].trim().replace(/-\s*$/, '').trim();
+          // Remove trailing descriptions after dash
+          cleaned = cleaned.split(/\s*[-–—]\s*This\b/i)[0].split(/\s*[-–—]\s*The\b/i)[0].trim();
+          cleaned = cleaned.replace(/[-–—]\s*$/, '').replace(/,\s*$/, '').trim();
           ccParts.push(cleaned);
         }
       }
