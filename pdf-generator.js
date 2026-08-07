@@ -130,6 +130,33 @@ function drawOrgHeader(doc, W, org) {
   return y + 12;
 }
 
+// KMRCL/Metro Rail Header - matches MYCEL/KMRCL letter format
+function drawKMRCLHeader(doc, W, org) {
+  const kmrclInfo = ORG_HEADERS['KMRCL'];
+  let y = 10;
+  
+  // Left side: MYCEL/KMRCL logo area (placeholder)
+  doc.font('Times-Bold').fontSize(10).fillColor('#000');
+  doc.text('MYCEL', 40, y, { width: 200, align: 'left' });
+  doc.font('Times-Roman').fontSize(7).fillColor('#333');
+  doc.text('General Consultants', 40, y + 12, { width: 200, align: 'left' });
+  doc.text('Kolkata East West Metro', 40, y + 22, { width: 200, align: 'left' });
+  doc.text('KMRCL Bhavan, Salt Lake City, Kolkata - 700064', 40, y + 32, { width: 200, align: 'left' });
+  doc.text('Tel: +91-33-22314553', 40, y + 42, { width: 200, align: 'left' });
+  
+  // Right side: Our Ref and Date
+  doc.font('Times-Bold').fontSize(9).fillColor('#000');
+  doc.text('Our Ref.:', W - 300, y, { width: 80, align: 'right' });
+  doc.font('Times-Roman').fontSize(9);
+  doc.text('Date:', W - 300, y + 20, { width: 80, align: 'right' });
+  
+  y += 55;
+  doc.moveTo(40, y).lineTo(W - 40, y).lineWidth(1).stroke('#000');
+  y += 4;
+  doc.moveTo(40, y).lineTo(W - 40, y).lineWidth(0.5).stroke('#000');
+  return y + 12;
+}
+
 // ══════════════════════════════════════════════════════════════
 //  BEML LETTER PDF - Exact Match to Official Format
 // ══════════════════════════════════════════════════════════════
@@ -141,98 +168,34 @@ function generateLetterPdf(data, outputPath) {
     const W = A4_W, H = A4_H, L = 72, R = W - 72, CW = R - L;
     const org = data.organization || 'BEML';
     
-    // ── HEADER: Use official letterhead image ──
+    // ── HEADER: Use organization-specific header ──
     let y = 0;
-    const headerPath = getAssetPath('beml-letterhead-header.png');
-    if (org === 'BEML' && fs.existsSync(headerPath)) {
-      try {
-        doc.image(headerPath, 0, 0, { width: W, fit: [W, 130] });
-        y = 130;
-      } catch (e) {}
+    if (org === 'BEML') {
+      // BEML: Use official letterhead image
+      const headerPath = getAssetPath('beml-letterhead-header.png');
+      if (fs.existsSync(headerPath)) {
+        try { doc.image(headerPath, 0, 0, { width: W, fit: [W, 130] }); y = 130; } catch (e) {}
+      }
+    } else if (org === 'KMRCL' || org === 'Metro Rail') {
+      // KMRCL/Metro Rail: Use KMRCL letterhead style with MYCEL/KMRCL branding
+      y = drawKMRCLHeader(doc, W, org);
     }
     if (y === 0) {
       y = drawOrgHeader(doc, W, org);
     }
-    drawBEMLFooter(doc, W, H);
-
-    // ── REF NUMBER (left) + DATE (right) per BEML format ──
-    y += 8;
-    doc.font('Times-Bold').fontSize(10).fillColor('#000');
-    doc.text(data.refNumber || '', L, y, { width: CW / 2 });
-    doc.font('Times-Roman').fontSize(10);
-    doc.text(data.date ? `Date: ${data.date}` : '', R - 180, y, { width: 180, align: 'right' });
-    y += 22;
-
-    // ── TO ADDRESS BLOCK ──
-    doc.font('Times-Roman').fontSize(10).fillColor('#000');
-    doc.text('To,', L, y);
-    y += 14;
-    if (data.to) {
-      // Handle both newline-separated and comma-separated addresses
-      let toLines = data.to.split('\n');
-      if (toLines.length === 1) toLines = data.to.split(',');
-      toLines.forEach(line => {
-        const trimmed = line.trim();
-        if (trimmed) {
-          doc.text(trimmed, L, y, { width: CW });
-          y += 13;
-        }
-      });
-    }
-    y += 4;
-
-    // ── KIND ATTENTION (right-aligned per BEML format) ──
-    if (data.kindAttn) {
-      doc.font('Times-Bold').fontSize(10).fillColor('#000');
-      doc.text('Kind Attn: ' + data.kindAttn, L, y, { width: CW, align: 'right' });
-      y = doc.y + 8;
-    }
-
-    // ── SUBJECT (bold, underlined per BEML format) ──
-    y += 2;
-    doc.font('Times-Bold').fontSize(10).fillColor('#000');
-    doc.text('Subject: ' + (data.subject || ''), L, y, { width: CW, underline: true });
-    y = doc.y + 10;
-
-    // ── DEAR SIR (per actual BEML format) ──
-    doc.font('Times-Roman').fontSize(10).fillColor('#000');
-    doc.text('Dear Sir,', L, y);
-    y = doc.y + 8;
-
-    // ── LETTER BODY ──
-    let body = data.letterContent || data.letterBody || '';
-    // Strip leading greetings
-    body = body.replace(/^(Dear\s+(?:Sir|Madam|Sir\/Madam|Team)[,]?\s*\n?)/i, '').trim();
-    // Strip trailing closings
-    body = body.replace(/\n*(Yours\s+(?:sincerely|faithfully|truly)[,]?\s*[\s\S]*)$/i, '').trim();
     
-    if (body) {
-      const bodyLines = body.split('\n');
-      bodyLines.forEach(line => {
-        const trimmed = line.trim();
-        if (trimmed) {
-          // Check if line starts with a reference pattern like "(1)", "Ref:", "A.", "B."
-          const isRef = /^[\(\[].*[\)\]]\s*/.test(trimmed) || /^(?:Ref|Reference)\s*[:\.]/i.test(trimmed) || /^[A-Z]\.\s/.test(trimmed);
-          if (isRef) {
-            // Reference lines: slight left indent
-            doc.font('Times-Roman').fontSize(10).fillColor('#000');
-            doc.text(trimmed, L + 12, y, { width: CW - 12, lineGap: 2, align: 'left' });
-          } else {
-            // Regular body text: justified
-            doc.font('Times-Roman').fontSize(10).fillColor('#000');
-            doc.text(trimmed, L, y, { width: CW, lineGap: 3, align: 'justify' });
-          }
-          y = doc.y + 3;
-        }
-      });
-      y += 6;
+    // ── FOOTER: Only for BEML ──
+    if (org === 'BEML') {
+      drawBEMLFooter(doc, W, H);
     }
 
-    // ── CLOSING: "Yours sincerely, for BEML Limited" per actual format ──
-    y = checkPageBreak(doc, y, 140, L, R);
-    doc.font('Times-Roman').fontSize(10).fillColor('#000');
-    doc.text('Yours sincerely,', L, y);
-    y = doc.y + 6;
+    // ── KMRCL/METRO RAIL LETTER FORMAT ──
+    if (org === 'KMRCL' || org === 'Metro Rail') {
+      y = drawKMRCLLetterBody(doc, data, L, R, CW, y);
+    } else {
+      // ── BEML LETTER FORMAT (existing) ──
+      y = drawBEMLLetterBody(doc, data, L, R, CW, y);
+    }
     doc.text('for ' + (org === 'BEML' ? 'BEML Limited' : org), L, y);
     y = doc.y + 35;
 
@@ -877,4 +840,236 @@ async function generateJointNoteDocx(data, outputPath) {
   const doc = new Document({ sections: [{ children }] });
   Packer.toBuffer(doc).then(buffer => { fs.writeFileSync(outputPath, buffer); resolve(outputPath); }).catch(reject);
   });
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  BEML LETTER BODY (Original Format)
+// ═══════════════════════════════════════════════════════════════
+function drawBEMLLetterBody(doc, data, L, R, CW, y) {
+  // REF NUMBER (left) + DATE (right)
+  y += 8;
+  doc.font('Times-Bold').fontSize(10).fillColor('#000');
+  doc.text(data.refNumber || '', L, y, { width: CW / 2 });
+  doc.font('Times-Roman').fontSize(10);
+  doc.text(data.date ? `Date: ${data.date}` : '', R - 180, y, { width: 180, align: 'right' });
+  y += 22;
+
+  // TO ADDRESS BLOCK
+  doc.font('Times-Roman').fontSize(10).fillColor('#000');
+  doc.text('To,', L, y);
+  y += 14;
+  if (data.to) {
+    let toLines = data.to.split('\n');
+    if (toLines.length === 1) toLines = data.to.split(',');
+    toLines.forEach(line => {
+      const trimmed = line.trim();
+      if (trimmed) {
+        doc.text(trimmed, L, y, { width: CW });
+        y += 13;
+      }
+    });
+  }
+  y += 4;
+
+  // KIND ATTENTION (right-aligned)
+  if (data.kindAttn) {
+    doc.font('Times-Bold').fontSize(10).fillColor('#000');
+    doc.text('Kind Attn: ' + data.kindAttn, L, y, { width: CW, align: 'right' });
+    y = doc.y + 8;
+  }
+
+  // SUBJECT (bold, underlined)
+  y += 2;
+  doc.font('Times-Bold').fontSize(10).fillColor('#000');
+  doc.text('Subject: ' + (data.subject || ''), L, y, { width: CW, underline: true });
+  y = doc.y + 10;
+
+  // DEAR SIR
+  doc.font('Times-Roman').fontSize(10).fillColor('#000');
+  doc.text('Dear Sir,', L, y);
+  y = doc.y + 8;
+
+  // LETTER BODY
+  let body = data.letterContent || data.letterBody || '';
+  body = body.replace(/^(Dear\s+(?:Sir|Madam|Sir\/Madam|Team)[,]?\s*\n?)/i, '').trim();
+  body = body.replace(/\n*(Yours\s+(?:sincerely|faithfully|truly)[,]?\s*[\s\S]*)$/i, '').trim();
+  
+  if (body) {
+    const bodyLines = body.split('\n');
+    bodyLines.forEach(line => {
+      const trimmed = line.trim();
+      if (trimmed) {
+        const isRef = /^[\(\[].*[\)\]]\s*/.test(trimmed) || /^(?:Ref|Reference)\s*[:\.]/i.test(trimmed) || /^[A-Z]\.\s/.test(trimmed);
+        if (isRef) {
+          doc.font('Times-Roman').fontSize(10).fillColor('#000');
+          doc.text(trimmed, L + 12, y, { width: CW - 12, lineGap: 2, align: 'left' });
+        } else {
+          doc.font('Times-Roman').fontSize(10).fillColor('#000');
+          doc.text(trimmed, L, y, { width: CW, lineGap: 3, align: 'justify' });
+        }
+        y = doc.y + 3;
+      }
+    });
+    y += 6;
+  }
+
+  // CLOSING
+  y = checkPageBreak(doc, y, 140, L, R);
+  doc.font('Times-Roman').fontSize(10).fillColor('#000');
+  doc.text('Yours sincerely,', L, y);
+  y = doc.y + 6;
+  doc.text('for BEML Limited', L, y);
+  y = doc.y + 20;
+  if (data.signatory) {
+    doc.font('Times-Bold').fontSize(10).fillColor('#000');
+    doc.text(data.signatory, L, y);
+    y += 12;
+  }
+  if (data.designation) {
+    doc.font('Times-Roman').fontSize(10).fillColor('#000');
+    doc.text(data.designation, L, y);
+    y += 12;
+  }
+  return y;
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  KMRCL/METRO RAIL LETTER BODY (MYCEL/KMRCL Format)
+// ═══════════════════════════════════════════════════════════════
+function drawKMRCLLetterBody(doc, data, L, R, CW, y) {
+  const isMetro = data.organization === 'Metro Rail';
+  const orgName = isMetro ? 'METRO RAIL CORPORATION LTD.' : 'KOLKATA METRO RAIL CORPORATION LTD.';
+  
+  // Contract No. (left) + Ref/Date already in header
+  y += 4;
+  doc.font('Times-Roman').fontSize(10).fillColor('#000');
+  doc.text('Contract no.', L, y);
+  y += 14;
+  if (data.techDetails) {
+    doc.font('Times-Roman').fontSize(10).fillColor('#000');
+    doc.text(data.techDetails, L, y, { width: CW });
+    y += 13;
+  } else {
+    doc.text('KMRC/Contract RS(3R)/2016/1&2 dated 29th Feb 2016.', L, y, { width: CW });
+    y += 13;
+  }
+  y += 4;
+
+  // ATTN (right-aligned for KMRCL)
+  if (data.kindAttn) {
+    doc.font('Times-Bold').fontSize(10).fillColor('#000');
+    doc.text('Attn: ' + data.kindAttn, R - 220, y, { width: 220, align: 'right' });
+    y = doc.y + 8;
+  }
+
+  // TO ADDRESS BLOCK (left-aligned)
+  doc.font('Times-Roman').fontSize(10).fillColor('#000');
+  if (data.to) {
+    let toLines = data.to.split('\n');
+    if (toLines.length === 1) toLines = data.to.split(',');
+    toLines.forEach(line => {
+      const trimmed = line.trim();
+      if (trimmed) {
+        doc.text(trimmed, L, y, { width: CW });
+        y += 13;
+      }
+    });
+  }
+  y += 6;
+
+  // SUBJECT (bold, underlined)
+  y += 2;
+  doc.font('Times-Bold').fontSize(10).fillColor('#000');
+  doc.text('Sub: ' + (data.subject || ''), L, y, { width: CW, underline: true });
+  y = doc.y + 10;
+
+  // REFERENCES
+  if (data.allReferences) {
+    doc.font('Times-Bold').fontSize(10).fillColor('#000');
+    doc.text('Ref:', L, y);
+    y = doc.y + 4;
+    const refs = data.allReferences.split('|');
+    refs.forEach((ref, idx) => {
+      doc.font('Times-Roman').fontSize(10).fillColor('#000');
+      doc.text(`${idx + 1}. ${ref.trim()}`, L + 12, y, { width: CW - 12, lineGap: 2 });
+      y = doc.y + 3;
+    });
+    y += 4;
+  }
+
+  // DEAR MADAM/SIR (KMRCL uses "Dear Madam")
+  doc.font('Times-Roman').fontSize(10).fillColor('#000');
+  doc.text('Dear Madam,', L, y);
+  y = doc.y + 8;
+
+  // LETTER BODY
+  let body = data.letterContent || data.letterBody || '';
+  body = body.replace(/^(Dear\s+(?:Sir|Madam|Sir\/Madam|Team)[,]?\s*\n?)/i, '').trim();
+  body = body.replace(/\n*(Yours\s+(?:sincerely|faithfully|truly)[,]?\s*[\s\S]*)$/i, '').trim();
+  
+  if (body) {
+    const bodyLines = body.split('\n');
+    bodyLines.forEach(line => {
+      const trimmed = line.trim();
+      if (trimmed) {
+        const isRef = /^[\(\[].*[\)\]]\s*/.test(trimmed) || /^(?:Ref|Reference)\s*[:\.]/i.test(trimmed) || /^[A-Z]\.\s/.test(trimmed);
+        if (isRef) {
+          doc.font('Times-Roman').fontSize(10).fillColor('#000');
+          doc.text(trimmed, L + 12, y, { width: CW - 12, lineGap: 2, align: 'left' });
+        } else {
+          doc.font('Times-Roman').fontSize(10).fillColor('#000');
+          doc.text(trimmed, L, y, { width: CW, lineGap: 3, align: 'justify' });
+        }
+        y = doc.y + 3;
+      }
+    });
+    y += 6;
+  }
+
+  // CLOSING - "Yours faithfully," with signatory
+  y = checkPageBreak(doc, y, 140, L, R);
+  doc.font('Times-Roman').fontSize(10).fillColor('#000');
+  doc.text('Yours faithfully,', L, y);
+  y = doc.y + 6;
+  
+  // Signature line (often "M.." or similar)
+  doc.text('M..', L, y);
+  y = doc.y + 8;
+  
+  if (data.signatory) {
+    doc.font('Times-Bold').fontSize(10).fillColor('#000');
+    // KMRCL format: (Name)
+    doc.text(`(${data.signatory})`, L, y);
+    y += 12;
+  }
+  if (data.designation) {
+    doc.font('Times-Roman').fontSize(10).fillColor('#000');
+    doc.text(data.designation, L, y);
+    y += 12;
+  }
+  
+  // ENCLOSURES
+  if (data.enclosures) {
+    y += 4;
+    doc.font('Times-Bold').fontSize(10).fillColor('#000');
+    doc.text('Encl:', L, y);
+    doc.font('Times-Roman').fontSize(10).fillColor('#000');
+    doc.text(data.enclosures, L + 50, y, { width: CW - 50 });
+    y += 13;
+  }
+  
+  // CC
+  if (data.cc) {
+    doc.font('Times-Bold').fontSize(10).fillColor('#000');
+    doc.text('CC:', L, y);
+    y = doc.y + 4;
+    const ccLines = data.cc.split(';');
+    ccLines.forEach(cc => {
+      doc.font('Times-Roman').fontSize(10).fillColor('#000');
+      doc.text(cc.trim(), L + 12, y, { width: CW - 12, lineGap: 2 });
+      y = doc.y + 3;
+    });
+  }
+  
+  return y;
 }
