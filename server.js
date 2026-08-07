@@ -1062,8 +1062,9 @@ function parseLetterContent(text, org) {
   if (!extracted.enclosures) {
     for (let i = 0; i < lines.length; i++) {
       const l = lines[i];
-      const m = l.match(/(?:Enclosures?|Encl\.?|Enc\.?)\s*[:\.]?\s*(.+)/i);
-      if (m && m[1] && m[1].trim().length > 1) {
+      // Must start with Encl/Enclosures (not match "enc" inside "Defence")
+      const m = l.match(/^(?:Enclosures?|Encl\.?|Enc\.?)\s*[:\.]?\s*(.+)/i);
+      if (m && m[1] && m[1].trim().length > 0) {
         extracted.enclosures = m[1].trim().substring(0, 300);
         break;
       }
