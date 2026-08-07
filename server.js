@@ -861,8 +861,8 @@ function parseLetterContent(text, org) {
   const extracted = { refNumber: '', allReferences: [], date: '', subject: '', from: '', to: '', kindAttn: '', enclosures: '', letterContent: '', remarks: '', cc: '', signatory: '', designation: '', project: '' };
 
   // ── REF NUMBER ──
-  // Priority 1: First 10 lines, look for BEML-style ref (ORG/.../number)
-  for (let i = 0; i < Math.min(lines.length, 10); i++) {
+  // Priority 1: First 20 lines, look for BEML-style ref (ORG/.../number)
+  for (let i = 0; i < Math.min(lines.length, 20); i++) {
     const line = lines[i];
     // Skip lines that are clearly not ref numbers
     if (/^(date|subject|dear|to|from|kind|ref\s*\.?\s*:|schedule|developed|mission|beml\s+limit)/i.test(line)) continue;
