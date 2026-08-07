@@ -1001,16 +1001,26 @@ function parseLetterContent(text, org) {
   const isKMRCLLetter = /\b(MYCEL|KMRCL)\b/.test(headerText25) && /\b(BEML|Bharat Earth)\b/i.test(headerText25);
   
   if (isKMRCLLetter) {
-    // KMRCL/MYCEL letter: sender is MYCEL (right-side header), not BEML (addressee)
+    // KMRCL/MYCEL letter: sender is in right-side header, addressee is on left
+    // Capture full sender org info: "MYCEL, General Consultants, Kolkata East West Metro"
     for (let i = 0; i < Math.min(lines.length, 25); i++) {
       const line = lines[i];
       if (line.match(/\b(MYCEL)\b/) && !line.match(/KMRCL.*Munshi/i)) {
-        extracted.from = 'MYCEL';
+        // Collect subsequent org detail lines (General Consultants, Kolkata East West Metro, etc.)
+        const fromParts = [line.trim()];
+        for (let j = i + 1; j < Math.min(i + 5, lines.length); j++) {
+          const next = lines[j];
+          // Stop at address lines, phone, or non-org content
+          if (next.match(/^KMRCL.*Munshi|^Kolkata|^Tel|^E[\s:]?mail|^\d{3}|^Bangalore|^PB No|^\+91/i)) break;
+          if (next.match(/General\s+Consultants|Kolkata\s+East\s+West\s+Metro|Metro\s+Rail/i)) {
+            fromParts.push(next.trim());
+          }
+        }
+        extracted.from = fromParts.join(', ').substring(0, 150);
         break;
       }
     }
     if (!extracted.from) {
-      // Try to find signatory name from closing and use their org
       for (let i = lines.length - 1; i >= Math.max(0, lines.length - 15); i--) {
         if (lines[i].match(/\/MYCEL/i)) { extracted.from = 'MYCEL'; break; }
       }
@@ -1070,6 +1080,17 @@ function parseLetterContent(text, org) {
         const l = lines[j];
         if (l.match(/^(kind\s+attn|dear|subject|sub\b|ref\b|date\b)/i) || l.length === 0) break;
         a.push(l);
+      }
+      if (a.length) { extracted.to = a.join(', ').replace(/\s+/g, ' ').substring(0, 300); break; }
+    }
+    // KMRCL format: "BEML Limited," as addressee (no "To:" prefix)
+    if (isKMRCLLetter && /^(BEML|Bharat Earth)\s+(Limited|Ltd)/i.test(line)) {
+      const a = [line.trim()];
+      for (let j = i + 1; j < Math.min(i + 6, lines.length); j++) {
+        const l = lines[j];
+        // Stop at Attn, Contract, Subject, or empty lines
+        if (l.match(/^(attn|contract|sub\b|dear|ref\b|date\b)/i) || l.length === 0) break;
+        a.push(l.trim());
       }
       if (a.length) { extracted.to = a.join(', ').replace(/\s+/g, ' ').substring(0, 300); break; }
     }
@@ -1139,8 +1160,8 @@ function parseLetterContent(text, org) {
       }
     }
   }
-  // Broader patterns for other reference formats
-  const refPatterns = [/Letter\s+No\.?\s*[:\.]\s*([A-Z][A-Z0-9\/\-\(\)\s]{5,})/gi, /GC\/KMRCL\s+Letter\s+No\.?\s*[:\.]\s*([0-9\-]+)/gi];
+  // Broader patterns for other reference formats (only specific patterns, not overly broad)
+  const refPatterns = [/GC\/KMRCL\s+Letter\s+No\.?\s*[:\.]\s*([0-9\-]+)/gi];
   for (const p of refPatterns) { let m; while ((m = p.exec(fullText)) !== null) { const r = m[1].trim().split(/\s{3,}/)[0].trim(); if (r.length >= 5 && r.length <= 80 && !allRefs.some(x => x.includes(r) || r.includes(x))) allRefs.push(r); } }
 
   // LETTER CONTENT - improved to find body text
@@ -1222,16 +1243,28 @@ function parseLetterContent(text, org) {
     const ccMatch2 = l.match(/(?:Cc|CC|Copy\s+to|Copies?\s+to)[:\.]?\s*(.+)/i);
     if (ccMatch2) {
       // Found CC line - collect this line and subsequent items
-      // Stop at: Page X of Y, Annexure, empty lines, or end of document
       const ccParts = [];
-      if (ccMatch2[1] && ccMatch2[1].trim().length > 1) ccParts.push(ccMatch2[1].trim());
+      // Clean first line: extract just the CC entry name (before any long description)
+      let firstEntry = ccMatch2[1].trim();
+      // For entries like "GGM(Electrical-1)/KMRCL- This has reference to..." extract just the name
+      const nameMatch = firstEntry.match(/^([\w\s\/\(\)]+?(?:\/[\w\-]+)?)/);
+      if (nameMatch && nameMatch[1].trim().length > 3) {
+        firstEntry = nameMatch[1].trim().replace(/-\s*$/, '').trim();
+      }
+      if (firstEntry.length > 1) ccParts.push(firstEntry);
+      
       for (let j = i + 1; j < Math.min(i + 10, lines.length); j++) {
         const ccLine = lines[j];
-        // Stop at page numbers, annexure headers, or empty lines
-        if (ccLine.match(/^Page\s+\d+\s+of\s+\d+/i) || ccLine.match(/^Annexure/i) || ccLine.length === 0) break;
-        if (ccLine.match(/^\d+\.\s+/) || ccLine.match(/^Shri|Smt|Mr|Mrs|Ms|Dr|GGM|DPM|PD|PM\b/i) || ccLine.match(/KMRCL|MYCEL|BMRCL|BEML/i)) {
-          ccParts.push(ccLine.trim());
-        } else break;
+        // Stop at page numbers, annexure headers, empty lines, or "Yours faithfully"
+        if (ccLine.match(/^Page\s+\d+\s+of\s+\d+/i) || ccLine.match(/^Annexure/i) || ccLine.length === 0 || ccLine.match(/^Yours\s+(faithfully|sincerely)/i)) break;
+        // Match CC entries: titles, org names, or lines with slashes (designation/org format)
+        if (ccLine.match(/^\d+\.\s+/) || ccLine.match(/^(Shri|Smt|Mr|Mrs|Ms|Dr|GGM|DPM|PD|PM|GM)\b/i) || ccLine.match(/\/(MYCEL|KMRCL|BEML|BMRCL)\b/i) || ccLine.match(/^[A-Z][A-Z\/\-\(\)]{2,}/)) {
+          // Clean: extract just the name/title part
+          let cleaned = ccLine.trim();
+          const nm = cleaned.match(/^([\w\s\/\(\)]+?(?:\/[\w\-]+)?)/);
+          if (nm && nm[1].trim().length > 3) cleaned = nm[1].trim().replace(/-\s*$/, '').trim();
+          ccParts.push(cleaned);
+        }
       }
       if (ccParts.length) { cc = ccParts.join('; '); break; }
     }
@@ -1304,14 +1337,14 @@ function parseLetterContent(text, org) {
   let project = '';
   // Look for project names like "KMRCL RS-3R" or "BMRCL RS-3R" in the letter content
   const projNameMatch = fullText.match(/\b(KMRCL|BMRCL|DMCRL|MMRCL|CMRCL|KMRC|BMRC)\s*(RS[\s\-]*(?:3R|2R|1R))?/i);
-  if (projNameMatch) project = projNameMatch[0].trim();
+  if (projNameMatch) project = projNameMatch[0].trim().toUpperCase();
   if (!project) {
     const projMatch = fullText.match(/(?:Project|Contract|Work\s+Order)\s*(?:No\.?|Number)?\s*[:\.]?\s*([A-Z0-9\/\-\s]+?)(?:\s{2,}|\n|$)/i);
-    if (projMatch) project = projMatch[1].trim().substring(0, 50);
+    if (projMatch) project = projMatch[1].trim().substring(0, 50).toUpperCase();
   }
   if (!project) {
     const trainMatch = fullText.match(/\b(RS[13]R|RS\s+[13]R|KMRC|BMRC|Metro)\b/i);
-    if (trainMatch) project = trainMatch[1].trim();
+    if (trainMatch) project = trainMatch[1].trim().toUpperCase();
   }
 
   return {
