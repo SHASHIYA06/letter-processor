@@ -570,7 +570,7 @@ function generateLetterDocx(data, outputPath) {
     ];
     if (data.to) { data.to.split('\n').forEach(line => { children.push(new Paragraph({ children: [new TextRun({ text: line.trim(), size: 20, font: 'Times New Roman' })] })); }); }
     children.push(new Paragraph({ spacing: { after: 100 }, children: [] }));
-    if (data.kindAttn) { children.push(new Paragraph({ children: [new TextRun({ text: 'Kind Attn: ' + data.kindAttn, bold: true, size: 20, font: 'Times New Roman' })] })); }
+    if (data.kindAttn) { children.push(new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: 'Kind Attn: ' + data.kindAttn, bold: true, size: 20, font: 'Times New Roman' })] })); }
     children.push(new Paragraph({ spacing: { after: 100 }, children: [] }));
     children.push(new Paragraph({ children: [new TextRun({ text: 'Subject: ' + (data.subject || ''), bold: true, size: 20, font: 'Times New Roman', underline: {} })] }));
     children.push(new Paragraph({ spacing: { after: 100 }, children: [] }));
@@ -842,10 +842,10 @@ function drawBEMLLetterBody(doc, data, L, R, CW, y) {
   }
   y += 4;
 
-  // KIND ATTENTION (right-aligned)
+  // KIND ATTENTION (centered)
   if (data.kindAttn) {
     doc.font('Times-Bold').fontSize(10).fillColor('#000');
-    doc.text('Kind Attn: ' + data.kindAttn, L, y, { width: CW, align: 'right' });
+    doc.text('Kind Attn: ' + data.kindAttn, L, y, { width: CW, align: 'center' });
     y = doc.y + 8;
   }
 
@@ -919,10 +919,10 @@ function drawKMRCLLetterBody(doc, data, L, R, CW, y) {
   doc.text(contractNo, L, y, { width: CW });
   y += 18;
 
-  // ATTN (right-aligned)
+  // ATTN (centered)
   if (data.kindAttn) {
     doc.font('Times-Bold').fontSize(10).fillColor('#000');
-    doc.text('Attn: ' + data.kindAttn, R - 260, y, { width: 260, align: 'right' });
+    doc.text('Attn: ' + data.kindAttn, L, y, { width: CW, align: 'center' });
     y = doc.y + 10;
   }
 
