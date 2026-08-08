@@ -1014,24 +1014,23 @@ function drawKMRCLLetterBody(doc, data, L, R, CW, y) {
   
   // ENCL:
   if (data.enclosures) {
-    y += 4;
-    doc.font('Times-Bold').fontSize(10).fillColor('#000');
-    doc.text('Encl:', L, y);
+    y += 6;
     doc.font('Times-Roman').fontSize(10).fillColor('#000');
+    doc.text('Encl:', L, y);
     doc.text(data.enclosures, L + 50, y, { width: CW - 50 });
     y += 14;
   }
   
   // CC:
   if (data.cc) {
-    doc.font('Times-Bold').fontSize(10).fillColor('#000');
+    y += 2;
+    doc.font('Times-Roman').fontSize(10).fillColor('#000');
     doc.text('CC:', L, y);
-    y = doc.y + 6;
+    y += 14;
     const ccLines = data.cc.split(';');
     ccLines.forEach(cc => {
-      doc.font('Times-Roman').fontSize(10).fillColor('#000');
       doc.text(cc.trim(), L + 12, y, { width: CW - 12, lineGap: 2 });
-      y = doc.y + 3;
+      y += 14;
     });
   }
   
