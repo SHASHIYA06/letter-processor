@@ -132,27 +132,33 @@ function drawOrgHeader(doc, W, org) {
 
 // KMRCL/Metro Rail Header - matches MYCEL/KMRCL letter format
 function drawKMRCLHeader(doc, W, org) {
-  const kmrclInfo = ORG_HEADERS['KMRCL'];
-  let y = 10;
+  let y = 8;
   
-  // Left side: MYCEL/KMRCL logo area (placeholder)
-  doc.font('Times-Bold').fontSize(10).fillColor('#000');
-  doc.text('MYCEL', 40, y, { width: 200, align: 'left' });
-  doc.font('Times-Roman').fontSize(7).fillColor('#333');
-  doc.text('General Consultants', 40, y + 12, { width: 200, align: 'left' });
-  doc.text('Kolkata East West Metro', 40, y + 22, { width: 200, align: 'left' });
-  doc.text('KMRCL Bhavan, Salt Lake City, Kolkata - 700064', 40, y + 32, { width: 200, align: 'left' });
-  doc.text('Tel: +91-33-22314553', 40, y + 42, { width: 200, align: 'left' });
+  // Left side: MYCEL info
+  doc.font('Times-Bold').fontSize(11).fillColor('#000');
+  doc.text('MYCEL', 40, y, { width: 280, align: 'left' });
+  y += 16;
+  doc.font('Times-Roman').fontSize(8).fillColor('#333');
+  doc.text('General Consultants', 40, y, { width: 280, align: 'left' });
+  y += 12;
+  doc.text('Kolkata East West Metro', 40, y, { width: 280, align: 'left' });
+  y += 12;
+  doc.text('KMRCL Bhavan, Munshi Premchand Sarani', 40, y, { width: 280, align: 'left' });
+  y += 12;
+  doc.text('Kolkata - 700 021', 40, y, { width: 280, align: 'left' });
+  y += 12;
+  doc.text('Tel: +91-33-22314553', 40, y, { width: 280, align: 'left' });
   
-  // Right side: Our Ref and Date
+  // Right side: Our Ref and Date (will be filled from data in generateLetterPdf)
+  y = 8;
   doc.font('Times-Bold').fontSize(9).fillColor('#000');
-  doc.text('Our Ref.:', W - 300, y, { width: 80, align: 'right' });
+  doc.text('Our Ref.:', W - 280, y, { width: 80, align: 'right' });
   doc.font('Times-Roman').fontSize(9);
-  doc.text('Date:', W - 300, y + 20, { width: 80, align: 'right' });
+  doc.text('Date:', W - 280, y + 22, { width: 80, align: 'right' });
   
-  y += 55;
+  y = 68;
   doc.moveTo(40, y).lineTo(W - 40, y).lineWidth(1).stroke('#000');
-  y += 4;
+  y += 3;
   doc.moveTo(40, y).lineTo(W - 40, y).lineWidth(0.5).stroke('#000');
   return y + 12;
 }
@@ -189,54 +195,19 @@ function generateLetterPdf(data, outputPath) {
       drawBEMLFooter(doc, W, H);
     }
 
+    // Fill in Our Ref and Date in KMRCL header (drawn at fixed positions)
+    if (org === 'KMRCL' || org === 'Metro Rail') {
+      doc.font('Times-Roman').fontSize(9).fillColor('#000');
+      doc.text(data.refNumber || '', W - 190, 8, { width: 170, align: 'left' });
+      doc.text(data.date ? `${data.date}` : '', W - 190, 30, { width: 170, align: 'left' });
+    }
+
     // ── KMRCL/METRO RAIL LETTER FORMAT ──
     if (org === 'KMRCL' || org === 'Metro Rail') {
       y = drawKMRCLLetterBody(doc, data, L, R, CW, y);
     } else {
       // ── BEML LETTER FORMAT (existing) ──
       y = drawBEMLLetterBody(doc, data, L, R, CW, y);
-    }
-    doc.text('for ' + (org === 'BEML' ? 'BEML Limited' : org), L, y);
-    y = doc.y + 35;
-
-    // ── SIGNATURE BLOCK ──
-    if (data.signatory) {
-      doc.font('Times-Bold').fontSize(10).text(data.signatory, L, y);
-      y = doc.y + 4;
-    }
-    if (data.designation) {
-      doc.font('Times-Roman').fontSize(10).text(data.designation, L, y);
-      y = doc.y + 4;
-    }
-    if (data.project) {
-      doc.font('Times-Roman').fontSize(9).text(data.project, L, y);
-      y = doc.y + 4;
-    }
-
-    // ── ENCLOSURES ──
-    if (data.enclosures) {
-      y += 8;
-      doc.font('Times-Roman').fontSize(9).fillColor('#000');
-      doc.text('Encl: ' + data.enclosures, L, y, { width: CW });
-      y = doc.y + 6;
-    }
-
-    // ── CC ──
-    if (data.cc) {
-      y += 4;
-      doc.font('Times-Roman').fontSize(9).fillColor('#000');
-      const ccLines = data.cc.split(/[;\n]/);
-      ccLines.forEach((line, i) => {
-        const trimmed = line.trim();
-        if (trimmed) {
-          if (i === 0) {
-            doc.text('Cc: ' + trimmed, L, y, { width: CW });
-          } else {
-            doc.text('    ' + trimmed, L, y, { width: CW });
-          }
-          y = doc.y + 2;
-        }
-      });
     }
 
     doc.end();
@@ -938,31 +909,24 @@ function drawBEMLLetterBody(doc, data, L, R, CW, y) {
 // ═══════════════════════════════════════════════════════════════
 function drawKMRCLLetterBody(doc, data, L, R, CW, y) {
   const isMetro = data.organization === 'Metro Rail';
-  const orgName = isMetro ? 'METRO RAIL CORPORATION LTD.' : 'KOLKATA METRO RAIL CORPORATION LTD.';
   
-  // Contract No. (left) + Ref/Date already in header
-  y += 4;
+  // CONTRACT NO. (left) - from techDetails or default
+  y += 2;
   doc.font('Times-Roman').fontSize(10).fillColor('#000');
   doc.text('Contract no.', L, y);
   y += 14;
-  if (data.techDetails) {
-    doc.font('Times-Roman').fontSize(10).fillColor('#000');
-    doc.text(data.techDetails, L, y, { width: CW });
-    y += 13;
-  } else {
-    doc.text('KMRC/Contract RS(3R)/2016/1&2 dated 29th Feb 2016.', L, y, { width: CW });
-    y += 13;
-  }
-  y += 4;
+  const contractNo = data.techDetails || 'KMRC/Contract RS(3R)/2016/1&2 dated 29th Feb 2016.';
+  doc.text(contractNo, L, y, { width: CW });
+  y += 18;
 
-  // ATTN (right-aligned for KMRCL)
+  // ATTN (right-aligned)
   if (data.kindAttn) {
     doc.font('Times-Bold').fontSize(10).fillColor('#000');
-    doc.text('Attn: ' + data.kindAttn, R - 220, y, { width: 220, align: 'right' });
-    y = doc.y + 8;
+    doc.text('Attn: ' + data.kindAttn, R - 260, y, { width: 260, align: 'right' });
+    y = doc.y + 10;
   }
 
-  // TO ADDRESS BLOCK (left-aligned)
+  // TO ADDRESS BLOCK (left)
   doc.font('Times-Roman').fontSize(10).fillColor('#000');
   if (data.to) {
     let toLines = data.to.split('\n');
@@ -975,32 +939,31 @@ function drawKMRCLLetterBody(doc, data, L, R, CW, y) {
       }
     });
   }
-  y += 6;
+  y += 8;
 
-  // SUBJECT (bold, underlined)
-  y += 2;
+  // SUB: with underline
   doc.font('Times-Bold').fontSize(10).fillColor('#000');
   doc.text('Sub: ' + (data.subject || ''), L, y, { width: CW, underline: true });
-  y = doc.y + 10;
+  y = doc.y + 12;
 
-  // REFERENCES
+  // REF: numbered references
   if (data.allReferences) {
     doc.font('Times-Bold').fontSize(10).fillColor('#000');
     doc.text('Ref:', L, y);
-    y = doc.y + 4;
+    y = doc.y + 6;
     const refs = data.allReferences.split('|');
     refs.forEach((ref, idx) => {
       doc.font('Times-Roman').fontSize(10).fillColor('#000');
       doc.text(`${idx + 1}. ${ref.trim()}`, L + 12, y, { width: CW - 12, lineGap: 2 });
       y = doc.y + 3;
     });
-    y += 4;
+    y += 6;
   }
 
-  // DEAR MADAM/SIR (KMRCL uses "Dear Madam")
+  // DEAR MADAM,
   doc.font('Times-Roman').fontSize(10).fillColor('#000');
   doc.text('Dear Madam,', L, y);
-  y = doc.y + 8;
+  y = doc.y + 10;
 
   // LETTER BODY
   let body = data.letterContent || data.letterBody || '';
@@ -1023,46 +986,47 @@ function drawKMRCLLetterBody(doc, data, L, R, CW, y) {
         y = doc.y + 3;
       }
     });
-    y += 6;
+    y += 8;
   }
 
-  // CLOSING - "Yours faithfully," with signatory
+  // CLOSING - Yours faithfully,
   y = checkPageBreak(doc, y, 140, L, R);
   doc.font('Times-Roman').fontSize(10).fillColor('#000');
   doc.text('Yours faithfully,', L, y);
-  y = doc.y + 6;
-  
-  // Signature line (often "M.." or similar)
-  doc.text('M..', L, y);
   y = doc.y + 8;
   
+  // Signature scribble "M.."
+  doc.text('M..', L, y);
+  y = doc.y + 10;
+  
+  // Signatory in parentheses: (Name)
   if (data.signatory) {
     doc.font('Times-Bold').fontSize(10).fillColor('#000');
-    // KMRCL format: (Name)
     doc.text(`(${data.signatory})`, L, y);
-    y += 12;
+    y += 14;
   }
+  // Designation
   if (data.designation) {
     doc.font('Times-Roman').fontSize(10).fillColor('#000');
     doc.text(data.designation, L, y);
-    y += 12;
+    y += 14;
   }
   
-  // ENCLOSURES
+  // ENCL:
   if (data.enclosures) {
     y += 4;
     doc.font('Times-Bold').fontSize(10).fillColor('#000');
     doc.text('Encl:', L, y);
     doc.font('Times-Roman').fontSize(10).fillColor('#000');
     doc.text(data.enclosures, L + 50, y, { width: CW - 50 });
-    y += 13;
+    y += 14;
   }
   
-  // CC
+  // CC:
   if (data.cc) {
     doc.font('Times-Bold').fontSize(10).fillColor('#000');
     doc.text('CC:', L, y);
-    y = doc.y + 4;
+    y = doc.y + 6;
     const ccLines = data.cc.split(';');
     ccLines.forEach(cc => {
       doc.font('Times-Roman').fontSize(10).fillColor('#000');
