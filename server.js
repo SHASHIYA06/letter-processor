@@ -155,6 +155,36 @@ async function initGoogleAuth() {
     const oauthConfigPath = path.join(__dirname, 'credentials', 'oauth-config.json');
     const credentialsPath = path.join(__dirname, 'credentials', 'service-account.json');
 
+    // Try service account from environment variable (Vercel/production)
+    if (process.env.GOOGLE_SERVICE_ACCOUNT) {
+      try {
+        const credentials = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT);
+        auth = new google.auth.GoogleAuth({
+          credentials,
+          scopes: ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive', 'https://www.googleapis.com/auth/cloud-vision']
+        });
+        sheets = google.sheets({ version: 'v4', auth });
+        drive = google.drive({ version: 'v3', auth });
+        console.log('✅ Google API authenticated (Service Account from env)');
+        return;
+      } catch (e) {
+        console.log('⚠️  Failed to parse GOOGLE_SERVICE_ACCOUNT:', e.message);
+      }
+    }
+
+    // Fallback to service account file (local)
+    if (!process.env.VERCEL && fs.existsSync(credentialsPath)) {
+      const credentials = JSON.parse(fs.readFileSync(credentialsPath, 'utf8'));
+      auth = new google.auth.GoogleAuth({
+        credentials,
+        scopes: ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive', 'https://www.googleapis.com/auth/cloud-vision']
+      });
+      sheets = google.sheets({ version: 'v4', auth });
+      drive = google.drive({ version: 'v3', auth });
+      console.log('✅ Google API authenticated (Service Account)');
+      return;
+    }
+
     // On Vercel: try OAuth tokens from environment variables
     if (process.env.VERCEL && process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_ACCESS_TOKEN) {
       try {
@@ -218,42 +248,11 @@ async function initGoogleAuth() {
       }
     }
 
-    // Try service account from environment variable (Vercel)
-    if (process.env.GOOGLE_SERVICE_ACCOUNT) {
-      try {
-        const credentials = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT);
-        auth = new google.auth.GoogleAuth({
-          credentials,
-          scopes: ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive', 'https://www.googleapis.com/auth/cloud-vision']
-        });
-        sheets = google.sheets({ version: 'v4', auth });
-        drive = google.drive({ version: 'v3', auth });
-        console.log('✅ Google API authenticated (Service Account from env)');
-        return;
-      } catch (e) {
-        console.log('⚠️  Failed to parse GOOGLE_SERVICE_ACCOUNT:', e.message);
-      }
-    }
-
-    // Fallback to service account file (local)
-    if (!process.env.VERCEL && fs.existsSync(credentialsPath)) {
-      const credentials = JSON.parse(fs.readFileSync(credentialsPath, 'utf8'));
-      auth = new google.auth.GoogleAuth({
-        credentials,
-        scopes: ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive', 'https://www.googleapis.com/auth/cloud-vision']
-      });
-      sheets = google.sheets({ version: 'v4', auth });
-      drive = google.drive({ version: 'v3', auth });
-      console.log('✅ Google API authenticated (Service Account)');
-      return;
-    }
-
     console.log('⚠️  No credentials found');
   } catch (err) {
     console.log('⚠️  Google auth failed:', err.message);
   }
 }
-
 const SPREADSHEET_ID = process.env.GOOGLE_SPREADSHEET_ID || '1qx5FAkOE959ng8eOGb_NC_DuF381x-NYRwKED0hgRIk';
 const DRIVE_FOLDER_ID = process.env.GOOGLE_DRIVE_FOLDER_ID || '1M3k66ROJSNVUe-TB5rcF4bJ0O6obBGRp';
 
