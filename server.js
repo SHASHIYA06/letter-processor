@@ -62,7 +62,7 @@ import { BEML_LOCATIONS, getLocationById, getLocationByOrg } from './locations.j
 import { createUserStore, USER_COLUMNS, verifyPassword, publicProfile, hashPassword } from './user-store.js';
 import {
   PROJECTS, BEML_SCOPE, getProject, scopeFromLegacyOrg, allScopeIds, projectScopeIds,
-  allowedSheetsFor, checkSheetAccess, rowVisibleTo, projectIdOfRow, SHARED_SHEETS
+  allowedSheetsFor, checkSheetAccess, rowVisibleTo, projectIdOfRow, SHARED_SHEETS, stampProjectId
 } from './projects.js';
 import { createProjectStore, TEMPLATE_TYPES } from './project-store.js';
 
@@ -182,7 +182,7 @@ async function loadAllDataCache() {
     const allData = {};
     for (const [key, sheetName] of Object.entries(SHEET_NAMES)) {
       try {
-        const range = `${sheetName}!A1:Z`;
+        const range = `${sheetName}!A1:BZ`;
         const result = await sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range });
         allData[sheetName] = result.data.values || [];
       } catch { allData[sheetName] = []; }
@@ -1525,7 +1525,11 @@ app.get('/api/ncr/next-number', authenticateToken, async (req, res) => {
 
 app.post('/api/ncr/create', authenticateToken, async (req, res) => {
   try {
+    if (!requireScopes(req, res)) return;
+    if (!guardSheet(req, res, 'NCR Records')) return;
     const data = req.body;
+    stampProjectId(req.scopes || [], data);
+    auditEvent(req, 'document.created', { sheet: 'NCR Records', ncrNo: data.ncrNo });
     const result = await appendToSheet('NCR Records', data, NCR_COLUMNS);
     res.json({ success: true, sheet: result });
   } catch (e) { res.status(500).json({ success: false, error: e.message }); }
@@ -1534,6 +1538,10 @@ app.post('/api/ncr/create', authenticateToken, async (req, res) => {
 app.post('/api/ncr/update', authenticateToken, async (req, res) => {
   try {
     const { rowIndex, data } = req.body;
+    if (!requireScopes(req, res)) return;
+    if (!(await guardRow(req, res, 'NCR Records', Number(rowIndex)))) return;
+    stampProjectId(req.scopes || [], data);
+    auditEvent(req, 'document.updated', { sheet: 'NCR Records', ncrNo: data.ncrNo, rowIndex });
     // Build row data based on NCR_COLUMNS
     const ncrRow = [
       rowIndex, // S.No (keep original)
@@ -1574,10 +1582,15 @@ app.post('/api/ncr/update', authenticateToken, async (req, res) => {
 
 app.get('/api/ncr/clone/:idx', authenticateToken, async (req, res) => {
   try {
+    if (!requireScopes(req, res)) return;
     const rows = allDataCache['NCR Records'] || [];
     const idx = parseInt(req.params.idx, 10);
     if (isNaN(idx) || !rows[idx]) return res.status(404).json({ success: false, error: 'NCR not found' });
     const original = rows[idx];
+    if (!rowVisibleTo('NCR Records', rows[0] || [], original, req.scopes || ['ALL'])) {
+      auditEvent(req, 'access.denied_row', { sheet: 'NCR Records', idx });
+      return res.status(403).json({ success: false, error: 'Access denied: this record belongs to another project.' });
+    }
     const year = new Date().getFullYear();
     const prefix = `NCR-${year}-`;
     let maxNum = 0;
@@ -1675,8 +1688,13 @@ app.get('/api/letter/next-number/:org', authenticateToken, async (req, res) => {
 app.post('/api/letter/create', authenticateToken, async (req, res) => {
   try {
     const { organization, ...data } = req.body;
-    const org = organization || 'BEML';
+    if (!requireScopes(req, res)) return;
+    const org = (organization && organization !== 'Unknown') ? organization
+      : (Array.isArray(req.scopes) && req.scopes.length === 1 && req.scopes[0] !== 'ALL' ? req.scopes[0] : 'BEML');
     const sheetName = SHEET_NAMES[org] || `${org} Letters`;
+    if (!guardSheet(req, res, sheetName)) return;
+    stampProjectId(req.scopes || [], data);
+    auditEvent(req, 'document.created', { sheet: sheetName, ref: data.refNumber });
     const result = await appendToSheet(sheetName, data, LETTER_COLUMNS);
     res.json({ success: true, sheet: result });
   } catch (e) { res.status(500).json({ success: false, error: e.message }); }
@@ -1713,6 +1731,7 @@ app.post('/api/letter/generate-docx', authenticateToken, async (req, res) => {
 app.post('/api/auto-save', authenticateToken, async (req, res) => {
   try {
     const { docType, data, rowIndex, organization } = req.body;
+    if (!requireScopes(req, res)) return;
     
     // Skip auto-save if data is empty/meaningless
     if (docType === 'ncr' && (!data.ncrNo || data.ncrNo.trim() === '')) {
@@ -1728,7 +1747,11 @@ app.post('/api/auto-save', authenticateToken, async (req, res) => {
     let sheetName;
     if (docType === 'ncr') {
       sheetName = 'NCR Records';
+      if (!guardSheet(req, res, sheetName)) return;
+      stampProjectId(req.scopes || [], data);
       if (rowIndex) {
+        // rowIndex here addresses a 1-based sheet row → array index rowIndex-1
+        if (!(await guardRow(req, res, sheetName, Number(rowIndex) - 1))) return;
         if (sheets) {
           const updates = [];
           NCR_COLUMNS.forEach((col, i) => {
@@ -1752,9 +1775,14 @@ app.post('/api/auto-save', authenticateToken, async (req, res) => {
         await appendToSheet(sheetName, data, NCR_COLUMNS);
       }
     } else {
-      const org = organization || 'BEML';
+      const org = (organization && organization !== 'Unknown') ? organization
+        : (Array.isArray(req.scopes) && req.scopes.length === 1 && req.scopes[0] !== 'ALL' ? req.scopes[0] : 'BEML');
       sheetName = SHEET_NAMES[org] || `${org} Letters`;
+      if (!guardSheet(req, res, sheetName)) return;
+      stampProjectId(req.scopes || [], data);
       if (rowIndex) {
+        // rowIndex here addresses a 1-based sheet row → array index rowIndex-1
+        if (!(await guardRow(req, res, sheetName, Number(rowIndex) - 1))) return;
         if (sheets) {
           const updates = [];
           LETTER_COLUMNS.forEach((col, i) => {
@@ -1798,7 +1826,11 @@ app.get('/api/joint-note/next-number', authenticateToken, async (req, res) => {
 
 app.post('/api/joint-note/create', authenticateToken, async (req, res) => {
   try {
+    if (!requireScopes(req, res)) return;
+    if (!guardSheet(req, res, 'Joint Notes')) return;
     const data = req.body;
+    stampProjectId(req.scopes || [], data);
+    auditEvent(req, 'document.created', { sheet: 'Joint Notes', jointNoteNo: data.jointNoteNo });
     const row = [
       '', // S.No (auto)
       data.jointNoteNo || '',
@@ -1812,7 +1844,8 @@ app.post('/api/joint-note/create', authenticateToken, async (req, res) => {
       '', // Attachments
       '', // Attachment Link
       '', // File Name
-      data.status || 'Open'
+      data.status || 'Open',
+      data.projectId || '' // Project ID (col 14)
     ];
     if (sheets) {
       const result = await sheets.spreadsheets.values.append({
@@ -2000,7 +2033,7 @@ async function guardRow(req, res, sheetName, arrayRowIndex) {
   if (!SHARED_SHEETS.includes(sheetName)) return true;
   if (!sheets) return true;
   try {
-    const r = await sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range: `${sheetName}!A1:Z` });
+    const r = await sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range: `${sheetName}!A1:BZ` });
     const rows = r.data.values || [];
     const row = rows[Number(arrayRowIndex)];
     if (!row) {
@@ -3042,12 +3075,27 @@ app.post('/api/save', authenticateToken, upload.single('file'), async (req, res)
     if ((!data.organization || data.organization === 'Unknown') && req.user?.org) {
       data.organization = req.user.org;
     }
+    // Scope fallback: single-project users always write into their own project's sheet
+    if ((!data.organization || data.organization === 'Unknown') &&
+        Array.isArray(req.scopes) && req.scopes.length === 1 && req.scopes[0] !== 'ALL') {
+      data.organization = req.scopes[0];
+    }
     if (!data.location && req.user?.city) {
       data.location = req.user.city;
     }
 
     const org = data.organization || 'Unknown';
     const docType = data.docType || 'letter';
+
+    // ── Project scope enforcement (write path): fail fast before any OCR/Drive work ──
+    if (!requireScopes(req, res)) return;
+    let sheetName = SHEET_NAMES[org] || `${org} Letters`;
+    if (docType === 'ncr') sheetName = 'NCR Records';
+    else if (docType === 'joint_note') sheetName = 'Joint Notes';
+    if (!guardSheet(req, res, sheetName)) return;
+    stampProjectId(req.scopes || [], data);
+    auditEvent(req, 'document.created', { sheet: sheetName, docType, org });
+
     let driveResult = { success: false };
 
     if (req.file) {
@@ -3131,11 +3179,6 @@ app.post('/api/save', authenticateToken, upload.single('file'), async (req, res)
       }
     }
 
-    // Determine sheet name
-    let sheetName = SHEET_NAMES[org] || `${org} Letters`;
-    if (docType === 'ncr') sheetName = 'NCR Records';
-    else if (docType === 'joint_note') sheetName = 'Joint Notes';
-
     const columns = docType === 'ncr' ? NCR_COLUMNS : docType === 'joint_note' ? JOINT_NOTE_COLUMNS : LETTER_COLUMNS;
     const sheetResult = await appendToSheet(sheetName, data, columns);
 
@@ -3150,7 +3193,14 @@ app.post('/api/save', authenticateToken, upload.single('file'), async (req, res)
 app.post('/api/save-reply', authenticateToken, async (req, res) => {
   try {
     const data = req.body;
-    const org = data.organization || 'BEML';
+    if (!requireScopes(req, res)) return;
+    let org = data.organization && data.organization !== 'Unknown' ? data.organization : 'BEML';
+    if ((!data.organization || data.organization === 'Unknown') &&
+        Array.isArray(req.scopes) && req.scopes.length === 1 && req.scopes[0] !== 'ALL') {
+      org = req.scopes[0];
+    }
+    const sheetName = SHEET_NAMES[org] || `${org} Letters`;
+    if (!guardSheet(req, res, sheetName)) return;
     
     // Build letter data matching LETTER_COLUMNS
     const letterData = {
@@ -3194,7 +3244,8 @@ app.post('/api/save-reply', authenticateToken, async (req, res) => {
       console.log('⚠️  Reply Drive upload failed:', driveErr.message);
     }
 
-    const sheetName = SHEET_NAMES[org] || `${org} Letters`;
+    stampProjectId(req.scopes || [], letterData);
+    auditEvent(req, 'document.created', { sheet: sheetName, docType: 'reply', org, ref: letterData.refNumber });
     const sheetResult = await appendToSheet(sheetName, letterData, LETTER_COLUMNS);
 
     res.json({ success: true, sheet: sheetResult, drive: driveResult, message: 'Reply saved as letter' });
@@ -3208,10 +3259,17 @@ app.post('/api/bulk-upload', authenticateToken, (req, res) => {
   upload.array('files', 50)(req, res, async (err) => {
     if (err) return res.status(500).json({ success: false, error: err.message });
     try {
-      const org = req.body.organization || 'Unknown';
+      let org = req.body.organization || 'Unknown';
+      if ((!req.body.organization || org === 'Unknown') &&
+          Array.isArray(req.scopes) && req.scopes.length === 1 && req.scopes[0] !== 'ALL') {
+        org = req.scopes[0];
+      }
       const docType = req.body.type || 'letter';
       const files = req.files || [];
       if (!files.length) return res.status(400).json({ success: false, error: 'No files' });
+      if (!requireScopes(req, res)) return;
+      const bulkSheet = docType === 'ncr' ? 'NCR Records' : docType === 'joint_note' ? 'Joint Notes' : (SHEET_NAMES[org] || `${org} Letters`);
+      if (!guardSheet(req, res, bulkSheet)) return;
 
       console.log(`\n📦 Bulk: ${files.length} files for ${org}`);
       const results = []; let ok = 0, fail = 0;
@@ -3243,12 +3301,14 @@ app.post('/api/bulk-upload', authenticateToken, (req, res) => {
           if (docType === 'ncr') sheetName = 'NCR Records';
           else if (docType === 'joint_note') sheetName = 'Joint Notes';
           const columns = docType === 'ncr' ? NCR_COLUMNS : docType === 'joint_note' ? JOINT_NOTE_COLUMNS : LETTER_COLUMNS;
+          stampProjectId(req.scopes || [], parsed);
           const sheetRes = await appendToSheet(sheetName, parsed, columns);
 
           results.push({ fileName: file.originalname, success: true, data: parsed, sheet: sheetRes, drive: driveRes });
           ok++;
         } catch (e) { results.push({ fileName: file.originalname, success: false, error: e.message }); fail++; }
       }
+      auditEvent(req, 'data.imported', { bulk: true, org, docType, successCount: ok, failCount: fail });
       res.json({ success: true, totalFiles: files.length, successCount: ok, failCount: fail, results });
     } catch (err) { res.status(500).json({ success: false, error: err.message }); }
   });
@@ -3261,8 +3321,15 @@ app.post('/api/import-excel', authenticateToken, upload.single('file'), async (r
   try {
     if (!req.file) return res.status(400).json({ success: false, error: 'No file uploaded' });
     const filePath = getFilePath(req);
-    const org = req.body.organization || 'BEML';
+    let org = req.body.organization || 'BEML';
+    if ((!req.body.organization || org === 'Unknown') &&
+        Array.isArray(req.scopes) && req.scopes.length === 1 && req.scopes[0] !== 'ALL') {
+      org = req.scopes[0];
+    }
     const docType = req.body.type || 'letter';
+    if (!requireScopes(req, res)) return;
+    const legacyTarget = docType === 'ncr' ? 'NCR Records' : docType === 'joint_note' ? 'Joint Notes' : (SHEET_NAMES[org] || `${org} Letters`);
+    if (!guardSheet(req, res, legacyTarget)) return;
     console.log(`\n📊 Excel Import: ${req.file.originalname} for ${org} (${docType})`);
 
     const XLSXModule = await import('xlsx');
@@ -3318,6 +3385,7 @@ app.post('/api/import-excel', authenticateToken, upload.single('file'), async (r
         data.fileName = data.fileName || req.file.originalname;
         data.uploadDate = new Date().toISOString().split('T')[0];
         const sheetTarget = docType === 'ncr' ? 'NCR Records' : docType === 'joint_note' ? 'Joint Notes' : (SHEET_NAMES[org] || `${org} Letters`);
+        stampProjectId(req.scopes || [], data);
         const sheetRes = await appendToSheet(sheetTarget, data, targetColumns);
         results.push({ row: rowIdx + 2, success: true, sheet: sheetRes });
         ok++;
@@ -3325,6 +3393,7 @@ app.post('/api/import-excel', authenticateToken, upload.single('file'), async (r
     }
     try { fs.unlinkSync(filePath); } catch {}
     console.log(`✅ Import complete: ${ok} success, ${fail} failed`);
+    auditEvent(req, 'data.imported', { sheetName: legacyTarget, imported: ok, total: rows.length });
     res.json({ success: true, totalRows: rows.length, successCount: ok, failCount: fail, results: results.slice(0, 50) });
   } catch (err) { console.error('❌ Import error:', err); res.status(500).json({ success: false, error: err.message }); }
 });
@@ -3338,7 +3407,7 @@ app.get('/api/records', authenticateToken, async (req, res) => {
     for (const [key, sheetName] of Object.entries(SHEET_NAMES)) {
       if (!allowed.has(sheetName)) continue;   // never read other projects' sheets
       try {
-        const range = `${sheetName}!A1:Z`;
+        const range = `${sheetName}!A1:BZ`;
         const result = await sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range });
         allData[sheetName] = visibleRows(sheetName, result.data.values || [], req.scopes);
       } catch { allData[sheetName] = []; }
@@ -3354,7 +3423,7 @@ app.get('/api/records/:sheetName', authenticateToken, async (req, res) => {
   try {
     const sheetName = decodeURIComponent(req.params.sheetName);
     if (!guardSheet(req, res, sheetName)) return;
-    const range = `${sheetName}!A1:Z`;
+    const range = `${sheetName}!A1:BZ`;
     const result = await sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range });
     res.json({ success: true, data: visibleRows(sheetName, result.data.values || [], req.scopes) });
   } catch (err) { res.status(500).json({ success: false, error: err.message }); }
@@ -3373,7 +3442,7 @@ app.get('/api/search', authenticateToken, async (req, res) => {
       if (!allowed.has(sheetName)) continue;   // project isolation
       if (org && key !== org && !sheetName.toLowerCase().includes(org.toLowerCase())) continue;
       try {
-        const range = `${sheetName}!A1:Z`;
+        const range = `${sheetName}!A1:BZ`;
         const result = await sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range });
         const rows = visibleRows(sheetName, result.data.values || [], req.scopes);
         if (rows.length > 1) {
@@ -3396,7 +3465,7 @@ app.get('/api/export/csv', authenticateToken, async (req, res) => {
     if (!requireScopes(req, res)) return;
     const sheetName = req.query.sheet || 'BEML Letters';
     if (!guardSheet(req, res, sheetName)) return;
-    const range = `${sheetName}!A1:Z`;
+    const range = `${sheetName}!A1:BZ`;
     const result = await sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range });
     const rows = visibleRows(sheetName, result.data.values || [], req.scopes);
     if (!rows.length) return res.status(404).json({ error: 'No data' });
@@ -3414,7 +3483,7 @@ app.get('/api/export/json', authenticateToken, async (req, res) => {
     if (!requireScopes(req, res)) return;
     const sheetName = req.query.sheet || 'BEML Letters';
     if (!guardSheet(req, res, sheetName)) return;
-    const range = `${sheetName}!A1:Z`;
+    const range = `${sheetName}!A1:BZ`;
     const result = await sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range });
     const rows = visibleRows(sheetName, result.data.values || [], req.scopes);
     if (!rows.length) return res.status(404).json({ error: 'No data' });
@@ -3430,6 +3499,8 @@ app.post('/api/import/json', authenticateToken, async (req, res) => {
     const records = req.body.records || req.body;
     const sheetName = req.body.sheetName || 'BEML Letters';
     if (!Array.isArray(records)) return res.status(400).json({ error: 'Invalid format' });
+    if (!requireScopes(req, res)) return;
+    if (!guardSheet(req, res, sheetName)) return;
     
     let columns;
     if (sheetName.includes('NCR')) columns = NCR_COLUMNS;
@@ -3437,7 +3508,8 @@ app.post('/api/import/json', authenticateToken, async (req, res) => {
     else columns = LETTER_COLUMNS;
     
     let count = 0;
-    for (const r of records) { try { await appendToSheet(sheetName, r, columns); count++; } catch {} }
+    for (const r of records) { try { stampProjectId(req.scopes || [], r); await appendToSheet(sheetName, r, columns); count++; } catch {} }
+    auditEvent(req, 'data.imported', { sheetName, imported: count, total: records.length });
     res.json({ success: true, imported: count, total: records.length });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -3447,6 +3519,8 @@ app.post('/api/import/excel', authenticateToken, upload.single('file'), async (r
   try {
     if (!req.file) return res.status(400).json({ success: false, error: 'No file uploaded' });
     const sheetName = req.body.sheetName || 'BEML Letters';
+    if (!requireScopes(req, res)) return;
+    if (!guardSheet(req, res, sheetName)) return;
     const ext = path.extname(req.file.originalname).toLowerCase();
     
     if (ext !== '.xlsx' && ext !== '.xls') {
@@ -3522,6 +3596,7 @@ app.post('/api/import/excel', authenticateToken, upload.single('file'), async (r
         // Add S.No if not present
         if (!record['S.No']) record['S.No'] = String(count + 1);
 
+        stampProjectId(req.scopes || [], record);
         await appendToSheet(sheetName, record, columns);
         count++;
       } catch (rowErr) {
@@ -3532,6 +3607,7 @@ app.post('/api/import/excel', authenticateToken, upload.single('file'), async (r
     // Cleanup uploaded file
     try { fs.unlinkSync(filePath); } catch {}
 
+    auditEvent(req, 'data.imported', { sheetName, imported: count, total: dataRows.length });
     res.json({ 
       success: true, 
       imported: count, 
@@ -3550,6 +3626,8 @@ app.post('/api/import/csv', authenticateToken, upload.single('file'), async (req
   try {
     if (!req.file) return res.status(400).json({ success: false, error: 'No file uploaded' });
     const sheetName = req.body.sheetName || 'NCR Records';
+    if (!requireScopes(req, res)) return;
+    if (!guardSheet(req, res, sheetName)) return;
     const ext = path.extname(req.file.originalname).toLowerCase();
     
     if (ext !== '.csv') {
@@ -3664,6 +3742,7 @@ app.post('/api/import/csv', authenticateToken, upload.single('file'), async (req
         // Add S.No if not present
         if (!record['S.No']) record['S.No'] = String(count + 1);
 
+        stampProjectId(req.scopes || [], record);
         await appendToSheet(sheetName, record, NCR_COLUMNS);
         count++;
       } catch (rowErr) {
@@ -3674,6 +3753,7 @@ app.post('/api/import/csv', authenticateToken, upload.single('file'), async (req
     // Cleanup uploaded file
     try { fs.unlinkSync(filePath); } catch {}
 
+    auditEvent(req, 'data.imported', { sheetName, imported: count, total: dataRows.length });
     res.json({ 
       success: true, 
       imported: count, 
@@ -3689,17 +3769,20 @@ app.post('/api/import/csv', authenticateToken, upload.single('file'), async (req
 
 // Update record status or fields
 app.put('/api/update', authenticateToken, async (req, res) => {
+  if (!requireScopes(req, res)) return;
   if (!sheets) return res.json({ success: true, local: true });
   try {
     const { sheetName, rowIndex, field, value } = req.body;
     if (!sheetName || rowIndex === undefined || !field) {
       return res.status(400).json({ success: false, error: 'Missing parameters' });
     }
+    if (!(await guardRow(req, res, sheetName, Number(rowIndex)))) return;
+    auditEvent(req, 'document.updated', { sheet: sheetName, field, rowIndex });
 
     // Get headers to find column index
     const headerRes = await sheets.spreadsheets.values.get({
       spreadsheetId: SPREADSHEET_ID,
-      range: `${sheetName}!A1:Z1`
+      range: `${sheetName}!A1:BZ1`
     });
     const headers = headerRes.data.values ? headerRes.data.values[0] : [];
     const colIndex = headers.indexOf(field);
@@ -3728,10 +3811,14 @@ app.put('/api/update', authenticateToken, async (req, res) => {
 
 // Delete a single record by shifting rows up
 app.delete('/api/delete', authenticateToken, async (req, res) => {
+  if (!requireScopes(req, res)) return;
   if (!sheets) return res.json({ success: true, local: true });
   try {
     const { sheetName, rowIndex } = req.body;
     if (!sheetName || rowIndex === undefined) return res.status(400).json({ success: false, error: 'Missing parameters' });
+    if (Number(rowIndex) === 0) return res.status(400).json({ success: false, error: 'Cannot delete the header row' });
+    if (!(await guardRow(req, res, sheetName, Number(rowIndex)))) return;
+    auditEvent(req, 'document.deleted', { sheet: sheetName, rowIndex });
     const result = await sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range: `${sheetName}!A1:ZZ` });
     const rows = result.data.values || [];
     if (rowIndex >= rows.length) return res.status(400).json({ success: false, error: 'Row index out of range' });
@@ -3747,13 +3834,20 @@ app.delete('/api/delete', authenticateToken, async (req, res) => {
 
 // Clear old broken data from a sheet (keep headers, remove all data rows)
 app.delete('/api/clear/:sheetName', authenticateToken, async (req, res) => {
+  if (!requireScopes(req, res)) return;
+  if (!isGlobalAdmin(req)) {
+    auditEvent(req, 'access.denied_clear', { sheet: req.params.sheetName });
+    return res.status(403).json({ success: false, error: 'Only administrators can clear a sheet.' });
+  }
   if (!sheets) return res.json({ success: true, local: true });
   try {
     const sheetName = decodeURIComponent(req.params.sheetName);
+    if (!guardSheet(req, res, sheetName)) return;
+    auditEvent(req, 'data.cleared', { sheet: sheetName });
     // Get all data
     const result = await sheets.spreadsheets.values.get({
       spreadsheetId: SPREADSHEET_ID,
-      range: `${sheetName}!A1:Z`
+      range: `${sheetName}!A1:BZ`
     });
     const rows = result.data.values || [];
     if (rows.length <= 1) {
@@ -4234,7 +4328,7 @@ app.post('/api/bulk-reparse', authenticateToken, async (req, res) => {
     // Read all rows
     const result = await sheets.spreadsheets.values.get({
       spreadsheetId: SPREADSHEET_ID,
-      range: `${sheetName}!A1:Z`
+      range: `${sheetName}!A1:BZ`
     });
     const rows = result.data.values || [];
     if (rows.length < 2) return res.json({ success: true, message: 'No data rows' });
@@ -4359,6 +4453,15 @@ const PORT = process.env.PORT || 3000;
 // Initialize Google Auth and start server
 async function startServer() {
   await initGoogleAuth();
+
+  // One-time global administrator bootstrap (idempotent — skips when an
+  // admin already exists; the credential itself is never logged or returned)
+  try {
+    const admin = await ensureBootstrapAdmin();
+    if (admin) console.log(`🔐 Global administrator ready: ${admin.username}`);
+  } catch (e) {
+    console.log('⚠️ Bootstrap admin init failed:', e.message);
+  }
   
   // Ensure all sheets exist and have headers (only when running locally)
   if (sheets && !process.env.VERCEL) {

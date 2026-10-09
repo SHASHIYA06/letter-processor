@@ -1,0 +1,54 @@
+✅ Google API authenticated (Service Account)
+✅ User created: admin @ beml-bengaluru-hq (BEML)
+🔑 Bootstrap global administrator "admin" created (password change required on first login)
+🔐 Global administrator ready: admin
+✅ Sheet ready: BEML Letters (25 columns)
+✅ Sheet ready: KMRCL Letters (25 columns)
+✅ Sheet ready: Metro Rail Letters (25 columns)
+✅ Sheet ready: BMRCL Letters (25 columns)
+✅ Sheet ready: DMCRL Letters (25 columns)
+✅ Sheet ready: MMRCL Letters (25 columns)
+✅ Sheet ready: CMRCL Letters (25 columns)
+✅ Sheet ready: NCR Records (63 columns)
+✅ Sheet ready: Joint Notes (14 columns)
+
+🚀 Letter Processor v4.0 running at http://localhost:0
+📊 Google Sheets: Connected
+📁 Google Drive: Connected
+
+📋 Sheets: BEML Letters, KMRCL Letters, Metro Rail Letters, BMRCL Letters, DMCRL Letters, MMRCL Letters, CMRCL Letters, NCR Records, Joint Notes
+
+✅ Login: admin @ BEML (Bengaluru)
+✅ User created: itest-mv14z4k9 @ kmrcl-kolkata (KMRCL)
+✅ Registration: itest-mv14z4k9 → KMRCL (Kolkata) projects=[KMRCL]
+
+📝 appendToSheet: KMRCL Letters (row 11)
+   5/25 fields filled
+   ✓ S.No: 11
+   ✓ Ref. Letter Number: ITEST/REF/MV14Z4K9
+   ✓ Subject: WRITE GUARD ACCEPTANCE ROW
+   ✓ Status: Open
+   ✓ Project ID: KMRCL
+🪪 User mirrored to sheet: itest-mv14z4k9
+✅ Row 11 appended to KMRCL Letters
+
+📝 appendToSheet: NCR Records (row 1119)
+   5/63 fields filled
+   ✓ S.No: 1119
+   ✓ NCR Report No: ITEST-NCR-MV14Z4K9
+   ✓ Status: Open
+   ✓ Project: KMRCL RS-3R
+   ✓ Project ID: KMRCL
+✅ Row 1119 appended to NCR Records
+✅ Login: admin @ BEML (Bengaluru)
+❌ Failed login attempt: admin
+❌ Failed login attempt: admin
+❌ Failed login attempt: admin
+✅ Login: admin @ BEML (Bengaluru)
+✅ Login: admin @ BEML (Bengaluru)
+❌ Failed login attempt: admin
+✅ Login: admin @ BEML (Bengaluru)
+❌ Failed login attempt: admin
+✅ Login: admin @ BEML (Bengaluru)
+✅ Login: admin @ BEML (Bengaluru)
+✅ Login: admin @ BEML (Bengaluru)
