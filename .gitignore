@@ -3,3 +3,7 @@ uploads/
 credentials/
 .env
 .vercel
+data/
+server-portal.log
+.DS_Store
+.freebuff/

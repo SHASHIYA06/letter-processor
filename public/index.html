@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>DocVault - Enterprise Document Management</title>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/portal.css">
   <style>
     *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
     :root{
@@ -144,26 +145,126 @@
   </style>
 </head>
 <body>
-  <!-- LOGIN SCREEN -->
+  <!-- LOGIN PORTAL: animated globe → India BEML map → location-scoped auth -->
   <div class="login-container" id="loginContainer">
-    <div class="login-box">
-      <div class="login-logo">
-        <img src="/beml-logo.jpg" alt="BEML Logo" style="max-width:180px;height:auto;margin-bottom:12px" onerror="this.style.display='none'">
-        <h1>DocVault</h1>
-        <p>BEML Enterprise Document Management</p>
+    <canvas id="portalStars" class="portal-stars"></canvas>
+
+    <!-- STAGE 1 · ROTATING GLOBE -->
+    <div class="portal-stage active" id="stage-globe">
+      <canvas id="globeCanvas"></canvas>
+      <div class="portal-brand" id="portalIntro">
+        <img src="/beml-logo.jpg" alt="BEML Logo" onerror="this.style.display='none'">
+        <div class="portal-title">BEML <span>DocVault</span></div>
+        <div class="portal-tag">Global Metro Rail Document Intelligence</div>
       </div>
-      <form class="login-form" id="loginForm" onsubmit="handleLogin(event)">
-        <div class="form-group">
-          <label>Username</label>
-          <input type="text" id="loginUsername" placeholder="Enter username" required autocomplete="username">
+      <div class="portal-bottom">
+        <button class="portal-cta" id="exploreBtn" type="button">Explore BEML Metro Locations</button>
+        <div class="portal-autoplay">Auto-selecting in <span id="autoCount">10</span>s · or pick a location yourself</div>
+      </div>
+    </div>
+
+    <!-- STAGE 2 · INDIA MAP WITH LIVE BEML METRO BUSINESS LOCATIONS -->
+    <div class="portal-stage" id="stage-map">
+      <aside class="map-side">
+        <button class="map-back" id="mapBack" type="button">← Globe</button>
+        <div class="map-heading">
+          <h2>Select your <em>BEML</em> location</h2>
+          <p>Every account is scoped to a metro business location — your documents, letters and NCR records stay organized location-wise.</p>
         </div>
-        <div class="form-group">
-          <label>Password</label>
-          <input type="password" id="loginPassword" placeholder="Enter password" required autocomplete="current-password">
+        <div class="map-stats">
+          <div class="map-stat"><b id="statLocations">6</b><span>Locations</span></div>
+          <div class="map-stat"><b id="statUsers">0</b><span>Users</span></div>
+          <div class="map-stat"><b id="statTrainsets">1357</b><span>Trainsets</span></div>
         </div>
-        <button type="submit" class="login-btn" id="loginBtn">Sign In</button>
-        <div class="login-error" id="loginError"></div>
-      </form>
+        <div class="location-cards" id="locationCards"></div>
+      </aside>
+      <div class="map-canvas-wrap">
+        <canvas id="indiaCanvas"></canvas>
+        <div class="map-live" id="mapLive"><span class="live-dot"></span>LIVE</div>
+        <div class="map-tooltip" id="mapTooltip"></div>
+      </div>
+
+      <!-- STAGE 3 · LOCATION-SCOPED AUTH DRAWER -->
+      <div class="auth-drawer" id="authDrawer">
+        <div class="auth-loc-banner">
+          <button class="auth-close" id="authClose" type="button">✕</button>
+          <div class="auth-loc-org"><span class="org-dot"></span><b id="authLocOrg">BEML</b></div>
+          <div class="auth-loc-name" id="authLocName">BEML South Complex</div>
+          <div class="auth-loc-city" id="authLocCity">Bengaluru, Karnataka</div>
+          <div class="auth-loc-projects" id="authLocProjects"></div>
+        </div>
+        <div class="auth-body">
+          <div class="auth-tabs">
+            <button type="button" class="active" data-tab="register">Create Account</button>
+            <button type="button" data-tab="signin">Sign In</button>
+          </div>
+
+          <form class="auth-form active" id="formRegister" autocomplete="off">
+            <div class="auth-field">
+              <label>Full Name</label>
+              <input type="text" id="regName" placeholder="e.g. Rajesh Kumar" required maxlength="80">
+            </div>
+            <div class="auth-row">
+              <div class="auth-field">
+                <label>Email</label>
+                <input type="email" id="regEmail" placeholder="you@beml.co.in" required>
+              </div>
+              <div class="auth-field">
+                <label>Phone</label>
+                <input type="tel" id="regPhone" placeholder="+91 …" maxlength="15">
+              </div>
+            </div>
+            <div class="auth-field">
+              <label>User ID <button type="button" class="username-suggest" id="regUsernameSuggest">↻ suggest</button></label>
+              <input type="text" id="regUsername" placeholder="auto-generated for your location" required pattern="[a-zA-Z0-9._-]{4,30}">
+              <div class="field-hint">Unique across BEML — letters, numbers, dot, dash, underscore.</div>
+            </div>
+            <div class="auth-row">
+              <div class="auth-field">
+                <label>Password</label>
+                <div class="pw-wrap">
+                  <input type="password" id="regPassword" placeholder="Min 8 characters" required minlength="8">
+                  <button type="button" class="pw-toggle">👁</button>
+                </div>
+                <div class="pw-strength" id="pwStrength"><i></i><i></i><i></i><i></i></div>
+              </div>
+              <div class="auth-field">
+                <label>Confirm Password</label>
+                <div class="pw-wrap">
+                  <input type="password" id="regConfirm" placeholder="Repeat password" required minlength="8">
+                  <button type="button" class="pw-toggle">👁</button>
+                </div>
+              </div>
+            </div>
+            <button type="submit" class="auth-submit" id="regSubmit">Create Account &amp; Enter →</button>
+            <div class="auth-note">Your workspace will be provisioned for <b id="regLocChip">BEML</b>. Documents, letters and NCRs are stored location-wise.</div>
+          </form>
+
+          <form class="auth-form" id="formSignin" autocomplete="off">
+            <div class="auth-field">
+              <label>User ID</label>
+              <input type="text" id="signinUsername" placeholder="e.g. kmrcl-0001" required autocomplete="username">
+            </div>
+            <div class="auth-field">
+              <label>Password</label>
+              <div class="pw-wrap">
+                <input type="password" id="signinPassword" placeholder="Your password" required autocomplete="current-password">
+                <button type="button" class="pw-toggle">👁</button>
+              </div>
+            </div>
+            <button type="submit" class="auth-submit" id="signinSubmit">Sign In →</button>
+            <div class="auth-note">Signing in to <b id="signinLocChip">BEML</b>. Accounts are location-scoped — pick your location on the map first, or sign in with your existing ID.</div>
+          </form>
+
+          <div class="auth-error" id="authError"></div>
+        </div>
+
+        <div class="auth-success" id="authSuccess">
+          <div class="success-ring">✅</div>
+          <h3 id="successTitle">Welcome</h3>
+          <p id="successMsg"></p>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -339,6 +440,7 @@
       pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
     }
   </script>
+  <script src="/portal.js"></script>
   <script>
     // Global error handler - prevents blank screens
     window.onerror = function(msg, url, line, col, error) {
@@ -2865,6 +2967,7 @@
         const data = await res.json();
         
         if (data.valid) {
+          document.getElementById('currentUser').textContent = (data.name || data.username) + (data.org ? ' · ' + data.org : '');
           hideLogin();
           return true;
         } else {
@@ -2883,10 +2986,12 @@
       document.getElementById('loginContainer').style.display = 'flex';
       document.querySelector('.sidebar').style.display = 'none';
       document.querySelector('.main').style.display = 'none';
+      if (window.DocVaultPortal) window.DocVaultPortal.reset();
     }
     
     function hideLogin() {
       document.getElementById('loginContainer').style.display = 'none';
+      if (window.DocVaultPortal) window.DocVaultPortal.stop();
       document.querySelector('.sidebar').style.display = '';
       document.querySelector('.main').style.display = '';
       document.getElementById('userBadge').style.display = 'flex';
@@ -2895,6 +3000,20 @@
       if (savedDepots) depotList = JSON.parse(savedDepots);
       populateDepotSelector(depotList);
     }
+    
+    // Called by the portal after successful registration or sign-in
+    window.portalAuthenticated = function(data) {
+      authToken = data.token;
+      localStorage.setItem('docvault_token', authToken);
+      if (data.depots) {
+        depotList = data.depots;
+        localStorage.setItem('docvault_depots', JSON.stringify(depotList));
+      }
+      document.getElementById('currentUser').textContent = (data.name || data.username) + (data.org ? ' · ' + data.org : '');
+      hideLogin();
+      loadAllData();
+      showToast('Welcome, ' + (data.name || data.username) + '!' + (data.city ? ' (' + data.city + ')' : ''), 'success');
+    };
     
     async function handleLogin(e) {
       e.preventDefault();
@@ -2916,15 +3035,7 @@
         const data = await res.json();
         
         if (data.success) {
-          authToken = data.token;
-          localStorage.setItem('docvault_token', authToken);
-          if (data.depots) {
-            depotList = data.depots;
-            localStorage.setItem('docvault_depots', JSON.stringify(data.depots));
-          }
-          hideLogin();
-          loadAllData();
-          showToast('Login successful!', 'success');
+          window.portalAuthenticated(data);
         } else {
           errorEl.textContent = data.error || 'Invalid credentials';
           errorEl.style.display = 'block';
@@ -2946,8 +3057,6 @@
       authToken = null;
       localStorage.removeItem('docvault_token');
       showLogin();
-      document.getElementById('loginUsername').value = '';
-      document.getElementById('loginPassword').value = '';
       showToast('Logged out', 'success');
     }
     

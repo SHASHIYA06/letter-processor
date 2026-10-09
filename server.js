@@ -57,6 +57,8 @@ if (!isVercel) {
 import { parseNCRContent } from './ncr-parser.js';
 import { generateNCRPdf, generateLetterPdf, generateNCRDocx, generateLetterDocx, generateJointNotePdf, generateJointNoteDocx } from './pdf-generator.js';
 import jwt from 'jsonwebtoken';
+import { BEML_LOCATIONS, getLocationById, getLocationByOrg } from './locations.js';
+import { createUserStore, USER_COLUMNS, verifyPassword, publicProfile } from './user-store.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -74,6 +76,13 @@ const ADMIN_USERNAME = process.env.ADMIN_USERNAME || 'admin';
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || '9799494321';
 
 const isVercelStorage = !!process.env.VERCEL;
+
+// ══════════════════════════════════════════════════════════════
+//  LOCATION-WISE USER DATABASE
+// ══════════════════════════════════════════════════════════════
+const DATA_DIR = isVercelStorage ? '/tmp/docvault-data' : path.join(__dirname, 'data');
+const USERS_SHEET = 'Users';
+const userStore = createUserStore(DATA_DIR);
 
 function generateFilename(file) {
   const ext = path.extname(file.originalname).toLowerCase() || '.bin';
@@ -1879,44 +1888,246 @@ app.get('/api/auth/status', (req, res) => {
 });
 
 // ══════════════════════════════════════════════════════════════
-//  LOGIN AUTHENTICATION
+//  LOCATION-AWARE AUTHENTICATION & USER DATABASE
 // ══════════════════════════════════════════════════════════════
 
-// Login endpoint
-app.post('/api/login', (req, res) => {
+function signUserToken(user) {
+  return jwt.sign(
+    {
+      uid: user.id,
+      username: user.username,
+      name: user.name,
+      role: user.role || 'user',
+      org: user.org,
+      locationId: user.locationId,
+      city: user.city
+    },
+    JWT_SECRET,
+    { expiresIn: '24h' }
+  );
+}
+
+// Best-effort mirror of a user record into the Google Sheets "Users" tab
+async function mirrorUserAppend(user) {
+  if (!sheets) return;
+  try {
+    await ensureHeaders(USERS_SHEET, USER_COLUMNS);
+    const row = [
+      String(user.seq || ''), user.username, user.name, user.email, user.phone,
+      user.role || 'user', user.org, user.locationId, user.city, user.state,
+      user.status || 'active', user.createdAt || '', user.lastLogin || '', ''
+    ];
+    await sheets.spreadsheets.values.append({
+      spreadsheetId: SPREADSHEET_ID,
+      range: `${USERS_SHEET}!A:N`,
+      valueInputOption: 'RAW',
+      insertDataOption: 'INSERT_ROWS',
+      requestBody: { values: [row] }
+    });
+    console.log(`🪪 User mirrored to sheet: ${user.username}`);
+  } catch (err) {
+    console.log('⚠️  User sheet mirror failed:', err.message);
+  }
+}
+
+// Best-effort: update Last Login column for a user in the sheet
+async function mirrorUserLogin(username) {
+  if (!sheets) return;
+  try {
+    const res = await sheets.spreadsheets.values.get({
+      spreadsheetId: SPREADSHEET_ID,
+      range: `${USERS_SHEET}!B1:B`
+    });
+    const rows = res.data.values || [];
+    for (let i = 0; i < rows.length; i++) {
+      if (String(rows[i][0] || '').trim().toLowerCase() === username) {
+        await sheets.spreadsheets.values.update({
+          spreadsheetId: SPREADSHEET_ID,
+          range: `${USERS_SHEET}!M${i + 1}`,
+          valueInputOption: 'RAW',
+          requestBody: { values: [[new Date().toISOString()]] }
+        });
+        break;
+      }
+    }
+  } catch { /* non-fatal */ }
+}
+
+// Pull users from the sheet mirror into the local store (keeps auth working on ephemeral filesystems)
+let _sheetSyncDone = false;
+async function syncUsersFromSheet(force = false) {
+  if (!sheets || (_sheetSyncDone && !force)) return;
+  try {
+    const res = await sheets.spreadsheets.values.get({
+      spreadsheetId: SPREADSHEET_ID,
+      range: `${USERS_SHEET}!A2:N`
+    });
+    const rows = res.data.values || [];
+    for (const row of rows) {
+      if (row[13]) userStore.upsertFromSheet(row); // only rows that carry a password hash
+    }
+    _sheetSyncDone = true;
+  } catch (err) {
+    console.log('⚠️  User sheet sync failed:', err.message);
+  }
+}
+
+// ── Live BEML locations with per-location stats ──
+app.get('/api/locations', async (req, res) => {
+  try {
+    await syncUsersFromSheet();
+    const locations = BEML_LOCATIONS.map(loc => {
+      const sheetName = SHEET_NAMES[loc.org];
+      const letterRows = allDataCache[sheetName] ? Math.max(0, allDataCache[sheetName].length - 1) : 0;
+      return {
+        ...loc,
+        users: userStore.countByLocation(loc.id),
+        letters: letterRows,
+        online: 0
+      };
+    });
+    const ncrCount = allDataCache['NCR Records'] ? Math.max(0, allDataCache['NCR Records'].length - 1) : 0;
+    res.json({ success: true, locations, ncrCount, totalUsers: userStore.count() });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ── Suggest a unique username for a location ──
+app.get('/api/auth/username-suggest', (req, res) => {
+  const loc = getLocationById(req.query.locationId);
+  const prefix = loc ? loc.userPrefix : 'user';
+  res.json({ success: true, username: userStore.nextUsername(prefix) });
+});
+
+// ── Register a location-scoped user ──
+app.post('/api/auth/register', async (req, res) => {
+  try {
+    const { locationId, name, email, phone, username, password, confirmPassword } = req.body || {};
+
+    const loc = getLocationById(locationId);
+    if (!loc) return res.status(400).json({ success: false, error: 'Invalid or missing location. Please select a BEML location on the map.' });
+
+    if (!name || String(name).trim().length < 2 || String(name).trim().length > 80) {
+      return res.status(400).json({ success: false, error: 'Please enter your full name (2–80 characters).' });
+    }
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email))) {
+      return res.status(400).json({ success: false, error: 'Please enter a valid email address.' });
+    }
+    if (userStore.findByEmail(email)) {
+      return res.status(409).json({ success: false, error: 'An account with this email already exists. Please sign in instead.' });
+    }
+    if (phone && !/^[0-9+\-\s]{8,15}$/.test(String(phone))) {
+      return res.status(400).json({ success: false, error: 'Please enter a valid phone number.' });
+    }
+
+    const uname = String(username || userStore.nextUsername(loc.userPrefix)).trim().toLowerCase();
+    if (!/^[a-z0-9._-]{4,30}$/.test(uname)) {
+      return res.status(400).json({ success: false, error: 'Username must be 4–30 characters (letters, numbers, dot, dash, underscore).' });
+    }
+    if (userStore.findByUsername(uname)) {
+      return res.status(409).json({ success: false, error: 'That username is taken. Try another or use the suggested one.' });
+    }
+    if (!password || String(password).length < 8) {
+      return res.status(400).json({ success: false, error: 'Password must be at least 8 characters.' });
+    }
+    if (password !== confirmPassword) {
+      return res.status(400).json({ success: false, error: 'Passwords do not match.' });
+    }
+
+    await syncUsersFromSheet(); // re-check uniqueness against mirror
+    if (userStore.findByUsername(uname)) {
+      return res.status(409).json({ success: false, error: 'That username is taken. Try another or use the suggested one.' });
+    }
+
+    const user = userStore.create({
+      name, email, phone, username: uname, password,
+      locationId: loc.id, org: loc.org, city: loc.city, state: loc.state, role: 'user'
+    });
+
+    mirrorUserAppend(user).catch(() => {});
+
+    const token = signUserToken(user);
+    console.log(`✅ Registration: ${user.username} → ${loc.org} (${loc.city})`);
+    res.json({
+      success: true, token,
+      username: user.username, name: user.name, role: user.role,
+      org: user.org, locationId: user.locationId, city: user.city,
+      depots: DEPOTS
+    });
+  } catch (err) {
+    console.log('❌ Registration failed:', err.message);
+    res.status(500).json({ success: false, error: 'Registration failed: ' + err.message });
+  }
+});
+
+// Login endpoint (location-scoped user DB + legacy admin fallback)
+app.post('/api/login', async (req, res) => {
   const { username, password } = req.body;
-  
+
   if (!username || !password) {
     return res.status(400).json({ success: false, error: 'Username and password required' });
   }
-  
+
+  let user = userStore.findByUsername(username);
+  if (!user) {
+    await syncUsersFromSheet();
+    user = userStore.findByUsername(username);
+  }
+
+  if (user) {
+    if (user.status && user.status !== 'active') {
+      return res.status(403).json({ success: false, error: 'This account is disabled. Contact your administrator.' });
+    }
+    if (verifyPassword(user, password)) {
+      userStore.updateLogin(user.id, req.ip);
+      mirrorUserLogin(user.username).catch(() => {});
+      console.log(`✅ Login: ${user.username} @ ${user.org} (${user.city})`);
+      return res.json({
+        success: true,
+        token: signUserToken(user),
+        username: user.username, name: user.name, role: user.role,
+        org: user.org, locationId: user.locationId, city: user.city,
+        depots: DEPOTS
+      });
+    }
+  }
+
+  // Legacy super-admin fallback (env credentials)
   if (username === ADMIN_USERNAME && password === ADMIN_PASSWORD) {
     const token = jwt.sign(
-      { username: ADMIN_USERNAME, role: 'admin' },
+      { username: ADMIN_USERNAME, name: 'Administrator', role: 'admin', org: 'BEML', locationId: 'beml-bengaluru-hq', city: 'Bengaluru' },
       JWT_SECRET,
       { expiresIn: '24h' }
     );
-    
     console.log(`✅ Admin login successful: ${username}`);
-    res.json({ success: true, token, username: ADMIN_USERNAME, depots: DEPOTS });
-  } else {
-    console.log(`❌ Failed login attempt: ${username}`);
-    res.status(401).json({ success: false, error: 'Invalid credentials' });
+    return res.json({ success: true, token, username: ADMIN_USERNAME, name: 'Administrator', role: 'admin', org: 'BEML', locationId: 'beml-bengaluru-hq', city: 'Bengaluru', depots: DEPOTS });
   }
+
+  console.log(`❌ Failed login attempt: ${username}`);
+  res.status(401).json({ success: false, error: 'Invalid credentials' });
 });
 
 // Verify token endpoint
 app.get('/api/auth/verify', (req, res) => {
   const authHeader = req.headers.authorization;
   const token = authHeader && authHeader.split(' ')[1];
-  
+
   if (!token) {
     return res.json({ valid: false });
   }
-  
+
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
-    res.json({ valid: true, username: decoded.username });
+    res.json({
+      valid: true,
+      username: decoded.username,
+      name: decoded.name || decoded.username,
+      role: decoded.role || 'user',
+      org: decoded.org || null,
+      locationId: decoded.locationId || null,
+      city: decoded.city || null
+    });
   } catch (err) {
     res.json({ valid: false });
   }
@@ -2186,6 +2397,14 @@ app.post('/api/save', authenticateToken, upload.single('file'), async (req, res)
       return res.status(400).json({ success: false, error: 'Invalid data format: ' + parseErr.message });
     }
     
+    // Location-wise defaulting: stamp the signed-in user's org/location when none was chosen
+    if ((!data.organization || data.organization === 'Unknown') && req.user?.org) {
+      data.organization = req.user.org;
+    }
+    if (!data.location && req.user?.city) {
+      data.location = req.user.city;
+    }
+
     const org = data.organization || 'Unknown';
     const docType = data.docType || 'letter';
     let driveResult = { success: false };
