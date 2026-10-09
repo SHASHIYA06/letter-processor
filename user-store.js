@@ -147,6 +147,16 @@ export function createUserStore(dataDir) {
       return user;
     },
 
+    // Patch arbitrary profile fields (projects, role, status, password, lockout...)
+    patch(id, fields) {
+      const user = this.findById(id);
+      if (!user) return null;
+      Object.assign(user, fields);
+      user.updatedAt = new Date().toISOString();
+      save();
+      return user;
+    },
+
     // Upsert a row synced from the Google Sheets "Users" mirror (keeps Vercel/ephemeral FS alive)
     upsertFromSheet(row) {
       // Expected row: [sno, username, name, email, phone, role, org, locationId, city, state, status, createdAt, lastLogin, pwHash]

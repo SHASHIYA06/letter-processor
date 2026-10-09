@@ -4,6 +4,7 @@ import { google } from 'googleapis';
 import cors from 'cors';
 import path from 'path';
 import fs from 'fs';
+import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 import 'dotenv/config';
 
@@ -58,7 +59,12 @@ import { parseNCRContent } from './ncr-parser.js';
 import { generateNCRPdf, generateLetterPdf, generateNCRDocx, generateLetterDocx, generateJointNotePdf, generateJointNoteDocx } from './pdf-generator.js';
 import jwt from 'jsonwebtoken';
 import { BEML_LOCATIONS, getLocationById, getLocationByOrg } from './locations.js';
-import { createUserStore, USER_COLUMNS, verifyPassword, publicProfile } from './user-store.js';
+import { createUserStore, USER_COLUMNS, verifyPassword, publicProfile, hashPassword } from './user-store.js';
+import {
+  PROJECTS, BEML_SCOPE, getProject, scopeFromLegacyOrg, allScopeIds, projectScopeIds,
+  allowedSheetsFor, checkSheetAccess, rowVisibleTo, projectIdOfRow, SHARED_SHEETS
+} from './projects.js';
+import { createProjectStore, TEMPLATE_TYPES } from './project-store.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -73,7 +79,10 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 // JWT Configuration
 const JWT_SECRET = process.env.JWT_SECRET || 'beml-docvault-secret-key-2024';
 const ADMIN_USERNAME = process.env.ADMIN_USERNAME || 'admin';
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || '9799494321';
+// Bootstrap credential comes ONLY from the server-side environment (.env is gitignored /
+// set in Vercel env). No password is embedded in source. If unset, no bootstrap admin
+// account is created until an operator provides one.
+const ADMIN_BOOTSTRAP_PASSCODE = process.env.ADMIN_BOOTSTRAP_PASSCODE || process.env.ADMIN_PASSWORD || '';
 
 const isVercelStorage = !!process.env.VERCEL;
 
@@ -83,6 +92,32 @@ const isVercelStorage = !!process.env.VERCEL;
 const DATA_DIR = isVercelStorage ? '/tmp/docvault-data' : path.join(__dirname, 'data');
 const USERS_SHEET = 'Users';
 const userStore = createUserStore(DATA_DIR);
+const projectStore = createProjectStore(DATA_DIR);
+
+// ── Migrate legacy user records into the multi-project model ──
+function deriveProjectsForUser(u) {
+  const fromOrg = scopeFromLegacyOrg(u.org);
+  if (fromOrg) return [fromOrg];
+  const loc = u.locationId ? getLocationById(u.locationId) : null;
+  if (loc) return [scopeFromLegacyOrg(loc.org) || 'BEML'];
+  return [];
+}
+
+function migrateLegacyUsers() {
+  let changed = 0;
+  for (const u of userStore.getAll()) {
+    const patch = {};
+    if (u.role === 'admin' || u.role === 'superadmin') {
+      patch.role = 'global_admin';
+      patch.projects = ['ALL'];
+    }
+    if (!Array.isArray(u.projects)) patch.projects = deriveProjectsForUser(u);
+    if (u.role === 'user' && !u.projects && !patch.projects) patch.projects = deriveProjectsForUser(u);
+    if (Object.keys(patch).length) { userStore.patch(u.id, patch); changed++; }
+  }
+  if (changed) console.log(`👥 Migrated ${changed} user record(s) to project-aware schema`);
+}
+migrateLegacyUsers();
 
 function generateFilename(file) {
   const ext = path.extname(file.originalname).toLowerCase() || '.bin';
@@ -285,7 +320,8 @@ const LETTER_COLUMNS = [
   'To (Addressee)', 'Kind Attention', 'Subject', 'Letter Type',
   'Letter Content', 'Enclosures', 'Remarks', 'Attachment Link', 'File Name', 'Status',
   'Signatory', 'Designation', 'Project', 'Cc',
-  'Depot', 'Priority', 'Reply Type', 'Tech Details', 'Reply To Ref'
+  'Depot', 'Priority', 'Reply Type', 'Tech Details', 'Reply To Ref',
+  'Project ID'
 ];
 
 const NCR_COLUMNS = [
@@ -304,7 +340,8 @@ const NCR_COLUMNS = [
   'Closure Date', 'Closure Authority', 'Distribution', 'Assy Dwg No',
   'Rev', 'Assy Serial No', 'Part Serial No', 'Place', 'B/L No',
   'Stored At', 'Invoice No', 'Material Status', 'Disassembled',
-  'Approval Scope', 'Repair Procedure'
+  'Approval Scope', 'Repair Procedure',
+  'Project ID'
 ];
 
 // ══════════════════════════════════════════════════════════════
@@ -409,7 +446,8 @@ const JOINT_NOTE_COLUMNS = [
   'S.No', 'Joint Note No', 'Date', 'Parties',
   'Subject', 'Description', 'Items Discussed',
   'Decisions', 'Action Items', 'Attachments',
-  'Attachment Link', 'File Name', 'Status'
+  'Attachment Link', 'File Name', 'Status',
+  'Project ID'
 ];
 
 async function ensureSheetExists(sheetName) {
@@ -479,7 +517,7 @@ const LETTER_KEY_TO_COL = {
   remarks: 'Remarks', attachmentLink: 'Attachment Link', fileName: 'File Name', status: 'Status',
   signatory: 'Signatory', designation: 'Designation', project: 'Project', cc: 'Cc',
   depot: 'Depot', priority: 'Priority', replyType: 'Reply Type', techDetails: 'Tech Details',
-  replyToRef: 'Reply To Ref'
+  replyToRef: 'Reply To Ref', projectId: 'Project ID'
 };
 
 const NCR_KEY_TO_COL = {
@@ -504,7 +542,7 @@ const NCR_KEY_TO_COL = {
   place: 'Place', blNo: 'B/L No', storedAt: 'Stored At',
   invoiceNo: 'Invoice No', materialStatus: 'Material Status',
   disassembled: 'Disassembled', approvalScope: 'Approval Scope',
-  repairProcedure: 'Repair Procedure',
+  repairProcedure: 'Repair Procedure', projectId: 'Project ID',
   // Legacy aliases from form
   vehicleNo: 'Train No', product: 'Item Description', partNumber: 'Part Number',
   supplier: 'Vendor', correction: 'Corrective Action', cause: 'Root Cause',
@@ -517,7 +555,7 @@ const JN_KEY_TO_COL = {
   items: 'Items Discussed', itemsDiscussed: 'Items Discussed',
   decisions: 'Decisions', actionItems: 'Action Items',
   attachments: 'Attachments', attachmentLink: 'Attachment Link',
-  fileName: 'File Name', status: 'Status'
+  fileName: 'File Name', status: 'Status', projectId: 'Project ID'
 };
 
 function buildRow(data, columns, keyToCol) {
@@ -1516,12 +1554,13 @@ app.post('/api/ncr/update', authenticateToken, async (req, res) => {
       data.assySerialNo || '', data.partSerialNo || '', data.place || '',
       data.blNo || '', data.storedAt || '', data.invoiceNo || '',
       data.materialStatus || '', data.disassembled || '',
-      data.approvalScope || '', data.repairProcedure || ''
+      data.approvalScope || '', data.repairProcedure || '',
+      data.projectId || ''
     ];
     if (sheets) {
       const updates = [];
       NCR_COLUMNS.forEach((col, i) => {
-        if (i > 0) updates.push({ range: `NCR Records!${columnToLetter(i+1)}${rowIndex+1}`, values: [[ncrRow[i]]] });
+        if (i > 0) updates.push({ range: `NCR Records!${columnToLetter(i+1)}${rowIndex+1}`, values: [[String(ncrRow[i] ?? '')]] });
       });
       await sheets.spreadsheets.values.batchUpdate({
         spreadsheetId: SPREADSHEET_ID,
@@ -1565,7 +1604,7 @@ app.get('/api/ncr/clone/:idx', authenticateToken, async (req, res) => {
       52: 'assySerialNo', 53: 'partSerialNo', 54: 'place',
       55: 'blNo', 56: 'storedAt', 57: 'invoiceNo',
       58: 'materialStatus', 59: 'disassembled',
-      60: 'approvalScope', 61: 'repairProcedure'
+      60: 'approvalScope', 61: 'repairProcedure', 62: 'projectId'
     };
     const clonedData = { ncrNo: `${prefix}${String(maxNum + 1).padStart(3, '0')}` };
     for (const [idx, field] of Object.entries(fieldMap)) {
@@ -1892,6 +1931,8 @@ app.get('/api/auth/status', (req, res) => {
 // ══════════════════════════════════════════════════════════════
 
 function signUserToken(user) {
+  const projects = Array.isArray(user.projects) && user.projects.length ? user.projects : deriveProjectsForUser(user);
+  const isGlobalAdmin = user.role === 'global_admin' || user.role === 'admin';
   return jwt.sign(
     {
       uid: user.id,
@@ -1900,11 +1941,150 @@ function signUserToken(user) {
       role: user.role || 'user',
       org: user.org,
       locationId: user.locationId,
-      city: user.city
+      city: user.city,
+      projects,
+      isGlobalAdmin,
+      mustChangePassword: !!user.mustChangePassword
     },
     JWT_SECRET,
     { expiresIn: '24h' }
   );
+}
+
+// ── Multi-project scope resolution ────────────────────────────
+// Returns the list of scope ids a request may operate on:
+//   ['ALL'] for global admins, the requested project when it is
+//   authorized, or the union of the user's own projects when no
+//   explicit x-project-id header was sent. Returns null when the
+//   caller asked for a project they are NOT a member of.
+function scopesFor(req) {
+  const role = req.user?.role || 'user';
+  if (role === 'global_admin') return ['ALL'];
+  const userProjects = Array.isArray(req.user?.projects) ? req.user.projects : [];
+  const header = req.get('x-project-id');
+  if (!header) {
+    return userProjects.length ? userProjects : [];
+  }
+  const p = getProject(header);
+  const id = p ? p.id : String(header).trim().toUpperCase();
+  if (userProjects.includes('ALL') || userProjects.includes(id)) return [id];
+  return null;
+}
+
+// Guard for data routes: blocks when no scope could be resolved.
+function requireScopes(req, res) {
+  if (req.scopes === null || req.scopes === undefined) {
+    res.status(403).json({ success: false, error: 'Access denied: you are not authorized for the requested project.' });
+    return false;
+  }
+  if (!req.scopes.length) {
+    res.status(400).json({ success: false, error: 'No project selected. Select a project or send the x-project-id header.' });
+    return false;
+  }
+  return true;
+}
+
+// Sheet-level guard: 403 when the sheet is outside the caller's scope.
+function guardSheet(req, res, sheetName) {
+  const chk = checkSheetAccess(req.scopes || ['ALL'], sheetName);
+  if (!chk.ok) {
+    res.status(403).json({ success: false, error: chk.error });
+    return false;
+  }
+  return true;
+}
+
+// Row-level guard for shared sheets (NCR Records / Joint Notes).
+async function guardRow(req, res, sheetName, arrayRowIndex) {
+  if (!guardSheet(req, res, sheetName)) return false;
+  if (!SHARED_SHEETS.includes(sheetName)) return true;
+  if (!sheets) return true;
+  try {
+    const r = await sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range: `${sheetName}!A1:Z` });
+    const rows = r.data.values || [];
+    const row = rows[Number(arrayRowIndex)];
+    if (!row) {
+      res.status(404).json({ success: false, error: 'Record not found' });
+      return false;
+    }
+    if (!rowVisibleTo(sheetName, rows[0], row, req.scopes || ['ALL'])) {
+      res.status(403).json({ success: false, error: 'Access denied: this record belongs to another project.' });
+      return false;
+    }
+    return true;
+  } catch (err) {
+    res.status(500).json({ success: false, error: 'Could not verify record access: ' + err.message });
+    return false;
+  }
+}
+
+// Filter a full sheet read down to rows the caller may see.
+function visibleRows(sheetName, rows, scopes) {
+  if (!rows || rows.length <= 1) return rows || [];
+  if (!SHARED_SHEETS.includes(sheetName)) return rows;
+  const header = rows[0];
+  return [rows[0], ...rows.slice(1).filter(r => rowVisibleTo(sheetName, header, r, scopes))];
+}
+
+// Audit trail for security-relevant actions
+function auditEvent(req, action, detail = {}) {
+  projectStore.audit({
+    user: req.user?.username || 'anonymous',
+    role: req.user?.role || null,
+    project: (req.scopes && req.scopes.length) ? (req.get('x-project-id') || req.scopes.join(',')) : null,
+    action,
+    detail,
+    ip: req.ip || null
+  });
+}
+
+// ── Login rate limiting + account lockout ─────────────────────
+const loginAttempts = new Map(); // key `${ip}` → { count, resetAt }
+function rateLimitLogin(req) {
+  const key = req.ip || 'unknown';
+  const now = Date.now();
+  const rec = loginAttempts.get(key);
+  if (!rec || now > rec.resetAt) {
+    loginAttempts.set(key, { count: 1, resetAt: now + 60_000 });
+    return false;
+  }
+  rec.count += 1;
+  return rec.count > 10; // >10 attempts/min from one IP → 429
+}
+
+// ── Bootstrap global administrator (one-time initialization) ──
+// The credential lives ONLY in the server environment. We salt+hash
+// it into the user store on first run, then never log or return it.
+// If the operator later removes the env var, the existing account
+// (and its hash) remains — no plaintext is ever retained.
+async function ensureBootstrapAdmin() {
+  const existingAdmin = userStore.getAll().find(u => u.role === 'global_admin');
+  if (existingAdmin) return existingAdmin;
+  if (!ADMIN_BOOTSTRAP_PASSCODE) {
+    console.log('⚠️  No global administrator exists. Set ADMIN_BOOTSTRAP_PASSCODE to create one.');
+    return null;
+  }
+  const uname = String(ADMIN_USERNAME).trim().toLowerCase();
+  if (userStore.findByUsername(uname)) {
+    userStore.patch(userStore.findByUsername(uname).id, { role: 'global_admin', projects: ['ALL'], mustChangePassword: true });
+    console.log(`🔑 Existing user "${uname}" promoted to global administrator (must change password)`);
+    return userStore.findByUsername(uname);
+  }
+  const admin = userStore.create({
+    name: 'System Administrator',
+    email: '',
+    phone: '',
+    username: uname,
+    password: ADMIN_BOOTSTRAP_PASSCODE,
+    locationId: 'beml-bengaluru-hq',
+    org: 'BEML',
+    city: 'Bengaluru',
+    state: 'Karnataka',
+    role: 'global_admin'
+  });
+  userStore.patch(admin.id, { projects: ['ALL'], mustChangePassword: true });
+  console.log(`🔑 Bootstrap global administrator "${uname}" created (password change required on first login)`);
+  return userStore.findByUsername(uname);
 }
 
 // Best-effort mirror of a user record into the Google Sheets "Users" tab
@@ -2044,29 +2224,37 @@ app.post('/api/auth/register', async (req, res) => {
       name, email, phone, username: uname, password,
       locationId: loc.id, org: loc.org, city: loc.city, state: loc.state, role: 'user'
     });
+    // Multi-project: scope the account to the metro project tied to this location
+    const userProjects = [scopeFromLegacyOrg(loc.org) || 'BEML'];
+    userStore.patch(user.id, { projects: userProjects });
+    user.projects = userProjects;
 
     mirrorUserAppend(user).catch(() => {});
 
     const token = signUserToken(user);
-    console.log(`✅ Registration: ${user.username} → ${loc.org} (${loc.city})`);
+    auditEvent({ user: { username: user.username, role: user.role }, ip: req.ip, scopes: userProjects, get: (h) => h === 'x-project-id' ? userProjects[0] : null }, 'user.register', { locationId: loc.id, org: loc.org, projects: userProjects });
+    console.log(`✅ Registration: ${user.username} → ${loc.org} (${loc.city}) projects=[${userProjects}]`);
     res.json({
       success: true, token,
       username: user.username, name: user.name, role: user.role,
       org: user.org, locationId: user.locationId, city: user.city,
+      projects: userProjects,
       depots: DEPOTS
     });
   } catch (err) {
     console.log('❌ Registration failed:', err.message);
     res.status(500).json({ success: false, error: 'Registration failed: ' + err.message });
   }
-});
-
-// Login endpoint (location-scoped user DB + legacy admin fallback)
+});// Login endpoint (project-scoped user DB + bootstrap global admin)
 app.post('/api/login', async (req, res) => {
   const { username, password } = req.body;
 
   if (!username || !password) {
     return res.status(400).json({ success: false, error: 'Username and password required' });
+  }
+  if (rateLimitLogin(req)) {
+    auditEvent({ user: { username }, ip: req.ip }, 'login.rate_limited', {});
+    return res.status(429).json({ success: false, error: 'Too many login attempts. Please wait a minute and try again.' });
   }
 
   let user = userStore.findByUsername(username);
@@ -2076,32 +2264,44 @@ app.post('/api/login', async (req, res) => {
   }
 
   if (user) {
+    if (user.lockedUntil && new Date(user.lockedUntil) > new Date()) {
+      auditEvent({ user: { username: user.username }, ip: req.ip }, 'login.locked', { lockedUntil: user.lockedUntil });
+      return res.status(403).json({ success: false, error: 'Account temporarily locked after repeated failures. Try again later.' });
+    }
     if (user.status && user.status !== 'active') {
+      auditEvent({ user: { username: user.username }, ip: req.ip }, 'login.disabled', {});
       return res.status(403).json({ success: false, error: 'This account is disabled. Contact your administrator.' });
     }
     if (verifyPassword(user, password)) {
-      userStore.updateLogin(user.id, req.ip);
+      const patch = { lastLogin: new Date().toISOString(), lastIp: req.ip, failedLogins: 0, lockedUntil: null };
+      if (!Array.isArray(user.projects)) patch.projects = deriveProjectsForUser(user);
+      const updated = userStore.patch(user.id, patch);
       mirrorUserLogin(user.username).catch(() => {});
-      console.log(`✅ Login: ${user.username} @ ${user.org} (${user.city})`);
+      const token = signUserToken(updated);
+      const scopes = updated.projects || [];
+      auditEvent({ user: { username: updated.username, role: updated.role }, ip: req.ip, scopes, get: (h) => null }, 'login.success', { projects: scopes });
+      console.log(`✅ Login: ${updated.username} @ ${updated.org} (${updated.city})`);
       return res.json({
-        success: true,
-        token: signUserToken(user),
-        username: user.username, name: user.name, role: user.role,
-        org: user.org, locationId: user.locationId, city: user.city,
+        success: true, token,
+        username: updated.username, name: updated.name, role: updated.role,
+        org: updated.org, locationId: updated.locationId, city: updated.city,
+        projects: scopes,
+        mustChangePassword: !!updated.mustChangePassword,
         depots: DEPOTS
       });
     }
-  }
-
-  // Legacy super-admin fallback (env credentials)
-  if (username === ADMIN_USERNAME && password === ADMIN_PASSWORD) {
-    const token = jwt.sign(
-      { username: ADMIN_USERNAME, name: 'Administrator', role: 'admin', org: 'BEML', locationId: 'beml-bengaluru-hq', city: 'Bengaluru' },
-      JWT_SECRET,
-      { expiresIn: '24h' }
-    );
-    console.log(`✅ Admin login successful: ${username}`);
-    return res.json({ success: true, token, username: ADMIN_USERNAME, name: 'Administrator', role: 'admin', org: 'BEML', locationId: 'beml-bengaluru-hq', city: 'Bengaluru', depots: DEPOTS });
+    // Failed password: count toward lockout (5 failures → 15-minute lock)
+    const fails = (user.failedLogins || 0) + 1;
+    const patch = { failedLogins: fails };
+    if (fails >= 5) {
+      patch.lockedUntil = new Date(Date.now() + 15 * 60_000).toISOString();
+      patch.failedLogins = 0;
+      console.log(`🔒 Account locked: ${user.username}`);
+    }
+    userStore.patch(user.id, patch);
+    auditEvent({ user: { username: user.username }, ip: req.ip }, 'login.failed', { attempts: fails });
+  } else {
+    auditEvent({ user: { username }, ip: req.ip }, 'login.unknown_user', {});
   }
 
   console.log(`❌ Failed login attempt: ${username}`);
@@ -2123,10 +2323,12 @@ app.get('/api/auth/verify', (req, res) => {
       valid: true,
       username: decoded.username,
       name: decoded.name || decoded.username,
-      role: decoded.role || 'user',
+      role: decoded.role === 'global_admin' || decoded.role === 'admin' ? 'admin' : (decoded.role || 'user'),
       org: decoded.org || null,
       locationId: decoded.locationId || null,
-      city: decoded.city || null
+      city: decoded.city || null,
+      projects: decoded.projects || [],
+      mustChangePassword: !!decoded.mustChangePassword
     });
   } catch (err) {
     res.json({ valid: false });
@@ -2135,6 +2337,7 @@ app.get('/api/auth/verify', (req, res) => {
 
 // Logout endpoint (client-side token removal, but we can log it)
 app.post('/api/logout', (req, res) => {
+  auditEvent(req, 'logout', {});
   console.log('ℹ️  User logged out');
   res.json({ success: true });
 });
@@ -2151,6 +2354,24 @@ function authenticateToken(req, res, next) {
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
     req.user = decoded;
+
+    // Forced credential rotation: bootstrap/password-reset accounts must
+    // change their password before touching any data route.
+    const p = req.path || '';
+    const changeAllowed = p.startsWith('/api/auth/change-password') ||
+                          p.startsWith('/api/auth/verify') ||
+                          p.startsWith('/api/logout');
+    if (decoded.mustChangePassword && !changeAllowed) {
+      return res.status(403).json({ error: 'Password change required.', code: 'PASSWORD_CHANGE_REQUIRED' });
+    }
+
+    // Resolve the project scope for every protected request (server-side
+    // enforcement — a browser-selected project is never trusted alone).
+    req.scopes = scopesFor(req);
+    if (req.scopes === null) {
+      auditEvent(req, 'access.denied_project', { requested: req.get('x-project-id') });
+      return res.status(403).json({ error: 'Access denied: you are not authorized for the requested project.', code: 'PROJECT_ACCESS_DENIED' });
+    }
     next();
   } catch (err) {
     res.status(403).json({ error: 'Invalid or expired token.' });
@@ -2160,6 +2381,426 @@ function authenticateToken(req, res, next) {
 // ══════════════════════════════════════════════════════════════
 //  API ROUTES (Protected)
 // ══════════════════════════════════════════════════════════════
+
+// ══════════════════════════════════════════════════════════
+//  MULTI-PROJECT PLATFORM APIs
+// ══════════════════════════════════════════════════════════
+
+function isGlobalAdmin(req) {
+  return req.user?.role === 'global_admin' || req.user?.role === 'admin';
+}
+
+function canManageProject(req, projectId) {
+  if (isGlobalAdmin(req)) return true;
+  return req.user?.role === 'project_admin' && (req.user.projects || []).includes(projectId);
+}
+
+function projectCount(sheetName) {
+  const rows = allDataCache[sheetName];
+  return rows && rows.length > 1 ? rows.length - 1 : 0;
+}
+
+// ── Current identity ────────────────────────────────────────
+app.get('/api/me', authenticateToken, (req, res) => {
+  const u = req.user.uid ? userStore.findById(req.user.uid) : null;
+  res.json({
+    success: true,
+    user: u ? { ...publicProfile(u), projects: u.projects || [] } : {
+      username: req.user.username, name: req.user.name, role: req.user.role, projects: req.user.projects || []
+    },
+    scopes: req.scopes || []
+  });
+});
+
+// ── Project listing (authorization-aware) ───────────────────
+app.get('/api/projects', authenticateToken, async (req, res) => {
+  try {
+    const scopes = req.scopes || [];
+    const admin = isGlobalAdmin(req);
+    const registry = [
+      ...PROJECTS.map(p => ({ ...p, internal: false })),
+      { ...BEML_SCOPE, internal: true }
+    ];
+    const visible = registry.filter(p => admin || scopes.includes('ALL') || scopes.includes(p.id));
+    const projects = visible.map(p => {
+      const cfg = projectStore.getConfig(p.id, {});
+      const tplState = projectStore.listTemplates(p.id);
+      return {
+        id: p.id, name: p.name, customer: p.customer, customerShort: p.customerShort,
+        city: p.city, color: p.color, internal: !!p.internal,
+        lettersSheet: p.lettersSheet, refPattern: p.refPattern,
+        ncrPattern: p.ncrPattern, jnPattern: p.jnPattern,
+        status: p.status, reference: !!p.reference,
+        counts: { letters: projectCount(p.lettersSheet) },
+        config: cfg,
+        templates: Object.fromEntries(Object.entries(tplState).map(([t, s]) => [t, {
+          activeVersion: s.activeVersion,
+          total: (s.versions || []).length,
+          pending: (s.versions || []).filter(v => v.status === 'pending').length
+        }]))
+      };
+    });
+    res.json({ success: true, projects, total: projects.length, isAdmin: admin });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.get('/api/projects/:id', authenticateToken, (req, res) => {
+  const p = getProject(req.params.id);
+  if (!p) return res.status(404).json({ success: false, error: 'Unknown project' });
+  const scopes = req.scopes || [];
+  if (!isGlobalAdmin(req) && !scopes.includes('ALL') && !scopes.includes(p.id)) {
+    return res.status(403).json({ success: false, error: 'Access denied: not a member of this project.' });
+  }
+  res.json({
+    success: true,
+    project: {
+      id: p.id, name: p.name, customer: p.customer, city: p.city, color: p.color,
+      lettersSheet: p.lettersSheet, org: p.org,
+      refPattern: p.refPattern, ncrPattern: p.ncrPattern, jnPattern: p.jnPattern,
+      config: projectStore.getConfig(p.id, {}),
+      templates: projectStore.listTemplates(p.id),
+      sequence: { letter: projectStore.peekSequence(p.id, 'letter'), ncr: projectStore.peekSequence(p.id, 'ncr') }
+    }
+  });
+});
+
+// Update project configuration (global admin or owning project admin)
+app.put('/api/projects/:id/config', authenticateToken, (req, res) => {
+  const p = getProject(req.params.id);
+  if (!p) return res.status(404).json({ success: false, error: 'Unknown project' });
+  if (!canManageProject(req, p.id)) {
+    auditEvent(req, 'access.denied_config', { project: p.id });
+    return res.status(403).json({ success: false, error: 'Only administrators can modify project configuration.' });
+  }
+  const b = req.body || {};
+  const allowedPatch = {};
+  for (const k of ['customer', 'customerShort', 'refPattern', 'ncrPattern', 'jnPattern', 'contracts', 'departments', 'address', 'contact']) {
+    if (b[k] !== undefined) allowedPatch[k] = b[k];
+  }
+  const updated = projectStore.updateConfig(p.id, allowedPatch);
+  auditEvent(req, 'project.config_updated', { project: p.id, fields: Object.keys(allowedPatch) });
+  res.json({ success: true, config: updated });
+});
+
+// Explicit, audited project switch (membership re-checked server-side)
+app.post('/api/auth/switch-project', authenticateToken, (req, res) => {
+  const p = getProject(req.body?.projectId);
+  if (!p) return res.status(404).json({ success: false, error: 'Unknown project' });
+  const scopes = req.scopes || [];
+  if (!isGlobalAdmin(req) && !scopes.includes('ALL') && !scopes.includes(p.id)) {
+    auditEvent(req, 'access.denied_switch', { project: p.id });
+    return res.status(403).json({ success: false, error: 'Access denied: not a member of this project.' });
+  }
+  auditEvent(req, 'project.switch', { project: p.id });
+  res.json({ success: true, project: p.id });
+});
+
+// Password change (forced for bootstrap/reset accounts)
+app.post('/api/auth/change-password', authenticateToken, (req, res) => {
+  try {
+    const { oldPassword, newPassword } = req.body || {};
+    const u = req.user.uid ? userStore.findById(req.user.uid) : null;
+    if (!u) return res.status(404).json({ success: false, error: 'Account not found' });
+    if (!verifyPassword(u, oldPassword || '')) {
+      auditEvent(req, 'password.change_failed', {});
+      return res.status(403).json({ success: false, error: 'Current password is incorrect.' });
+    }
+    if (!newPassword || String(newPassword).length < 8) {
+      return res.status(400).json({ success: false, error: 'New password must be at least 8 characters.' });
+    }
+    const updated = userStore.patch(u.id, { passwordHash: hashPassword(String(newPassword)), mustChangePassword: false });
+    auditEvent(req, 'password.changed', {});
+    res.json({ success: true, token: signUserToken(updated) });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ── Administration ──────────────────────────────────────────
+function requireGlobalAdmin(req, res) {
+  if (!isGlobalAdmin(req)) {
+    res.status(403).json({ success: false, error: 'Global administrator access required.' });
+    return false;
+  }
+  return true;
+}
+
+app.get('/api/admin/users', authenticateToken, async (req, res) => {
+  if (!requireGlobalAdmin(req, res)) return;
+  await syncUsersFromSheet();
+  const users = userStore.getAll().map(u => ({
+    id: u.id, username: u.username, name: u.name, email: u.email, phone: u.phone,
+    role: u.role, projects: u.projects || [], org: u.org, locationId: u.locationId,
+    city: u.city, status: u.status, lastLogin: u.lastLogin, createdAt: u.createdAt,
+    mustChangePassword: !!u.mustChangePassword,
+    lockedUntil: u.lockedUntil || null
+  }));
+  res.json({ success: true, users, total: users.length });
+});
+
+app.post('/api/admin/users/:id/role', authenticateToken, (req, res) => {
+  if (!requireGlobalAdmin(req, res)) return;
+  const { role, projects } = req.body || {};
+  const valid = ['user', 'project_admin', 'global_admin'];
+  if (!valid.includes(role)) return res.status(400).json({ success: false, error: 'Invalid role' });
+  const target = userStore.findById(req.params.id);
+  if (!target) return res.status(404).json({ success: false, error: 'User not found' });
+  if (role === 'global_admin' && target.role !== 'global_admin') {
+    // Only existing global admins may mint new global admins.
+    if (!isGlobalAdmin(req)) return res.status(403).json({ success: false, error: 'Cannot create global administrators.' });
+  }
+  if (target.role === 'global_admin' && role !== 'global_admin') {
+    const remaining = userStore.getAll().filter(u => u.role === 'global_admin' && u.id !== target.id);
+    if (!remaining.length) return res.status(400).json({ success: false, error: 'Cannot demote the last global administrator.' });
+  }
+  const patch = { role };
+  if (Array.isArray(projects)) patch.projects = role === 'global_admin' ? ['ALL'] : projects;
+  const updated = userStore.patch(target.id, patch);
+  auditEvent(req, 'admin.role_changed', { target: target.username, role, projects: patch.projects });
+  res.json({ success: true, user: publicProfile(updated) });
+});
+
+app.post('/api/admin/users/:id/status', authenticateToken, (req, res) => {
+  if (!requireGlobalAdmin(req, res)) return;
+  const { status } = req.body || {};
+  if (!['active', 'disabled'].includes(status)) return res.status(400).json({ success: false, error: 'Invalid status' });
+  const target = userStore.findById(req.params.id);
+  if (!target) return res.status(404).json({ success: false, error: 'User not found' });
+  if (target.id === req.user.uid && status === 'disabled') return res.status(400).json({ success: false, error: 'You cannot disable your own account.' });
+  const updated = userStore.patch(target.id, { status, lockedUntil: null, failedLogins: 0 });
+  auditEvent(req, 'admin.status_changed', { target: target.username, status });
+  res.json({ success: true, user: publicProfile(updated) });
+});
+
+app.post('/api/admin/users/:id/reset-password', authenticateToken, (req, res) => {
+  if (!requireGlobalAdmin(req, res)) return;
+  const target = userStore.findById(req.params.id);
+  if (!target) return res.status(404).json({ success: false, error: 'User not found' });
+  const temp = 'Tmp-' + crypto.randomBytes(6).toString('hex');
+  userStore.patch(target.id, { passwordHash: hashPassword(temp), mustChangePassword: true, lockedUntil: null, failedLogins: 0 });
+  auditEvent(req, 'admin.password_reset', { target: target.username });
+  // Returned once to the administrator over authenticated API — never logged.
+  res.json({ success: true, temporaryPassword: temp });
+});
+
+app.get('/api/admin/audit', authenticateToken, (req, res) => {
+  if (!requireGlobalAdmin(req, res)) return;
+  res.json({ success: true, entries: projectStore.tailAudit(Math.min(500, parseInt(req.query.limit) || 100)) });
+});
+
+// ── Project templates: onboarding, versions, approval ───────
+function guardTemplateAccess(req, res, p) {
+  if (isGlobalAdmin(req)) return true;
+  const scopes = req.scopes || [];
+  if (scopes.includes('ALL') || scopes.includes(p.id)) return true;
+  res.status(403).json({ success: false, error: 'Access denied' });
+  return false;
+}
+
+app.get('/api/projects/:id/templates', authenticateToken, (req, res) => {
+  const p = getProject(req.params.id);
+  if (!p) return res.status(404).json({ success: false, error: 'Unknown project' });
+  if (!guardTemplateAccess(req, res, p)) return;
+  res.json({ success: true, templates: projectStore.listTemplates(p.id) });
+});
+
+app.get('/api/projects/:id/templates/:type', authenticateToken, (req, res) => {
+  const p = getProject(req.params.id);
+  if (!p) return res.status(404).json({ success: false, error: 'Unknown project' });
+  if (!guardTemplateAccess(req, res, p)) return;
+  const type = req.params.type;
+  const state = projectStore.listTemplates(p.id)[type];
+  if (!state) return res.status(404).json({ success: false, error: `No '${type}' templates for ${p.id}` });
+  const active = projectStore.getActiveTemplate(p.id, type);
+  res.json({ success: true, type, activeVersion: state.activeVersion, versions: state.versions, active: active ? active.config : null });
+});
+
+// Create a draft template version (from config JSON)
+app.post('/api/projects/:id/templates/:type', authenticateToken, (req, res) => {
+  const p = getProject(req.params.id);
+  if (!p) return res.status(404).json({ success: false, error: 'Unknown project' });
+  if (!canManageProject(req, p.id)) {
+    auditEvent(req, 'access.denied_template', { project: p.id, type: req.params.type });
+    return res.status(403).json({ success: false, error: 'Only administrators can create templates.' });
+  }
+  const type = req.params.type;
+  if (!TEMPLATE_TYPES.includes(type)) return res.status(400).json({ success: false, error: `Invalid template type. Valid: ${TEMPLATE_TYPES.join(', ')}` });
+  const rec = projectStore.addTemplateVersion(p.id, type, {
+    config: req.body?.config || {},
+    createdBy: req.user.username,
+    sourceSamples: req.body?.sourceSamples || [],
+    proposal: req.body?.proposal || null
+  });
+  auditEvent(req, 'template.draft_created', { project: p.id, type, version: rec.version });
+  res.json({ success: true, template: rec });
+});
+
+// Upload official samples → extract text → propose a template (never auto-approve)
+app.post('/api/projects/:id/templates/:type/samples', authenticateToken, upload.array('samples', 10), async (req, res) => {
+  try {
+    const p = getProject(req.params.id);
+    if (!p) return res.status(404).json({ success: false, error: 'Unknown project' });
+    if (!canManageProject(req, p.id)) {
+      auditEvent(req, 'access.denied_template', { project: p.id, type: req.params.type });
+      return res.status(403).json({ success: false, error: 'Only administrators can onboard templates.' });
+    }
+    const type = req.params.type;
+    if (!TEMPLATE_TYPES.includes(type)) return res.status(400).json({ success: false, error: `Invalid template type. Valid: ${TEMPLATE_TYPES.join(', ')}` });
+    if (!req.files?.length) return res.status(400).json({ success: false, error: 'No sample files uploaded' });
+
+    const sampleDir = path.join(__dirname, 'uploads', 'samples', p.id, type);
+    if (!fs.existsSync(sampleDir)) fs.mkdirSync(sampleDir, { recursive: true });
+    const sourceSamples = [];
+    let extractedText = '';
+    for (const f of req.files) {
+      const safeName = `${Date.now()}_${(f.originalname || 'sample').replace(/[^a-zA-Z0-9._-]/g, '_').substring(0, 80)}`;
+      const dest = path.join(sampleDir, safeName);
+      if (f.buffer) fs.writeFileSync(dest, f.buffer);
+      else if (f.path) fs.copyFileSync(f.path, dest);
+      sourceSamples.push({ name: f.originalname, storedAs: `uploads/samples/${p.id}/${type}/${safeName}`, uploadedAt: new Date().toISOString() });
+      try {
+        const text = await extractText(dest);
+        if (text) extractedText += `\n\n===== ${f.originalname} =====\n${text.substring(0, 8000)}`;
+      } catch (e) {
+        console.log('⚠️  Sample extraction failed:', f.originalname, e.message);
+      }
+    }
+
+    // AI proposes candidate fields — stored as DRAFT only, never auto-approved.
+    let proposal = null;
+    try {
+      const aiText = await callAI(
+        `Analyze this official ${p.customer} ${type} sample and propose a structured template configuration as JSON with keys: headerFields, refPattern, footerFields, signatoryBlocks, tables, notes. Return ONLY JSON.\n\nSample text:\n${extractedText.substring(0, 6000)}`,
+        'You are a railway document template analyst. Extract document structure precisely; never invent content that is not present.'
+      );
+      const match = (aiText || '').match(/\{[\s\S]*\}/);
+      if (match) proposal = { generatedBy: 'ai', json: match[0], generatedAt: new Date().toISOString() };
+    } catch (e) {
+      console.log('⚠️  AI template proposal unavailable:', e.message);
+    }
+
+    const rec = projectStore.addTemplateVersion(p.id, type, {
+      config: req.body?.config ? JSON.parse(req.body.config) : { customer: p.customer, refPattern: p.refPattern },
+      createdBy: req.user.username,
+      sourceSamples,
+      extractedText,
+      proposal
+    });
+    projectStore.setTemplateStatus(p.id, type, rec.version, 'pending');
+    auditEvent(req, 'template.samples_uploaded', { project: p.id, type, version: rec.version, samples: sourceSamples.length });
+    res.json({ success: true, template: projectStore.listTemplates(p.id)[type].versions.find(v => v.version === rec.version), proposalReceived: !!proposal, extractedChars: extractedText.length });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Approve / reject a template version (explicit human approval — required)
+app.post('/api/projects/:id/templates/:type/:version/approve', authenticateToken, (req, res) => {
+  const p = getProject(req.params.id);
+  if (!p) return res.status(404).json({ success: false, error: 'Unknown project' });
+  if (!canManageProject(req, p.id)) {
+    auditEvent(req, 'access.denied_template_review', { project: p.id, version: req.params.version });
+    return res.status(403).json({ success: false, error: 'Only administrators can approve templates.' });
+  }
+  const out = projectStore.reviewTemplateVersion(p.id, req.params.type, req.params.version, {
+    approve: true, reviewer: req.user.username, notes: req.body?.notes
+  });
+  if (out.error) return res.status(400).json({ success: false, error: out.error });
+  auditEvent(req, 'template.approved', { project: p.id, type: req.params.type, version: Number(req.params.version) });
+  res.json({ success: true, ...out });
+});
+
+app.post('/api/projects/:id/templates/:type/:version/reject', authenticateToken, (req, res) => {
+  const p = getProject(req.params.id);
+  if (!p) return res.status(404).json({ success: false, error: 'Unknown project' });
+  if (!canManageProject(req, p.id)) {
+    return res.status(403).json({ success: false, error: 'Only administrators can review templates.' });
+  }
+  const out = projectStore.reviewTemplateVersion(p.id, req.params.type, req.params.version, {
+    approve: false, reviewer: req.user.username, notes: req.body?.notes
+  });
+  if (out.error) return res.status(400).json({ success: false, error: out.error });
+  auditEvent(req, 'template.rejected', { project: p.id, type: req.params.type, version: Number(req.params.version) });
+  res.json({ success: true, ...out });
+});
+
+// ── Correspondence links (graph edges) ──────────────────────
+app.post('/api/links', authenticateToken, (req, res) => {
+  if (!requireScopes(req, res)) return;
+  const { from, to, type, project } = req.body || {};
+  const projectId = project || (req.scopes[0] !== 'ALL' ? req.scopes[0] : null);
+  if (!projectId) return res.status(400).json({ success: false, error: 'project is required for global administrators' });
+  if (!isGlobalAdmin(req) && !req.scopes.includes(projectId)) {
+    return res.status(403).json({ success: false, error: 'Access denied: not a member of this project.' });
+  }
+  for (const ep of [from, to]) {
+    if (ep?.sheet && !checkSheetAccess([projectId], ep.sheet).ok) {
+      return res.status(403).json({ success: false, error: `Access denied: '${ep.sheet}' is not part of project ${projectId}.` });
+    }
+  }
+  const out = projectStore.addLink({ project: projectId, from, to, type, createdBy: req.user.username });
+  if (out.error) return res.status(400).json({ success: false, error: out.error });
+  if (!out.duplicate) auditEvent(req, 'link.created', { project: projectId, type: type || 'reference' });
+  res.json({ success: true, ...out });
+});
+
+app.get('/api/links', authenticateToken, (req, res) => {
+  if (!requireScopes(req, res)) return;
+  const { sheet, row, ref, docId } = req.query;
+  const endpoint = (sheet || ref || docId) ? { sheet, row: row !== undefined ? Number(row) : null, ref, docId } : null;
+  const projects = req.scopes.includes('ALL') ? null : req.scopes;
+  let edges = projectStore.listLinks(null, endpoint);
+  if (projects) edges = edges.filter(e => projects.includes(e.project));
+  res.json({ success: true, links: edges, total: edges.length });
+});
+
+app.get('/api/graph', authenticateToken, (req, res) => {
+  if (!requireScopes(req, res)) return;
+  const projects = req.scopes.includes('ALL') ? null : req.scopes;
+  let edges = projectStore.listLinks(null, null);
+  if (projects) edges = edges.filter(e => projects.includes(e.project));
+
+  // Nodes come only from live records the caller can actually read
+  const nodes = [];
+  const seen = new Set();
+  const sheetList = [...allowedSheetsFor(req.scopes)];
+  for (const sheet of sheetList) {
+    const rows = allDataCache[sheet];
+    if (!rows || rows.length < 2) continue;
+    const header = rows[0];
+    for (let i = 1; i < rows.length; i++) {
+      if (!rowVisibleTo(sheet, header, rows[i], req.scopes)) continue;
+      const key = `${sheet}#${i}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const label = sheet.includes('NCR') || sheet.includes('Joint')
+        ? (rows[i][1] || `Row ${i}`)
+        : (rows[i][1] || rows[i][7] || `Row ${i}`);
+      nodes.push({ id: key, sheet, row: i, label: String(label).substring(0, 120), project: projectIdOfRow(sheet, header, rows[i], null) });
+    }
+  }
+  res.json({ success: true, nodes, edges, generatedAt: new Date().toISOString() });
+});
+
+app.delete('/api/links/:id', authenticateToken, (req, res) => {
+  if (!requireScopes(req, res)) return;
+  const projects = req.scopes.includes('ALL') ? null : req.scopes;
+  const existing = projectStore.listLinks(null, null).find(l => l.id === req.params.id);
+  if (!existing) return res.status(404).json({ success: false, error: 'Link not found' });
+  if (projects && !projects.includes(existing.project)) {
+    return res.status(403).json({ success: false, error: 'Access denied' });
+  }
+  const ok = projectStore.removeLink(req.params.id, projects && projects.length === 1 ? projects[0] : null);
+  if (!ok) return res.status(404).json({ success: false, error: 'Link not found' });
+  auditEvent(req, 'link.deleted', { id: req.params.id });
+  res.json({ success: true });
+});
+
+// ══════════════════════════════════════════════════════════
+//  API ROUTES (Protected)
+// ══════════════════════════════════════════════════════════
 
 function getFilePath(req) {
   if (req.file.path) return req.file.path;
@@ -2690,13 +3331,16 @@ app.post('/api/import-excel', authenticateToken, upload.single('file'), async (r
 
 app.get('/api/records', authenticateToken, async (req, res) => {
   if (!sheets) return res.json({ success: true, data: {} });
+  if (!requireScopes(req, res)) return;
   try {
+    const allowed = allowedSheetsFor(req.scopes);
     const allData = {};
     for (const [key, sheetName] of Object.entries(SHEET_NAMES)) {
+      if (!allowed.has(sheetName)) continue;   // never read other projects' sheets
       try {
         const range = `${sheetName}!A1:Z`;
         const result = await sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range });
-        allData[sheetName] = result.data.values || [];
+        allData[sheetName] = visibleRows(sheetName, result.data.values || [], req.scopes);
       } catch { allData[sheetName] = []; }
     }
     allDataCache = allData;
@@ -2706,27 +3350,32 @@ app.get('/api/records', authenticateToken, async (req, res) => {
 
 app.get('/api/records/:sheetName', authenticateToken, async (req, res) => {
   if (!sheets) return res.json({ success: true, data: [] });
+  if (!requireScopes(req, res)) return;
   try {
     const sheetName = decodeURIComponent(req.params.sheetName);
+    if (!guardSheet(req, res, sheetName)) return;
     const range = `${sheetName}!A1:Z`;
     const result = await sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range });
-    res.json({ success: true, data: result.data.values || [] });
+    res.json({ success: true, data: visibleRows(sheetName, result.data.values || [], req.scopes) });
   } catch (err) { res.status(500).json({ success: false, error: err.message }); }
 });
 
 app.get('/api/search', authenticateToken, async (req, res) => {
   if (!sheets) return res.json({ success: true, data: [] });
+  if (!requireScopes(req, res)) return;
   try {
     const q = (req.query.q || '').toLowerCase();
     const org = req.query.org || '';
+    const allowed = allowedSheetsFor(req.scopes);
     const allResults = [];
 
     for (const [key, sheetName] of Object.entries(SHEET_NAMES)) {
+      if (!allowed.has(sheetName)) continue;   // project isolation
       if (org && key !== org && !sheetName.toLowerCase().includes(org.toLowerCase())) continue;
       try {
         const range = `${sheetName}!A1:Z`;
         const result = await sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range });
-        const rows = result.data.values || [];
+        const rows = visibleRows(sheetName, result.data.values || [], req.scopes);
         if (rows.length > 1) {
           const header = rows[0];
           for (let i = 1; i < rows.length; i++) {
@@ -2744,11 +3393,14 @@ app.get('/api/search', authenticateToken, async (req, res) => {
 app.get('/api/export/csv', authenticateToken, async (req, res) => {
   try {
     if (!sheets) return res.status(503).json({ error: 'Google Sheets not connected. Visit /auth/google to authenticate.' });
+    if (!requireScopes(req, res)) return;
     const sheetName = req.query.sheet || 'BEML Letters';
+    if (!guardSheet(req, res, sheetName)) return;
     const range = `${sheetName}!A1:Z`;
     const result = await sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range });
-    const rows = result.data.values || [];
+    const rows = visibleRows(sheetName, result.data.values || [], req.scopes);
     if (!rows.length) return res.status(404).json({ error: 'No data' });
+    auditEvent(req, 'data.exported', { format: 'csv', sheet: sheetName, rows: rows.length - 1 });
     const csv = rows.map(r => r.map(c => `"${(c || '').replace(/"/g, '""')}"`).join(',')).join('\n');
     res.setHeader('Content-Type', 'text/csv');
     res.setHeader('Content-Disposition', `attachment; filename=${sheetName.replace(/\s/g, '_')}.csv`);
@@ -2759,11 +3411,14 @@ app.get('/api/export/csv', authenticateToken, async (req, res) => {
 app.get('/api/export/json', authenticateToken, async (req, res) => {
   try {
     if (!sheets) return res.status(503).json({ error: 'Google Sheets not connected. Visit /auth/google to authenticate.' });
+    if (!requireScopes(req, res)) return;
     const sheetName = req.query.sheet || 'BEML Letters';
+    if (!guardSheet(req, res, sheetName)) return;
     const range = `${sheetName}!A1:Z`;
     const result = await sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range });
-    const rows = result.data.values || [];
+    const rows = visibleRows(sheetName, result.data.values || [], req.scopes);
     if (!rows.length) return res.status(404).json({ error: 'No data' });
+    auditEvent(req, 'data.exported', { format: 'json', sheet: sheetName, rows: rows.length - 1 });
     const header = rows[0];
     const data = rows.slice(1).map(r => { const o = {}; header.forEach((h, i) => o[h] = r[i] || ''); return o; });
     res.json(data);
