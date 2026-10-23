@@ -2373,6 +2373,30 @@ app.post('/api/login', async (req, res) => {
     user = userStore.findByUsername(username);
   }
 
+  // On serverless (Vercel) the filesystem is ephemeral, so a fresh cold start has
+  // an empty store. The bootstrap operator account is created only in that
+  // startServer() pass, which doesn't run here, so re-ensure it lazily when an
+  // unknown username arrives — then persist it to the sheet mirror so sibling
+  // isolates can sync it back on their own cold starts.
+  if (!user && isVercelStorage && ADMIN_BOOTSTRAP_PASSCODE) {
+    try {
+      const uname = String(username).trim().toLowerCase();
+      if (uname === String(ADMIN_USERNAME).trim().toLowerCase()) {
+        user = await ensureBootstrapAdmin();
+        if (user) mirrorUserAppend(user).catch(() => {});
+      } else {
+        const known = /^([a-z0-9._-]+)-admin$/.exec(uname);
+        if (known) {
+          ensureLocationAdmins();
+          user = userStore.findByUsername(uname);
+          if (user) mirrorUserAppend(user).catch(() => {});
+        }
+      }
+    } catch (e) {
+      console.log('⚠️ Lazy admin bootstrap failed:', e.message);
+    }
+  }
+
   if (user) {
     if (user.lockedUntil && new Date(user.lockedUntil) > new Date()) {
       auditEvent({ user: { username: user.username }, ip: req.ip }, 'login.locked', { lockedUntil: user.lockedUntil });
