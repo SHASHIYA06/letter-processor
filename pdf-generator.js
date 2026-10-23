@@ -2,7 +2,7 @@ import PDFDocument from 'pdfkit';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { Document, Packer, Paragraph, TextRun, AlignmentType, BorderStyle, TableRow, TableCell, Table, WidthType } from 'docx';
+import { Document, Packer, Paragraph, TextRun, AlignmentType, BorderStyle, TableRow, TableCell, Table, WidthType, ImageRun, Footer, Header } from 'docx';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -104,8 +104,12 @@ function drawBEMLFooter(doc, W, H) {
 // ══════════════════════════════════════════════════════════════
 const ORG_HEADERS = {
   'BEML': { name: 'BEML LIMITED', sub: 'A Government of India Enterprise under Ministry of Defence', addr: 'BEML Bhavan, No.1, Outer Ring Road, Bengaluru - 560068' },
-  'KMRCL': { name: 'KOLKATA METRA RAIL CORPORATION LTD.', sub: 'A Government of India Enterprise', addr: 'KMRCL Bhavan, Salt Lake City, Kolkata - 700064' },
-  'Metro Rail': { name: 'METRO RAIL CORPORATION LTD.', sub: 'A Government of India Enterprise', addr: 'Metro Rail Bhavan, Kolkata' }
+  'BMRCL': { name: 'BANGALORE METRO RAIL CORPORATION LIMITED', sub: 'A Joint Venture of the Government of India and the Government of Karnataka', addr: 'Bengaluru, Karnataka' },
+  'KMRCL': { name: 'KOLKATA METRO RAIL CORPORATION LIMITED', sub: 'A Government of India Enterprise', addr: 'KMRCL Bhavan, Munshi Premchand Sarani, Kolkata - 700021' },
+  'DMCRL': { name: 'DELHI METRO RAIL CORPORATION LIMITED', sub: 'A Joint Venture of the Government of India and the Government of Delhi', addr: 'New Delhi, Delhi' },
+  'MMRCL': { name: 'MUMBAI METRO RAIL CORPORATION LIMITED', sub: 'A Government of India Enterprise', addr: 'Mumbai, Maharashtra' },
+  'CMRCL': { name: 'CHENNAI METRO RAIL CORPORATION LIMITED', sub: 'A Joint Venture of the Government of India and the Government of Tamil Nadu', addr: 'Chennai, Tamil Nadu' },
+  'Metro Rail': { name: 'METRO RAIL CORPORATION LIMITED', sub: 'A Government of India Enterprise', addr: 'Metro Rail Bhavan, Kolkata' }
 };
 
 function drawOrgHeader(doc, W, org) {
@@ -559,11 +563,31 @@ function generateNCRDocx(data, outputPath) {
 
 function generateLetterDocx(data, outputPath) {
   return new Promise((resolve, reject) => {
+    // ── Header: embed the official letterhead image for BEML, org-name block otherwise ──
+    const org = data.organization || 'BEML';
+    const orgInfo = ORG_HEADERS[org] || ORG_HEADERS['BEML'];
+    const headerChildren = [];
+    if (org === 'BEML') {
+      const headerPath = getAssetPath('beml-letterhead-header.png');
+      if (fs.existsSync(headerPath)) {
+        // A4 usable width ~ 9636 EMU-per-pt; render at 9636 x ~2146 to keep 2480:550 aspect
+        headerChildren.push(new Paragraph({ alignment: AlignmentType.CENTER, children: [
+          new ImageRun({ type: 'png', data: fs.readFileSync(headerPath), transformation: { width: 650, height: Math.round(650 * 550 / 2480) } })
+        ] }));
+      } else {
+        headerChildren.push(new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: orgInfo.name, bold: true, size: 28, font: 'Times New Roman' })] }));
+        headerChildren.push(new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: orgInfo.sub, size: 14, font: 'Times New Roman', color: '666666' })] }));
+        headerChildren.push(new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: orgInfo.addr, size: 14, font: 'Times New Roman', color: '333333' })] }));
+      }
+    } else {
+      headerChildren.push(new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: orgInfo.name, bold: true, size: 26, font: 'Times New Roman' })] }));
+      headerChildren.push(new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: orgInfo.sub, size: 13, font: 'Times New Roman', color: '666666' })] }));
+      headerChildren.push(new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: orgInfo.addr, size: 13, font: 'Times New Roman', color: '333333' })] }));
+    }
+    headerChildren.push(new Paragraph({ spacing: { after: 200 }, children: [] }));
+
     const children = [
-      new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: 'BEML LIMITED', bold: true, size: 28, font: 'Times New Roman' })] }),
-      new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: 'A Government of India Enterprise | Ministry of Defence', size: 14, font: 'Times New Roman', color: '666666' })] }),
-      new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: 'BEML Bhavan, No.1, Outer Ring Road, Bengaluru - 560068', size: 14, font: 'Times New Roman', color: '333333' })] }),
-      new Paragraph({ spacing: { after: 200 }, children: [] }),
+      ...headerChildren,
       new Paragraph({ children: [new TextRun({ text: data.refNumber || '', bold: true, size: 20, font: 'Times New Roman' }), new TextRun({ text: '\t\t\t\t\tDate: ' + (data.date || ''), size: 20, font: 'Times New Roman' })] }),
       new Paragraph({ spacing: { after: 100 }, children: [] }),
       new Paragraph({ children: [new TextRun({ text: 'To,', size: 20, font: 'Times New Roman' })] }),
@@ -584,14 +608,35 @@ function generateLetterDocx(data, outputPath) {
     children.push(new Paragraph({ children: [new TextRun({ text: 'Thanking you,', size: 20, font: 'Times New Roman' })] }));
     children.push(new Paragraph({ children: [new TextRun({ text: 'Yours faithfully,', size: 20, font: 'Times New Roman' })] }));
     children.push(new Paragraph({ spacing: { after: 200 }, children: [] }));
-    children.push(new Paragraph({ children: [new TextRun({ text: 'For BEML Limited', size: 20, font: 'Times New Roman' })] }));
+    children.push(new Paragraph({ children: [new TextRun({ text: 'For ' + orgInfo.name, size: 20, font: 'Times New Roman' })] }));
     children.push(new Paragraph({ spacing: { after: 100 }, children: [] }));
     if (data.signatory) { children.push(new Paragraph({ children: [new TextRun({ text: data.signatory, bold: true, size: 20, font: 'Times New Roman' })] })); }
     if (data.designation) { children.push(new Paragraph({ children: [new TextRun({ text: data.designation, size: 20, font: 'Times New Roman' })] })); }
     if (data.project) { children.push(new Paragraph({ children: [new TextRun({ text: data.project, size: 20, font: 'Times New Roman' })] })); }
     if (data.enclosures) { children.push(new Paragraph({ spacing: { before: 200 }, children: [new TextRun({ text: 'Encl: ' + data.enclosures, size: 18, font: 'Times New Roman' })] })); }
 
-    const doc = new Document({ sections: [{ children }] });
+    // ── Footer: embed the official letterhead footer image (BEML) or a text footer ──
+    let footChildren;
+    if (org === 'BEML') {
+      const footerPath = getAssetPath('beml-letterhead-footer.png');
+      if (fs.existsSync(footerPath)) {
+        footChildren = [new Paragraph({ alignment: AlignmentType.CENTER, children: [
+          new ImageRun({ type: 'png', data: fs.readFileSync(footerPath), transformation: { width: 650, height: Math.round(650 * 450 / 2480) } })
+        ] })];
+      } else {
+        footChildren = [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: orgInfo.addr, size: 12, font: 'Times New Roman', color: '555555' })] })];
+      }
+    } else {
+      footChildren = [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: orgInfo.addr, size: 12, font: 'Times New Roman', color: '555555' })] })];
+    }
+
+    const doc = new Document({
+      sections: [{
+        headers: { default: new Header({ children: [] }) },
+        footers: { default: new Footer({ children: footChildren }) },
+        children
+      }]
+    });
     Packer.toBuffer(doc).then(buffer => { fs.writeFileSync(outputPath, buffer); resolve(outputPath); }).catch(reject);
   });
 }
@@ -887,7 +932,7 @@ function drawBEMLLetterBody(doc, data, L, R, CW, y) {
   // CLOSING
   y = checkPageBreak(doc, y, 140, L, R);
   doc.font('Times-Roman').fontSize(10).fillColor('#000');
-  doc.text('Yours sincerely,', L, y);
+  doc.text('Yours faithfully,', L, y);
   y = doc.y + 6;
   doc.text('for BEML Limited', L, y);
   y = doc.y + 20;

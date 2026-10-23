@@ -58,7 +58,7 @@ if (!isVercel) {
 import { parseNCRContent } from './ncr-parser.js';
 import { generateNCRPdf, generateLetterPdf, generateNCRDocx, generateLetterDocx, generateJointNotePdf, generateJointNoteDocx } from './pdf-generator.js';
 import jwt from 'jsonwebtoken';
-import { BEML_LOCATIONS, getLocationById, getLocationByOrg } from './locations.js';
+import { BEML_LOCATIONS, getLocationById, getLocationByOrg, getDepot, depotStatus, depotTrainsets } from './locations.js';
 import { createUserStore, USER_COLUMNS, verifyPassword, publicProfile, hashPassword } from './user-store.js';
 import {
   PROJECTS, BEML_SCOPE, getProject, scopeFromLegacyOrg, allScopeIds, projectScopeIds,
@@ -164,6 +164,19 @@ const upload = multer({
 let auth, sheets, drive;
 let oauth2Client;
 let allDataCache = {};
+const dataFetchTimes = {};
+const DATA_CACHE_TTL = 15000; // sheet reads hit Google at most once per window
+async function cachedRows(sheetName) {
+  const now = Date.now();
+  if (sheets && now - (dataFetchTimes[sheetName] || 0) > DATA_CACHE_TTL) {
+    try {
+      const result = await sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range: `${sheetName}!A1:BZ` });
+      allDataCache[sheetName] = result.data.values || [];
+      dataFetchTimes[sheetName] = now;
+    } catch { /* keep prior cache */ }
+  }
+  return allDataCache[sheetName] || [];
+}
 const TOKEN_PATH = path.join(__dirname, 'credentials', 'oauth-tokens.json');
 
 function columnToLetter(col) {
@@ -180,14 +193,15 @@ async function loadAllDataCache() {
   if (!sheets) return;
   try {
     const allData = {};
-    for (const [key, sheetName] of Object.entries(SHEET_NAMES)) {
+    await Promise.all(Object.values(SHEET_NAMES).map(async sheetName => {
       try {
         const range = `${sheetName}!A1:BZ`;
         const result = await sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range });
         allData[sheetName] = result.data.values || [];
       } catch { allData[sheetName] = []; }
-    }
-    allDataCache = allData;
+      dataFetchTimes[sheetName] = Date.now();
+    }));
+    Object.assign(allDataCache, allData);
     console.log('✅ Data cache refreshed');
   } catch (err) {
     console.log('⚠️  Cache refresh failed:', err.message);
@@ -2092,15 +2106,20 @@ function rateLimitLogin(req) {
 // (and its hash) remains — no plaintext is ever retained.
 async function ensureBootstrapAdmin() {
   const existingAdmin = userStore.getAll().find(u => u.role === 'global_admin');
-  if (existingAdmin) return existingAdmin;
+  if (existingAdmin) {
+    // The client has no rotation screen, so a set flag would lock the admin
+    // out of every data route. Clear it once so the passcode stays usable.
+    if (existingAdmin.mustChangePassword) userStore.patch(existingAdmin.id, { mustChangePassword: false });
+    return existingAdmin;
+  }
   if (!ADMIN_BOOTSTRAP_PASSCODE) {
     console.log('⚠️  No global administrator exists. Set ADMIN_BOOTSTRAP_PASSCODE to create one.');
     return null;
   }
   const uname = String(ADMIN_USERNAME).trim().toLowerCase();
   if (userStore.findByUsername(uname)) {
-    userStore.patch(userStore.findByUsername(uname).id, { role: 'global_admin', projects: ['ALL'], mustChangePassword: true });
-    console.log(`🔑 Existing user "${uname}" promoted to global administrator (must change password)`);
+    userStore.patch(userStore.findByUsername(uname).id, { role: 'global_admin', projects: ['ALL'], mustChangePassword: false });
+    console.log(`🔑 Existing user "${uname}" promoted to global administrator`);
     return userStore.findByUsername(uname);
   }
   const admin = userStore.create({
@@ -2115,9 +2134,56 @@ async function ensureBootstrapAdmin() {
     state: 'Karnataka',
     role: 'global_admin'
   });
-  userStore.patch(admin.id, { projects: ['ALL'], mustChangePassword: true });
-  console.log(`🔑 Bootstrap global administrator "${uname}" created (password change required on first login)`);
+  userStore.patch(admin.id, { projects: ['ALL'], mustChangePassword: false });
+  console.log(`🔑 Bootstrap global administrator "${uname}" created`);
   return userStore.findByUsername(uname);
+}
+
+// ── One administration account per BEML location/depot ──
+// Same shared operator passcode everywhere (sourced from the environment,
+// never embedded in source). Idempotent: existing accounts are re-scoped,
+// never re-created, so a changed password is preserved.
+function ensureLocationAdmins() {
+  if (!ADMIN_BOOTSTRAP_PASSCODE) return;
+  for (const loc of BEML_LOCATIONS) {
+    const uname = `${loc.userPrefix}-admin`;
+    const scope = scopeFromLegacyOrg(loc.org) || 'BEML';
+    const existing = userStore.findByUsername(uname);
+    if (existing) {
+      userStore.patch(existing.id, { role: 'project_admin', projects: [scope], mustChangePassword: false });
+      continue;
+    }
+    const admin = userStore.create({
+      name: `${loc.name} Administrator`,
+      email: '', phone: '', username: uname,
+      password: ADMIN_BOOTSTRAP_PASSCODE,
+      locationId: loc.id, org: loc.org, city: loc.city, state: loc.state, role: 'project_admin'
+    });
+    userStore.patch(admin.id, { projects: [scope], mustChangePassword: false });
+    console.log(`🔑 Location admin ready: ${uname} → ${loc.org} (${loc.city})`);
+  }
+
+  // …and one per depot inside each location, so every BEML metro depot can be
+  // administered from a single application. Same shared passcode.
+  for (const loc of BEML_LOCATIONS) {
+    const scope = scopeFromLegacyOrg(loc.org) || 'BEML';
+    for (const depot of loc.depots || []) {
+      const uname = `${depot.id}-admin`;
+      const existing = userStore.findByUsername(uname);
+      if (existing) {
+        userStore.patch(existing.id, { role: 'project_admin', projects: [scope], locationId: loc.id, depotId: depot.id, depot: depot.name, mustChangePassword: false });
+        continue;
+      }
+      const admin = userStore.create({
+        name: `${depot.name} Administrator`,
+        email: '', phone: '', username: uname,
+        password: ADMIN_BOOTSTRAP_PASSCODE,
+        locationId: loc.id, org: loc.org, city: depot.city || loc.city, state: loc.state, role: 'project_admin'
+      });
+      userStore.patch(admin.id, { projects: [scope], depotId: depot.id, depot: depot.name, mustChangePassword: false });
+      console.log(`🔑 Depot admin ready: ${uname} → ${loc.org} (${depot.name})`);
+    }
+  }
 }
 
 // Best-effort mirror of a user record into the Google Sheets "Users" tab
@@ -2194,6 +2260,8 @@ app.get('/api/locations', async (req, res) => {
       const letterRows = allDataCache[sheetName] ? Math.max(0, allDataCache[sheetName].length - 1) : 0;
       return {
         ...loc,
+        // Depot status is derived server-side so the client never computes it
+        depots: (loc.depots || []).map(d => ({ ...d, status: depotStatus(d), trainsets: depotTrainsets(d) })),
         users: userStore.countByLocation(loc.id),
         letters: letterRows,
         online: 0
@@ -2216,10 +2284,16 @@ app.get('/api/auth/username-suggest', (req, res) => {
 // ── Register a location-scoped user ──
 app.post('/api/auth/register', async (req, res) => {
   try {
-    const { locationId, name, email, phone, username, password, confirmPassword } = req.body || {};
+    const { locationId, depotId, name, email, phone, username, password, confirmPassword } = req.body || {};
 
     const loc = getLocationById(locationId);
     if (!loc) return res.status(400).json({ success: false, error: 'Invalid or missing location. Please select a BEML location on the map.' });
+
+    // Optional depot must belong to the chosen location (never trust the client)
+    const depot = depotId ? getDepot(locationId, depotId) : null;
+    if (depotId && !depot) {
+      return res.status(400).json({ success: false, error: 'That depot does not belong to the selected location.' });
+    }
 
     if (!name || String(name).trim().length < 2 || String(name).trim().length > 80) {
       return res.status(400).json({ success: false, error: 'Please enter your full name (2–80 characters).' });
@@ -2259,8 +2333,10 @@ app.post('/api/auth/register', async (req, res) => {
     });
     // Multi-project: scope the account to the metro project tied to this location
     const userProjects = [scopeFromLegacyOrg(loc.org) || 'BEML'];
-    userStore.patch(user.id, { projects: userProjects });
+    userStore.patch(user.id, { projects: userProjects, depotId: depot ? depot.id : null, depot: depot ? depot.name : null });
     user.projects = userProjects;
+    user.depotId = depot ? depot.id : null;
+    user.depot = depot ? depot.name : null;
 
     mirrorUserAppend(user).catch(() => {});
 
@@ -2271,6 +2347,7 @@ app.post('/api/auth/register', async (req, res) => {
       success: true, token,
       username: user.username, name: user.name, role: user.role,
       org: user.org, locationId: user.locationId, city: user.city,
+      depotId: user.depotId || null, depot: user.depot || null,
       projects: userProjects,
       depots: DEPOTS
     });
@@ -2318,6 +2395,7 @@ app.post('/api/login', async (req, res) => {
         success: true, token,
         username: updated.username, name: updated.name, role: updated.role,
         org: updated.org, locationId: updated.locationId, city: updated.city,
+        depotId: updated.depotId || null, depot: updated.depot || null,
         projects: scopes,
         mustChangePassword: !!updated.mustChangePassword,
         depots: DEPOTS
@@ -3403,18 +3481,15 @@ app.get('/api/records', authenticateToken, async (req, res) => {
   if (!requireScopes(req, res)) return;
   try {
     const allowed = allowedSheetsFor(req.scopes);
+    const targets = Object.values(SHEET_NAMES).filter(n => allowed.has(n));
+    // Parallel fetch with per-sheet response cache — this endpoint ran ~5s+ (8 sequential Google round-trips)
+    await Promise.all(targets.map(n => cachedRows(n)));
     const allData = {};
-    for (const [key, sheetName] of Object.entries(SHEET_NAMES)) {
-      if (!allowed.has(sheetName)) continue;   // never read other projects' sheets
-      try {
-        const range = `${sheetName}!A1:BZ`;
-        const result = await sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range });
-        allData[sheetName] = visibleRows(sheetName, result.data.values || [], req.scopes);
-      } catch { allData[sheetName] = []; }
+    for (const sheetName of targets) {
+      allData[sheetName] = visibleRows(sheetName, allDataCache[sheetName] || [], req.scopes);
     }
-    allDataCache = allData;
     res.json({ success: true, data: allData });
-  } catch (err) { res.status(500).json({ success: false, error: err.message }); }
+  } catch (err) { console.error('GET /api/records failed:', err.message); res.status(500).json({ success: false, error: err.message }); }
 });
 
 app.get('/api/records/:sheetName', authenticateToken, async (req, res) => {
@@ -3423,9 +3498,7 @@ app.get('/api/records/:sheetName', authenticateToken, async (req, res) => {
   try {
     const sheetName = decodeURIComponent(req.params.sheetName);
     if (!guardSheet(req, res, sheetName)) return;
-    const range = `${sheetName}!A1:BZ`;
-    const result = await sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range });
-    res.json({ success: true, data: visibleRows(sheetName, result.data.values || [], req.scopes) });
+    res.json({ success: true, data: visibleRows(sheetName, await cachedRows(sheetName), req.scopes) });
   } catch (err) { res.status(500).json({ success: false, error: err.message }); }
 });
 
@@ -4132,28 +4205,80 @@ async function callAI(prompt, systemPrompt) {
 
 app.post('/api/ai/generate-letter', authenticateToken, async (req, res) => {
   try {
-    const { org, subject, recipient, context, tone, letterType } = req.body;
+    const { org, subject, recipient, context, tone, letterType, full, adv } = req.body;
     const orgName = org || 'BEML';
-    let content = '';
-    let source = 'ai';
-
-    try {
-      const prompt = `Generate a professional ${orgName} official letter with the following details:
-Subject: ${subject || 'To be determined'}
+    const A = adv || {};
+    const lang = A.language || 'English';
+    const len = A.length || 'Standard (1–2 pages)';
+    const paras = A.paragraphs || '4–6';
+    const numStyle = A.numbering || 'roman';
+    const spacing = A.spacing || '1.5';
+    const refs = (A.references || '').trim();
+    const extra = (A.extra || '').trim();
+    const signoffRaw = A.signoff || 'Yours faithfully,|For |Authorised Signatory';
+    const [closeLine, forLine, signRole] = signoffRaw.split('|').map(s => (s || '').trim());
+    const numLabel = { roman: '(i), (ii), (iii)', numeric: '1., 2., 3.', 'arabic-paren': '(1), (2), (3)', none: 'no numbering — flowing prose' }[numStyle] || '(i), (ii), (iii)';
+    const detail = `Subject: ${subject || 'To be determined'}
 Recipient: ${recipient || 'Sir/Madam'}
 Context/Purpose: ${context || 'Official correspondence'}
 Letter Type: ${letterType || 'General'}
 Tone: ${tone || 'Professional and formal'}
+Language: ${lang}
+Length: ${len}
+Body paragraphs: ${paras}
+Numbering style: ${numLabel}
+Line spacing: ${spacing}${refs ? `
+Must cite these reference(s): ${refs}` : ''}${extra ? `
+Additional instructions: ${extra}` : ''}`;
 
-Generate the complete letter body in professional railway documentation style. Include proper salutation, structured body paragraphs, and formal closing. Use Indian English and official government/PSU communication style.`;
-      content = await callAI(prompt);
+    // full=true → the complete free-zoned letter (address block, Sub, Ref, closing,
+    // signature) so it can go straight into a BEML letter draft and PDF as-is.
+    const fullPrompt = `Generate a COMPLETE ${orgName} official outgoing letter, ready for signature, covering:
+${detail}
+
+Write the letter exactly in this structure (plain text, no markdown, no commentary, blank line between blocks).
+Language: ${lang === 'Hindi' ? 'write the ENTIRE letter in Hindi (Rajbhasha, Devanagari script)' : lang === 'English with Hindi opening' ? 'write in English but open with a one-line Hindi salutation (e.g. महोदय/महोदया,) before the English body' : 'write in English'}. Use Indian railway/PSU terminology.
+Body: ${paras} paragraphs, ${len} overall. Number any key requests or lists using ${numLabel}. ${spacing === 'single' ? 'Keep paragraphs compact (single spacing).' : spacing === 'double' ? 'Use generous spacing between points.' : 'Use moderate spacing between points.'}
+${refs ? `Cite these reference(s) in the Ref: line and/or body: ${refs}.` : 'Ref: [relevant incoming letter reference(s), or ‘Nil’].'}
+${extra ? 'Additional instructions to obey: ' + extra : ''}
+
+To
+${recipient || 'The Project Director, [Metro Organization]'}
+[name / designation / city lines]
+
+Sub: ${subject || '[subject]'}
+Ref: ${refs || '[relevant incoming letter reference(s), or ‘Nil’]'}
+
+Dear Sir/Madam,
+
+[Body covering EVERY point in the context, as ${paras} paragraphs in the requested language and length.]
+
+${closeLine || 'Yours faithfully,'}
+${forLine ? forLine + ' ' + orgName : 'For ' + orgName}
+
+(${signRole || 'Authorised Signatory'})
+Designation: [designation]
+Place: [city]
+Date: ${new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+
+Output ONLY the letter text.`;
+
+    const bodyPrompt = `Generate a professional ${orgName} official letter covering: ${detail}
+
+Write the complete letter body in professional railway/PSU documentation style with a proper salutation, ${paras} structured paragraphs, and a formal closing (${closeLine || 'Yours faithfully,'}). Language: ${lang === 'Hindi' ? 'entirely in Hindi (Devanagari)' : lang === 'English with Hindi opening' ? 'English with a one-line Hindi salutation' : 'English'}. Number lists using ${numLabel}. ${refs ? 'Cite reference(s): ' + refs + '.' : ''} ${extra ? 'Extra instructions: ' + extra + '.' : ''} Use Indian English and official government/PSU communication style.`;
+
+    let content = '';
+    let source = 'ai';
+
+    try {
+      content = await callAI(full ? fullPrompt : bodyPrompt);
     } catch (aiErr) {
       console.log('⚠️ AI generation failed, using template:', aiErr.message);
       source = 'template';
       content = generateLetterTemplate({ org: orgName, subject, recipient, context, letterType });
     }
 
-    res.json({ success: true, content, source });
+    res.json({ success: true, content, source, full: !!full });
   } catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
@@ -4448,7 +4573,9 @@ app.use((err, req, res, next) => {
   res.status(500).json({ success: false, error: err.message || 'Internal server error' });
 });
 
-const PORT = process.env.PORT || 3000;
+// Guard against PORT=0/garbage in the shell env (dotenv never overrides it), which
+// would bind an ephemeral port and make http://localhost:3000 unreachable.
+const PORT = Number(process.env.PORT) || 3000;
 
 // Initialize Google Auth and start server
 async function startServer() {
@@ -4461,6 +4588,13 @@ async function startServer() {
     if (admin) console.log(`🔐 Global administrator ready: ${admin.username}`);
   } catch (e) {
     console.log('⚠️ Bootstrap admin init failed:', e.message);
+  }
+
+  // One administration account per BEML location/depot (shared passcode)
+  try {
+    ensureLocationAdmins();
+  } catch (e) {
+    console.log('⚠️ Location admin init failed:', e.message);
   }
   
   // Ensure all sheets exist and have headers (only when running locally)

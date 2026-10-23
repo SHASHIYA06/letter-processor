@@ -9,38 +9,38 @@
   <style>
     *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
     :root{
-      --primary:#2563EB;--primary-hover:#1D4ED8;--primary-light:#DBEAFE;
-      --navy:#1E293B;--navy-dark:#0F172A;--navy-light:#334155;
+      --primary:#0D9488;--primary-hover:#0F766E;--primary-light:#CCFBF1;
+      --navy:#134E4A;--navy-dark:#042F2E;--navy-light:#115E59;
       --success:#10B981;--success-bg:rgba(16,185,129,.1);
-      --warning:#F59E0B;--warning-bg:rgba(245,158,11,.1);
-      --error:#EF4444;--error-bg:rgba(239,68,68,.1);
-      --bg:#F8FAFC;--card:#FFFFFF;--border:#E2E8F0;
-      --text:#1E293B;--text2:#475569;--text3:#94A3B8;
-      --sidebar:#1E293B;--sidebar-hover:#334155;--sidebar-active:#2563EB;
-      --beml:#F59E0B;--kmrcl:#8B5CF6;--metro:#06B6D4;--ncr:#EF4444;--jn:#10B981;
-      --radius:12px;--radius-sm:8px;--shadow:0 1px 3px rgba(0,0,0,.1);
-      --shadow-lg:0 10px 40px rgba(0,0,0,.15);
+      --warning:#D97706;--warning-bg:rgba(217,119,6,.1);
+      --error:#DC2626;--error-bg:rgba(220,38,38,.1);
+      --bg:#F0FDFA;--card:#FFFFFF;--border:#CCECE4;
+      --text:#134E4A;--text2:#3F6B66;--text3:#6B9A94;
+      --sidebar:#042F2E;--sidebar-hover:#134E4A;--sidebar-active:#0D9488;
+      --beml:#D97706;--kmrcl:#8B5CF6;--metro:#06B6D4;--ncr:#DC2626;--jn:#10B981;
+      --radius:12px;--radius-sm:8px;--shadow:0 1px 3px rgba(4,47,46,.08);
+      --shadow-lg:0 10px 40px rgba(4,47,46,.14);
     }
     body{font-family:'Inter',-apple-system,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;display:flex}
-    .sidebar{width:260px;background:linear-gradient(180deg,#0F172A 0%,#1E293B 100%);color:white;display:flex;flex-direction:column;position:fixed;height:100vh;z-index:100;border-right:1px solid rgba(255,255,255,.05)}
+    .sidebar{width:260px;background:linear-gradient(180deg,#042F2E 0%,#134E4A 100%);color:white;display:flex;flex-direction:column;position:fixed;height:100vh;z-index:100;border-right:1px solid rgba(255,255,255,.05)}
     .sidebar-logo{padding:20px 24px;border-bottom:1px solid rgba(255,255,255,.08)}
-    .sidebar-logo h1{font-size:1.4rem;font-weight:800;background:linear-gradient(135deg,#60A5FA,#A78BFA);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+    .sidebar-logo h1{font-size:1.4rem;font-weight:800;background:linear-gradient(135deg,#2DD4BF,#A7F3D0);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
     .sidebar-logo p{font-size:.65rem;color:var(--text3);margin-top:2px;opacity:.7}
     .sidebar-menu{flex:1;padding:12px 0;overflow-y:auto}
     .menu-item{display:flex;align-items:center;gap:10px;padding:10px 24px;color:rgba(255,255,255,.55);cursor:pointer;transition:all .2s;font-size:.82rem;border-left:3px solid transparent;border-radius:0 8px 8px 0;margin-right:8px}
     .menu-item:hover{background:rgba(255,255,255,.08);color:rgba(255,255,255,.9)}
-    .menu-item.active{background:rgba(59,130,246,.2);color:#60A5FA;border-left-color:#60A5FA;font-weight:600}
+    .menu-item.active{background:rgba(45,212,191,.15);color:#2DD4BF;border-left-color:#2DD4BF;font-weight:600}
     .menu-item .icon{width:20px;text-align:center}
     .menu-section{padding:4px 24px;font-size:.6rem;color:var(--text3);text-transform:uppercase;letter-spacing:1px;margin-top:6px}
     .main{margin-left:260px;flex:1;min-height:100vh;background:var(--bg)}
     .topbar{background:var(--card);border-bottom:1px solid var(--border);padding:14px 24px;display:flex;align-items:center;gap:16px;position:sticky;top:0;z-index:50;box-shadow:0 1px 3px rgba(0,0,0,.05)}
     .search-box{flex:1;max-width:500px;position:relative}
     .search-box input{width:100%;padding:10px 16px 10px 40px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);font-size:.85rem;color:var(--text)}
-    .search-box input:focus{outline:none;border-color:var(--primary);box-shadow:0 0 0 3px rgba(37,99,235,.1)}
+    .search-box input:focus{outline:none;border-color:var(--primary);box-shadow:0 0 0 3px rgba(13,148,136,.12)}
     .search-box .search-icon{position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--text3)}
     .topbar-actions{display:flex;gap:8px;margin-left:auto}
     .btn{padding:8px 16px;border:none;border-radius:var(--radius-sm);font-family:inherit;font-size:.8rem;font-weight:600;cursor:pointer;transition:all .2s;display:inline-flex;align-items:center;gap:6px}
-    .btn-primary{background:var(--primary);color:white;box-shadow:0 2px 8px rgba(37,99,235,.25)}.btn-primary:hover{background:var(--primary-hover);box-shadow:0 4px 12px rgba(37,99,235,.35);transform:translateY(-1px)}
+    .btn-primary{background:var(--primary);color:white;box-shadow:0 2px 8px rgba(13,148,136,.25)}.btn-primary:hover{background:var(--primary-hover);box-shadow:0 4px 12px rgba(13,148,136,.35);transform:translateY(-1px)}
     .btn-success{background:var(--success);color:white;box-shadow:0 2px 8px rgba(16,185,129,.25)}.btn-success:hover{background:#059669;transform:translateY(-1px)}
     .btn-secondary{background:var(--bg);color:var(--text);border:1px solid var(--border)}.btn-secondary:hover{background:var(--border);transform:translateY(-1px)}
     .btn-danger{background:var(--error);color:white;box-shadow:0 2px 8px rgba(239,68,68,.25)}.btn-danger:hover{background:#DC2626;transform:translateY(-1px)}
@@ -65,7 +65,7 @@
     .table{width:100%;border-collapse:collapse}
     .table th{padding:12px 16px;text-align:left;font-size:.7rem;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;background:var(--bg);border-bottom:1px solid var(--border)}
     .table td{padding:12px 16px;border-bottom:1px solid var(--border);font-size:.85rem}
-    .table tr:hover td{background:rgba(37,99,235,.02)}
+    .table tr:hover td{background:rgba(13,148,136,.03)}
     .table .actions{display:flex;gap:6px}
     .badge{padding:4px 10px;border-radius:20px;font-size:.7rem;font-weight:600}
     .badge-beml{background:rgba(245,158,11,.1);color:var(--beml)}
@@ -85,7 +85,7 @@
     .form-group{margin-bottom:16px}
     .form-group label{display:block;font-size:.75rem;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px}
     .form-group input,.form-group select,.form-group textarea{width:100%;padding:10px 14px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);font-size:.85rem;color:var(--text)}
-    .form-group input:focus,.form-group select:focus,.form-group textarea:focus{outline:none;border-color:var(--primary);box-shadow:0 0 0 3px rgba(37,99,235,.1)}
+    .form-group input:focus,.form-group select:focus,.form-group textarea:focus{outline:none;border-color:var(--primary);box-shadow:0 0 0 3px rgba(13,148,136,.12)}
     .form-row{display:grid;grid-template-columns:1fr 1fr;gap:16px}
     .drop-zone{border:2px dashed var(--border);border-radius:var(--radius);padding:40px;text-align:center;cursor:pointer;transition:all .2s;position:relative}
     .drop-zone:hover,.drop-zone.dragover{border-color:var(--primary);background:var(--primary-light)}
@@ -97,7 +97,7 @@
     .toast.show{transform:translateY(0);opacity:1}
     .toast.success{background:linear-gradient(135deg,#10B981,#059669);color:white}
     .toast.error{background:linear-gradient(135deg,#EF4444,#DC2626);color:white}
-    .toast.info{background:linear-gradient(135deg,#3B82F6,#2563EB);color:white}
+    .toast.info{background:linear-gradient(135deg,#0D9488,#0F766E);color:white}
     .spinner{display:inline-block;width:16px;height:16px;border:2px solid rgba(255,255,255,.3);border-top-color:white;border-radius:50%;animation:spin .8s linear infinite}
     @keyframes spin{to{transform:rotate(360deg)}}
     .empty-state{text-align:center;padding:60px 20px;color:var(--text3)}
@@ -118,26 +118,26 @@
     .ncr-required{color:var(--error)!important;font-weight:700!important}
     .ncr-required::after{content:' *';color:var(--error)}
     .ncr-select{width:100%;padding:8px 12px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);font-size:.8rem;color:var(--text);cursor:pointer}
-    .ncr-select:focus{outline:none;border-color:var(--primary);box-shadow:0 0 0 3px rgba(37,99,235,.1)}
+    .ncr-select:focus{outline:none;border-color:var(--primary);box-shadow:0 0 0 3px rgba(13,148,136,.12)}
     .ncr-dd-wrapper{position:relative}
     .ncr-dd-input{width:100%;padding:8px 12px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);font-size:.8rem;color:var(--text)}
-    .ncr-dd-input:focus{outline:none;border-color:var(--primary);box-shadow:0 0 0 3px rgba(37,99,235,.1)}
+    .ncr-dd-input:focus{outline:none;border-color:var(--primary);box-shadow:0 0 0 3px rgba(13,148,136,.12)}
     .ncr-dd-list{display:none;position:absolute;top:100%;left:0;right:0;background:white;border:1px solid var(--border);border-radius:var(--radius-sm);max-height:200px;overflow-y:auto;z-index:100;box-shadow:var(--shadow-lg)}
     .ncr-dd-item{padding:8px 12px;cursor:pointer;font-size:.8rem;border-bottom:1px solid var(--border)}
     .ncr-dd-item:hover{background:var(--primary-light);color:var(--primary)}
     .ncr-dd-item:last-child{border-bottom:none;color:var(--primary);font-weight:600}
     
     /* Login Styles */
-    .login-container{position:fixed;inset:0;background:linear-gradient(135deg,#0F172A 0%,#1E293B 50%,#334155 100%);display:flex;align-items:center;justify-content:center;z-index:1000}
+    .login-container{position:fixed;inset:0;background:linear-gradient(135deg,#042F2E 0%,#134E4A 50%,#115E59 100%);display:flex;align-items:center;justify-content:center;z-index:1000}
     .login-box{background:var(--card);border-radius:20px;padding:44px;width:100%;max-width:420px;box-shadow:0 25px 80px rgba(0,0,0,.4);border:1px solid rgba(255,255,255,.1)}
     .login-logo{text-align:center;margin-bottom:36px}
-    .login-logo h1{font-size:2rem;font-weight:800;background:linear-gradient(135deg,#3B82F6,#8B5CF6);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+    .login-logo h1{font-size:2rem;font-weight:800;background:linear-gradient(135deg,#0D9488,#2DD4BF);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
     .login-logo p{color:var(--text3);font-size:.82rem;margin-top:6px}
     .login-form .form-group{margin-bottom:20px}
     .login-form input{width:100%;padding:14px 16px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);font-size:.9rem;color:var(--text)}
-    .login-form input:focus{outline:none;border-color:var(--primary);box-shadow:0 0 0 3px rgba(37,99,235,.1)}
-    .login-btn{width:100%;padding:14px;background:linear-gradient(135deg,#3B82F6,#2563EB);color:white;border:none;border-radius:10px;font-size:1rem;font-weight:700;cursor:pointer;transition:all .2s;box-shadow:0 4px 15px rgba(37,99,235,.35)}
-    .login-btn:hover{background:linear-gradient(135deg,#2563EB,#1D4ED8);box-shadow:0 6px 20px rgba(37,99,235,.45);transform:translateY(-1px)}
+    .login-form input:focus{outline:none;border-color:var(--primary);box-shadow:0 0 0 3px rgba(13,148,136,.1)}
+    .login-btn{width:100%;padding:14px;background:linear-gradient(135deg,#0D9488,#0F766E);color:white;border:none;border-radius:10px;font-size:1rem;font-weight:700;cursor:pointer;transition:all .2s;box-shadow:0 4px 15px rgba(13,148,136,.35)}
+    .login-btn:hover{background:linear-gradient(135deg,#0F766E,#115E59);box-shadow:0 6px 20px rgba(13,148,136,.45);transform:translateY(-1px)}
     .login-btn:disabled{opacity:.5;cursor:not-allowed}
     .login-error{color:var(--error);font-size:.8rem;margin-top:12px;text-align:center;display:none}
     .user-badge{display:flex;align-items:center;gap:8px;padding:6px 12px;background:var(--bg);border-radius:20px;font-size:.75rem;color:var(--text2)}
@@ -168,12 +168,12 @@
       <aside class="map-side">
         <button class="map-back" id="mapBack" type="button">← Globe</button>
         <div class="map-heading">
-          <h2>Select your <em>BEML</em> location</h2>
-          <p>Every account is scoped to a metro business location — your documents, letters and NCR records stay organized location-wise.</p>
+          <h2 id="mapHeading">Select your <em>BEML</em> location</h2>
+          <p id="mapSub">Pick a city on the 3D map to see every BEML depot there — delivered, in delivery and planned rolling stock.</p>
         </div>
         <div class="map-stats">
           <div class="map-stat"><b id="statLocations">6</b><span>Locations</span></div>
-          <div class="map-stat"><b id="statUsers">0</b><span>Users</span></div>
+          <div class="map-stat"><b id="statDepots">19</b><span>Depots</span></div>
           <div class="map-stat"><b id="statTrainsets">1357</b><span>Trainsets</span></div>
         </div>
         <div class="location-cards" id="locationCards"></div>
@@ -181,6 +181,7 @@
       <div class="map-canvas-wrap">
         <canvas id="indiaCanvas"></canvas>
         <div class="map-live" id="mapLive"><span class="live-dot"></span>LIVE</div>
+        <div class="map-legend" id="mapLegend"></div>
         <div class="map-tooltip" id="mapTooltip"></div>
       </div>
 
@@ -191,6 +192,7 @@
           <div class="auth-loc-org"><span class="org-dot"></span><b id="authLocOrg">BEML</b></div>
           <div class="auth-loc-name" id="authLocName">BEML South Complex</div>
           <div class="auth-loc-city" id="authLocCity">Bengaluru, Karnataka</div>
+          <div class="auth-loc-depot" id="authLocDepot" style="display:none"></div>
           <div class="auth-loc-projects" id="authLocProjects"></div>
         </div>
         <div class="auth-body">
@@ -253,6 +255,7 @@
               </div>
             </div>
             <button type="submit" class="auth-submit" id="signinSubmit">Sign In →</button>
+            <div class="auth-admin-hint" id="signinAdminHint" style="display:none">This depot's admin ID is <b id="signinAdminId"></b> — sign in with the shared depot passcode.</div>
             <div class="auth-note">Signing in to <b id="signinLocChip">BEML</b>. Accounts are location-scoped — pick your location on the map first, or sign in with your existing ID.</div>
           </form>
 
@@ -510,7 +513,7 @@
           </div>
         </div>
           <div class="dash-stats-4" style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:20px">
-            <div style="background:linear-gradient(135deg,#3B82F6,#1D4ED8);border-radius:12px;padding:18px;color:white;box-shadow:0 4px 15px rgba(37,99,235,.3)">
+            <div style="background:linear-gradient(135deg,#0D9488,#0F766E);border-radius:12px;padding:18px;color:white;box-shadow:0 4px 15px rgba(13,148,136,.3)">
               <div style="display:flex;justify-content:space-between;align-items:start">
                 <div><div style="font-size:.68rem;opacity:.85;text-transform:uppercase;letter-spacing:.5px">Total Documents</div><div style="font-size:2rem;font-weight:800;margin-top:4px">${stats.total}</div></div>
                 <div style="width:42px;height:42px;background:rgba(255,255,255,.2);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:1.2rem">📄</div>
@@ -1822,7 +1825,7 @@
           <div class="card" style="overflow-y:auto;padding:20px">
             <h3 style="margin-bottom:16px;font-size:1rem">Letter Form</h3>
             <div style="font-size:.75rem;color:var(--text3);margin-bottom:12px;padding:8px;background:var(--success-bg);border-radius:6px">Auto-saves every 5 seconds</div>
-            <div class="form-group"><label>Organization</label><select id="letter_org" onchange="updateLetterPreview(); regenerateLetterRef()"><option value="BEML">BEML</option><option value="KMRCL">KMRCL</option><option value="Metro Rail">Metro Rail</option></select></div>
+            <div class="form-group"><label>Organization</label><select id="letter_org" onchange="updateLetterPreview(); regenerateLetterRef()"><option value="BEML">BEML</option><option value="BMRCL">BMRCL</option><option value="KMRCL">KMRCL</option><option value="DMCRL">DMCRL</option><option value="MMRCL">MMRCL</option><option value="CMRCL">CMRCL</option><option value="Metro Rail">Metro Rail (legacy)</option></select></div>
             <div class="form-row"><div class="form-group"><label>Letter Number</label><input id="letter_refNumber" value="${esc(refNo)}" onchange="updateLetterPreview()"></div>
             <div class="form-group"><label>Date</label><input type="text" id="letter_date" value="${new Date().toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'})}" onchange="updateLetterPreview()"></div></div>
             <div class="form-group"><label>From</label><input id="letter_from" value="" placeholder="Sender name and designation" onchange="updateLetterPreview()"></div>
@@ -1899,25 +1902,43 @@
       const d = getLetterData();
       const el = document.getElementById('letterPreview');
       if (!el) return;
-      const letterBodyHtml = (d.letterContent || '').split('\n').map(l => `<p style="margin:4px 0">${esc(l) || '&nbsp;'}</p>`).join('');
+      // Mirror the PDF's body handling: the fixed header/closing below already
+      // print Ref/Date/To/Sub and the signature, so keep the body free of them
+      const letterBodyHtml = (d.letterContent || '')
+        .replace(/^(Dear\s+(?:Sir|Madam|Sir\/Madam|Team)[,]?\s*\n?)/i, '')
+        .replace(/\n*(Yours\s+(?:sincerely|faithfully|truly)[,]?\s*[\s\S]*)$/i, '')
+        .trim()
+        .split('\n').map(l => `<p style="margin:4px 0">${esc(l) || '&nbsp;'}</p>`).join('');
       
       // Organization-specific header
       const org = d.organization || 'BEML';
       const orgHeaders = {
         'BEML': { name: 'BEML LIMITED', addr: 'BEML Bhavan, No.1, Outer Ring Road, Bengaluru - 560068', sub: 'A Government of India Enterprise under Ministry of Defence' },
-        'KMRCL': { name: 'KOLKATA METRA RAIL CORPORATION LTD.', addr: 'KMRCL Bhavan, Salt Lake City, Kolkata - 700064', sub: 'A Government of India Enterprise' },
-        'Metro Rail': { name: 'METRO RAIL CORPORATION LTD.', addr: 'Metro Rail Bhavan, Kolkata', sub: 'A Government of India Enterprise' }
+        'BMRCL': { name: 'BANGALORE METRO RAIL CORPORATION LIMITED', addr: 'Bengaluru, Karnataka', sub: 'A Joint Venture of the Government of India and the Government of Karnataka' },
+        'KMRCL': { name: 'KOLKATA METRO RAIL CORPORATION LIMITED', addr: 'KMRCL Bhavan, Munshi Premchand Sarani, Kolkata - 700021', sub: 'A Government of India Enterprise' },
+        'DMCRL': { name: 'DELHI METRO RAIL CORPORATION LIMITED', addr: 'New Delhi, Delhi', sub: 'A Joint Venture of the Government of India and the Government of Delhi' },
+        'MMRCL': { name: 'MUMBAI METRO RAIL CORPORATION LIMITED', addr: 'Mumbai, Maharashtra', sub: 'A Government of India Enterprise' },
+        'CMRCL': { name: 'CHENNAI METRO RAIL CORPORATION LIMITED', addr: 'Chennai, Tamil Nadu', sub: 'A Joint Venture of the Government of India and the Government of Tamil Nadu' },
+        'Metro Rail': { name: 'METRO RAIL CORPORATION LIMITED', addr: 'Metro Rail Bhavan, Kolkata', sub: 'A Government of India Enterprise' }
       };
       const orgInfo = orgHeaders[org] || orgHeaders['BEML'];
+      // BEML uses the official letterhead image (same asset as the generated PDF)
+      const letterHeadHtml = org === 'BEML'
+        ? `<img src="/assets/beml-letterhead-header.png" alt="BEML letterhead" style="width:100%;display:block;margin-bottom:10px">
+           <hr style="border:1px solid #000;margin-bottom:10px">`
+        : `<div style="text-align:center;margin-bottom:15px">
+             <div style="font-size:15px;font-weight:bold;text-transform:uppercase">${orgInfo.name}</div>
+             <div style="font-size:8px;color:#555;margin-top:2px">${orgInfo.sub}</div>
+             <div style="font-size:9px;color:#333;margin-top:4px">${orgInfo.addr}</div>
+           </div>
+           <hr style="border:1px solid #000;margin-bottom:10px">`;
+      // BEML uses the official footer image; other orgs show a text footer line
+      const letterFootHtml = org === 'BEML'
+        ? `<img src="/assets/beml-letterhead-footer.png" alt="BEML letterhead footer" style="width:100%;display:block">`
+        : `<div style="border-top:1px solid #999;padding-top:5px;text-align:center;font-size:9px;color:#555">${esc(orgInfo.addr)}</div>`;
       
-      el.innerHTML = `
-        <div style="font-family:serif;border:2px solid #000;padding:30px;min-height:700px;background:white">
-          <div style="text-align:center;margin-bottom:15px">
-            <div style="font-size:15px;font-weight:bold;text-transform:uppercase">${orgInfo.name}</div>
-            <div style="font-size:8px;color:#555;margin-top:2px">${orgInfo.sub}</div>
-            <div style="font-size:9px;color:#333;margin-top:4px">${orgInfo.addr}</div>
-          </div>
-          <hr style="border:1px solid #000;margin-bottom:10px">
+      el.innerHTML = `          <div style="font-family:serif;border:2px solid #000;padding:30px;min-height:900px;background:white;position:relative">
+          ${letterHeadHtml}
           <table style="width:100%;font-size:11px;margin-bottom:10px">
             <tr><td style="font-weight:bold">Our Ref: ${esc(d.refNumber)}</td>
             <td style="text-align:right">Date: ${esc(d.date)}</td></tr>
@@ -1939,7 +1960,9 @@
             ${d.project ? `<p>${esc(d.project)}</p>` : ''}
           </div>
           ${d.cc ? `<div style="font-size:10px;margin-top:15px;border-top:1px solid #ccc;padding-top:8px"><strong>Copy to:</strong><br>${esc(d.cc).replace(/\n/g,'<br>')}</div>` : ''}
-        </div>`;
+          <div style="position:absolute;left:30px;right:30px;bottom:20px">${letterFootHtml}</div>
+        </div>
+      </div>`;
     }
 
     async function autoSaveLetter() {
@@ -2600,15 +2623,27 @@
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;height:calc(100vh - 180px)">
           <div class="card" style="overflow-y:auto;padding:20px">
             <h3 style="margin-bottom:16px;font-size:1rem">Letter Details</h3>
-            <div class="form-group"><label>Organization</label><select id="ai_org"><option value="BEML">BEML</option><option value="KMRCL">KMRCL</option><option value="Metro Rail">Metro Rail</option></select></div>
-            <div class="form-group"><label>Letter Type</label><select id="ai_type"><option value="General">General</option><option value="Technical">Technical</option><option value="Commercial">Commercial</option><option value="Compliance">Compliance</option><option value="Approval Request">Approval Request</option><option value="PDN/Obsolescence">PDN/Obsolescence</option></select></div>
+            <div class="form-group"><label>Organization</label><select id="ai_org"><option value="BEML">BEML</option><option value="BMRCL">BMRCL</option><option value="KMRCL">KMRCL</option><option value="DMCRL">DMCRL</option><option value="MMRCL">MMRCL</option><option value="CMRCL">CMRCL</option><option value="Metro Rail">Metro Rail (legacy)</option></select></div>
+            <div class="form-group"><label>Letter Type</label><select id="ai_type"><option value="General">General / Administrative</option><option value="Technical">Technical Clarification</option><option value="Commercial">Commercial / Commercial Terms</option><option value="Compliance">Compliance / Quality (QA-QC)</option><option value="Approval Request">Approval / Sanction Request</option><option value="PDN/Obsolescence">PDN / Obsolescence</option><option value="Inspection">Inspection / Expediting</option><option value="Warranty">Warranty / Deficiency</option><option value="Payment">Payment / Financial</option><option value="Meeting">Meeting / Review Minutes</option><option value="Invitation">Invitation</option><option value="Appointment">Appointment / Deputation</option><option value="Contractual">Contractual / Agreement</option><option value="Safety">Safety / Incident</option><option value="Project Update">Project Status / Progress</option><option value="RFQ">RFQ / Enquiry / Tender</option><option value="Work Order">Work Order / Purchase Order</option><option value="Test Report">Test / Acceptance Report</option></select></div>
             <div class="form-group"><label>Subject / Purpose *</label><input id="ai_subject" placeholder="e.g. Request for technical clarification on door spindle specification"></div>
             <div class="form-group"><label>Recipient</label><input id="ai_recipient" placeholder="e.g. The Project Director, KMRCL"></div>
             <div class="form-group"><label>Context / Key Points *</label><textarea id="ai_context" rows="5" placeholder="Describe what the letter should cover. Include technical details, references, specific requirements..."></textarea></div>
-            <div class="form-group"><label>Tone</label><select id="ai_tone"><option value="Professional and formal">Professional</option><option value="Urgent and firm">Urgent</option><option value="Courteous and requesting">Courteous</option><option value="Technical and precise">Technical</option></select></div>
+            <div class="form-group"><label>Tone</label><select id="ai_tone"><option value="Professional and formal">Professional (formal)</option><option value="Urgent and firm">Urgent &amp; firm</option><option value="Courteous and requesting">Courteous &amp; requesting</option><option value="Technical and precise">Technical &amp; precise</option><option value="Assertive and referential">Assertive (referencing clauses)</option><option value="Polite but firm reminder">Reminder (polite but firm)</option><option value="Apologetic and corrective">Apologetic &amp; corrective</option><option value="Concise and direct">Concise &amp; direct (executive)</option><option value="Formal government/PSU">Government / PSU (Rajbhasha)</option></select></div>
+            <div id="ai_advToggle" style="cursor:pointer;user-select:none;font-size:.75rem;font-weight:600;color:var(--accent,#2563EB);margin:6px 0 2px" onclick="toggleAiAdvanced()">▶ Advanced setup (language, length, paragraphs, sign-off)</div>
+            <div id="ai_advanced" style="display:none;border:1px solid var(--border,#1E293B);border-radius:8px;padding:12px;margin-bottom:8px">
+              <div class="form-group"><label>Language</label><select id="ai_lang"><option value="English">English</option><option value="Hindi">Hindi (राजभाषा)</option><option value="English with Hindi opening">English + Hindi salutation</option></select></div>
+              <div class="form-group"><label>Length</label><select id="ai_length"><option value="Concise (1 page)">Concise — 1 page</option><option value="Standard (1–2 pages)" selected>Standard — 1–2 pages</option><option value="Detailed (2–3 pages)">Detailed — 2–3 pages</option><option value="Elaborate (multi-page)">Elaborate — multi-page annexure-style</option></select></div>
+              <div class="form-group"><label>Body paragraphs</label><select id="ai_paras"><option value="3–4">3–4</option><option value="4–6" selected>4–6</option><option value="6–8">6–8</option><option value="As needed">As needed</option></select></div>
+              <div class="form-row"><div class="form-group"><label>Numbered items</label><select id="ai_numbering"><option value="roman">Roman — (i), (ii), (iii)</option><option value="numeric">Numeric — 1., 2., 3.</option><option value="arabic-paren">Parenthesised — (1), (2)</option><option value="none">None — flowing prose</option></select></div><div class="form-group"><label>Line spacing</label><select id="ai_spacing"><option value="single">Single</option><option value="1.5" selected>1.5</option><option value="double">Double</option></select></div></div>
+              <div class="form-group"><label>References to cite</label><input id="ai_refs" placeholder="e.g. MOU dt. 12.04.2026, Clause 7.2, LOA No. BEML/PO/25-26/114"></div>
+              <div class="form-group"><label>Sign-off / closings</label><select id="ai_signoff"><option value="Yours faithfully,|For |Authorised Signatory">Yours faithfully — For BEML (Auth. Signatory)</option><option value="Yours faithfully,|For |Head of Department">Yours faithfully — For … (Head of Dept)</option><option value="Yours sincerely,||">Yours sincerely</option><option value="Yours truly,||">Yours truly</option><option value="Regards,||">Regards (semi-formal)</option><option value="With regards,|For |Authorised Signatory">With regards — For … (Auth. Signatory)</option></select></div>
+              <div class="form-group"><label>Extra instructions (optional)</label><textarea id="ai_extra" rows="2" placeholder="Anything else — annexure list, specific paragraph order, disclaimers..."></textarea></div>
+            </div>
+            <div class="form-group" style="display:flex;align-items:center;gap:10px"><input type="checkbox" id="ai_full" style="width:auto" checked onchange="updateAILetterHint()"><label for="ai_full" style="margin:0;font-size:.72rem">Complete letter — full BEML format (To / Sub / Ref / closing / signature block)</label></div>
+            <div id="ai_full_hint" style="font-size:.68rem;color:var(--text-muted,#94A3B8);margin-top:-8px;margin-bottom:8px">✅ Full letter mode: generates the complete signed-ready BEML draft and opens it prefilled.</div>
             <div style="display:flex;gap:8px;margin-top:16px">
               <button class="btn btn-primary" onclick="generateAILetter()">🤖 Generate with AI</button>
-              <button class="btn btn-success" onclick="useAILetterAsDraft()">📝 Use as Draft</button>
+              <button class="btn btn-success" onclick="useAILetterAsDraft()">📝 Open as Letter Draft</button>
             </div>
           </div>
           <div class="card" style="overflow-y:auto;padding:20px">
@@ -2621,10 +2656,28 @@
         </div>`;
     }
 
+    function toggleAiAdvanced() {
+      const box = document.getElementById('ai_advanced');
+      const tog = document.getElementById('ai_advToggle');
+      if (!box) return;
+      const open = box.style.display === 'none';
+      box.style.display = open ? 'block' : 'none';
+      if (tog) tog.textContent = (open ? '▼' : '▶') + ' Advanced setup (language, length, paragraphs, sign-off)';
+    }
+
+    function updateAILetterHint() {
+      const full = document.getElementById('ai_full')?.checked;
+      const hint = document.getElementById('ai_full_hint');
+      if (hint) hint.textContent = full
+        ? '✅ Full letter mode: generates the complete signed-ready BEML draft and opens it prefilled.'
+        : 'ℹ️ Body-only mode: generates just the letter body for pasting into any form.';
+    }
+
     async function generateAILetter() {
       const subject = document.getElementById('ai_subject').value;
       const context = document.getElementById('ai_context').value;
       if (!subject && !context) return showToast('Enter subject or context', 'error');
+      const full = document.getElementById('ai_full')?.checked;
       showToast('Generating...', 'info');
       try {
         const res = await authFetch('/api/ai/generate-letter', {
@@ -2633,14 +2686,31 @@
             org: document.getElementById('ai_org').value,
             subject, recipient: document.getElementById('ai_recipient').value,
             context, tone: document.getElementById('ai_tone').value,
-            letterType: document.getElementById('ai_type').value
+            letterType: document.getElementById('ai_type').value,
+            full,
+            adv: {
+              language: document.getElementById('ai_lang')?.value || 'English',
+              length: document.getElementById('ai_length')?.value || 'Standard (1–2 pages)',
+              paragraphs: document.getElementById('ai_paras')?.value || '4–6',
+              numbering: document.getElementById('ai_numbering')?.value || 'roman',
+              spacing: document.getElementById('ai_spacing')?.value || '1.5',
+              references: document.getElementById('ai_refs')?.value || '',
+              signoff: document.getElementById('ai_signoff')?.value || 'Yours faithfully,|For |Authorised Signatory',
+              extra: document.getElementById('ai_extra')?.value || ''
+            }
           })
         });
         const r = await res.json();
         if (r.success) {
           document.getElementById('aiLetterResult').textContent = r.content;
+          // remember the draft metadata so 'Open as Letter Draft' can prefill everything
+          window.__aiLetterMeta = {
+            org: document.getElementById('ai_org').value,
+            subject, recipient: document.getElementById('ai_recipient').value,
+            content: r.content, full: !!full
+          };
           const src = r.source === 'template' ? '📋 Template' : '🤖 AI';
-          showToast(`Generated via ${src}`, 'success');
+          showToast(`Generated via ${src}${full ? ' — full BEML format' : ''}`, 'success');
         } else showToast('Error: ' + (r.error || ''), 'error');
       } catch (e) { showToast('Error: ' + e.message, 'error'); }
     }
@@ -2660,13 +2730,34 @@
       } catch (e) { showToast('Error: ' + e.message, 'error'); }
     }
 
-    function useAILetterAsDraft() {
+    async function useAILetterAsDraft() {
       const content = document.getElementById('aiLetterResult').textContent;
+      const meta = window.__aiLetterMeta || {};
       if (!content || content.startsWith('AI will generate')) return showToast('Generate content first', 'error');
       navigate('create-letter');
-      setTimeout(() => {
-        const el = document.getElementById('letter_letterContent');
-        if (el) { el.value = content; updateLetterPreview(); }
+      // generate-letter form seeds its ref number at render time; wait for it, then prefill all fields
+      setTimeout(async () => {
+        const orgEl = document.getElementById('letter_org');
+        const set = (id, v) => { const el = document.getElementById(id); if (el && v) el.value = v; };
+        if (orgEl && meta.org) orgEl.value = meta.org;
+        try {
+          const org = meta.org || (orgEl ? orgEl.value : 'BEML');
+          const nr = await (await authFetch(`/api/letter/next-number/${encodeURIComponent(org)}`)).json();
+          if (nr && nr.success && nr.number) set('letter_refNumber', nr.number);
+        } catch { /* keep form's default ref */ }
+        set('letter_date', new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }));
+        set('letter_to', meta.recipient || '');
+        set('letter_subject', meta.full ? (content.match(/^Sub:\s*(.+)$/m)?.[1] || meta.subject || '') : (meta.subject || ''));
+        // full mode: the form header (Ref/Date/To/Subject) already carries the
+        // address block — trim it from the body so the PDF doesn't print it twice
+        let body = content;
+        if (meta.full) {
+          const idx = body.search(/^Dear\s+Sir\/Madam,?\s*$/im);
+          if (idx > 0) body = body.slice(idx);
+        }
+        set('letter_letterContent', body);
+        updateLetterPreview();
+        showToast('AI letter loaded into the BEML draft — review & generate PDF/DOCX', 'success');
       }, 500);
     }
 

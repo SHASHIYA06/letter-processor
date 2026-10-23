@@ -1,22 +1,22 @@
 // ══════════════════════════════════════════════════════════════
 //  DocVault Pre-Login Portal
-//  Stage 1: rotating dot-matrix globe  →  Stage 2: India map with
-//  live BEML metro business locations  →  Stage 3: location-scoped
-//  account creation / sign-in
+//  Stage 1: rotating dot-matrix globe  →  Stage 2: 3D tilted India
+//  map with BEML metro business locations  →  Stage 3: location +
+//  depot scoped account creation / sign-in
 // ══════════════════════════════════════════════════════════════
 (function () {
   'use strict';
 
   const $ = (id) => document.getElementById(id);
 
-  // Offline fallback (mirrors server locations.js)
+  // Offline fallback (mirrors server locations.js — depots need the live API)
   const FALLBACK_LOCATIONS = [
-    { id: 'beml-bengaluru-hq', org: 'BEML', code: 'BEML', name: 'BEML South Complex', city: 'Bengaluru', state: 'Karnataka', lat: 12.9955, lng: 77.6350, hq: true, color: '#F59E0B', projects: ['Metro Rolling Stock Manufacturing'], trainsets: 420, users: 0, letters: 0 },
-    { id: 'bmrcl-bengaluru', org: 'BMRCL', code: 'BMRCL', name: 'BMRCL Metro Depot', city: 'Bengaluru', state: 'Karnataka', lat: 12.9960, lng: 77.6820, color: '#8B5CF6', projects: ['Bangalore Metro Phase 1 & 2'], trainsets: 214, users: 0, letters: 0 },
-    { id: 'kmrcl-kolkata', org: 'KMRCL', code: 'KMRCL', name: 'KMRCL East-West Depot', city: 'Kolkata', state: 'West Bengal', lat: 22.5697, lng: 88.4330, color: '#3B82F6', projects: ['Kolkata Metro East-West RS-3R'], trainsets: 168, users: 0, letters: 0 },
-    { id: 'dmcrl-delhi', org: 'DMCRL', code: 'DMCRL', name: 'Delhi Metro Operations', city: 'New Delhi', state: 'Delhi', lat: 28.6139, lng: 77.2090, color: '#10B981', projects: ['Delhi Metro Rolling Stock'], trainsets: 340, users: 0, letters: 0 },
-    { id: 'mmrcl-mumbai', org: 'MMRCL', code: 'MMRCL', name: 'Mumbai Metro Aqua Line', city: 'Mumbai', state: 'Maharashtra', lat: 19.0760, lng: 72.8777, color: '#06B6D4', projects: ['Mumbai Metro Line 3 Trainsets'], trainsets: 95, users: 0, letters: 0 },
-    { id: 'cmrcl-chennai', org: 'CMRCL', code: 'CMRCL', name: 'Chennai Metro Depot', city: 'Chennai', state: 'Tamil Nadu', lat: 13.0827, lng: 80.2707, color: '#EF4444', projects: ['Chennai Metro Phase 2 Rolling Stock'], trainsets: 120, users: 0, letters: 0 }
+    { id: 'beml-bengaluru-hq', org: 'BEML', code: 'BEML', name: 'BEML South Complex', city: 'Bengaluru', state: 'Karnataka', lat: 12.9955, lng: 77.6350, hq: true, color: '#F59E0B', projects: ['Metro Rolling Stock Manufacturing'], trainsets: 420, depots: [], users: 0, letters: 0 },
+    { id: 'bmrcl-bengaluru', org: 'BMRCL', code: 'BMRCL', name: 'BMRCL Metro Depot', city: 'Bengaluru', state: 'Karnataka', lat: 12.9960, lng: 77.6820, color: '#8B5CF6', projects: ['Bangalore Metro Phase 1 & 2'], trainsets: 214, depots: [], users: 0, letters: 0 },
+    { id: 'kmrcl-kolkata', org: 'KMRCL', code: 'KMRCL', name: 'KMRCL East-West Depot', city: 'Kolkata', state: 'West Bengal', lat: 22.5697, lng: 88.4330, color: '#14B8A6', projects: ['Kolkata Metro East-West RS-3R'], trainsets: 168, depots: [], users: 0, letters: 0 },
+    { id: 'dmcrl-delhi', org: 'DMCRL', code: 'DMCRL', name: 'Delhi Metro Operations', city: 'New Delhi', state: 'Delhi', lat: 28.6139, lng: 77.2090, color: '#10B981', projects: ['Delhi Metro Rolling Stock'], trainsets: 340, depots: [], users: 0, letters: 0 },
+    { id: 'mmrcl-mumbai', org: 'MMRCL', code: 'MMRCL', name: 'Mumbai Metro Aqua Line', city: 'Mumbai', state: 'Maharashtra', lat: 19.0760, lng: 72.8777, color: '#06B6D4', projects: ['Mumbai Metro Line 3 Trainsets'], trainsets: 95, depots: [], users: 0, letters: 0 },
+    { id: 'cmrcl-chennai', org: 'CMRCL', code: 'CMRCL', name: 'Chennai Metro Depot', city: 'Chennai', state: 'Tamil Nadu', lat: 13.0827, lng: 80.2707, color: '#EF4444', projects: ['Chennai Metro Phase 2 Rolling Stock'], trainsets: 120, depots: [], users: 0, letters: 0 }
   ];
 
   // ── Simplified India outline (lng, lat) ──
@@ -96,19 +96,25 @@
   }
   const easeInOut = (p) => p < 0.5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2;
   const easeOut = (p) => 1 - Math.pow(1 - p, 3);
+  const easeIn = (p) => p * p * p;
   function cancelTweens() { activeTweens.forEach(t => t.cancelled = true); activeTweens.clear(); }
 
   // ═══════════════ state ═══════════════
   const state = {
     running: false,
     stage: 'globe',          // globe | map
+    view: 'locations',       // locations | depots
     locations: FALLBACK_LOCATIONS.map(l => ({ ...l })),
-    selected: null,
+    depots: [],
+    selected: null,          // location id
+    selectedDepot: null,     // depot id
+    hit: [],                 // screen-space pins for pointer hit-testing
     live: { users: 0, ncr: 0 },
     pollTimer: null,
     countdownTimer: null,
     countdown: 10,
-    enteringMapAt: 0
+    enteringMapAt: 0,
+    enteringDepotsAt: 0
   };
 
   let starsCanvas, starsCtx, globeCanvas, globeCtx, indiaCanvas, indiaCtx;
@@ -116,8 +122,7 @@
   let rotLon = 0.6, tilt = -0.32, globeR = 0, globeAdvancing = false;
   let animHandle = null;
   let mapView = { k: 1, fx: 0, fy: 0 };
-  let mapProj = null;         // {project(lng,lat)->{x,y}, unproject(x,y)}
-  let mapHover = null;
+  let mapProj = null;         // { project(lng,lat)->{x,y} flat map coords }
   let pointer = { x: -1, y: -1 };
 
   // ═══════════════ canvas helpers ═══════════════
@@ -132,6 +137,12 @@
     const ctx = canvas.getContext('2d');
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     return { ctx, w, h };
+  }
+
+  function hexA(hex, a) {
+    const h = String(hex || '#0D9488').replace('#', '');
+    const r = parseInt(h.substring(0, 2), 16), g = parseInt(h.substring(2, 4), 16), b = parseInt(h.substring(4, 6), 16);
+    return `rgba(${r},${g},${b},${Math.max(0, Math.min(1, a)).toFixed(3)})`;
   }
 
   // ═══════════════ starfield ═══════════════
@@ -281,12 +292,32 @@
     ctx.restore();
   }
 
-  // ═══════════════ India map ═══════════════
+  // ═══════════════ India map — 3D tilted projection ═══════════════
+  // Flat map coords come from mapProj.project(); cam3() then lifts them into
+  // a 3D camera: screen-y compresses by sin(elev), height lifts by cos(elev),
+  // and a mild perspective divide gives the extruded landmass real depth.
   const MAP_BOX = { lng0: 66.5, lng1: 97.5, lat0: 6.0, lat1: 37.5 };
   const LAT_STRETCH = 1.18;
+  const CAM = {
+    elev: 0.99,               // camera elevation over the map plane (rad)
+    elevFrom: 0.24,           // start of the tilt-up reveal
+    yaw: -0.10,               // turntable rotation of the plane
+    dist: 2200,               // perspective distance
+    slab: 15,                 // landmass extrusion, screen px
+    pinH: 34,                 // location pillar height, px
+    depotH: 20,               // depot pillar height, px
+    maxK: 34                  // deepest zoom (depot cluster view)
+  };
+  const DEPOT_STATUS = {
+    delivered: { label: 'Delivered', color: '#10B981' },
+    'in-delivery': { label: 'In delivery', color: '#F59E0B' },
+    planned: { label: 'Planned', color: '#5EEAD4' }
+  };
+  let mapFrame = { w: 0, h: 0 };
 
   function buildMapProjection(w, h) {
-    const pad = Math.min(w, h) * 0.07;
+    mapFrame = { w, h };
+    const pad = Math.min(w, h) * 0.10;
     const bw = MAP_BOX.lng1 - MAP_BOX.lng0;
     const bh = (MAP_BOX.lat1 - MAP_BOX.lat0) * LAT_STRETCH;
     const s = Math.min((w - 2 * pad) / bw, (h - 2 * pad) / bh);
@@ -295,21 +326,35 @@
       s,
       project(lng, lat) {
         return { x: ox + (lng - MAP_BOX.lng0) * s, y: oy + (MAP_BOX.lat1 - lat) * LAT_STRETCH * s };
-      },
-      unproject(px, py) {
-        return { lng: (px - ox) / s + MAP_BOX.lng0, lat: MAP_BOX.lat1 - (py - oy) / (s * LAT_STRETCH) }
       }
     };
     return mapProj;
   }
 
-  // view transform: screen = (map - focus) * k + canvasCenter
-  function toScreen(p, w, h) {
-    return { x: (p.x - mapView.fx) * mapView.k + w / 2, y: (p.y - mapView.fy) * mapView.k + h / 2 };
+  // flat map point + screen-space height → screen point
+  function cam3(fx, fy, hgt) {
+    const k = mapView.k;
+    const wx = (fx - mapView.fx) * k;
+    const wy = (mapView.fy - fy) * k;                 // north is +
+    const wz = hgt || 0;                              // up is +
+    const cy = Math.cos(CAM.yaw), sy = Math.sin(CAM.yaw);
+    const x1 = wx * cy - wy * sy;
+    const y1 = wx * sy + wy * cy;
+    const ce = Math.cos(CAM.elev), se = Math.sin(CAM.elev);
+    const depth = y1 * ce - wz * se;
+    const sc = CAM.dist / (CAM.dist + depth);
+    return {
+      x: mapFrame.w / 2 + x1 * sc,
+      y: mapFrame.h / 2 - (y1 * se + wz * ce) * sc,
+      s: sc,
+      d: depth
+    };
   }
-  function toMap(px, py, w, h) {
-    return { x: (px - w / 2) / mapView.k + mapView.fx, y: (py - h / 2) / mapView.k + mapView.fy };
-  }
+
+  const pinOf = (lng, lat, hgt) => {
+    const p = mapProj.project(lng, lat);
+    return { base: cam3(p.x, p.y, 0), top: cam3(p.x, p.y, hgt), flat: p };
+  };
 
   const CITY_DOTS = [
     { name: 'Delhi', lat: 28.61, lng: 77.21 }, { name: 'Mumbai', lat: 19.08, lng: 72.88 },
@@ -318,173 +363,323 @@
     { name: 'Ahmedabad', lat: 23.02, lng: 72.57 }, { name: 'Pune', lat: 18.52, lng: 73.86 }
   ];
 
+  // ── drawing helpers ──
+  function roundRectPath(ctx, x, y, w, h, r) {
+    ctx.beginPath();
+    if (ctx.roundRect) { ctx.roundRect(x, y, w, h, r); return; }
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+  }
+
+  function groundRing(ctx, p, r, color, a) {
+    ctx.beginPath();
+    ctx.ellipse(p.x, p.y, r * p.s, r * 0.42 * p.s, 0, 0, Math.PI * 2);
+    ctx.strokeStyle = hexA(color, 0.38 * a);
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  }
+
+  function pillar(ctx, base, top, color, a) {
+    const g = ctx.createLinearGradient(base.x, base.y, top.x, top.y);
+    g.addColorStop(0, hexA(color, 0.08 * a));
+    g.addColorStop(1, hexA(color, 0.8 * a));
+    ctx.strokeStyle = g;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(base.x, base.y);
+    ctx.lineTo(top.x, top.y);
+    ctx.stroke();
+  }
+
+  function orb(ctx, p, r, color, a, glow) {
+    const gr = r * (glow || 3);
+    const g = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, gr);
+    g.addColorStop(0, hexA(color, 0.9 * a));
+    g.addColorStop(0.35, hexA(color, 0.24 * a));
+    g.addColorStop(1, hexA(color, 0));
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(p.x, p.y, gr, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = hexA(color, a);
+    ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = `rgba(255,255,255,${(0.55 * a).toFixed(3)})`;
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.arc(p.x, p.y, r + 1.5, 0, Math.PI * 2); ctx.stroke();
+  }
+
+  function drawLabel(ctx, x, y, main, sub, a, strong) {
+    ctx.textAlign = 'left';
+    ctx.shadowColor = 'rgba(0,0,0,0.9)';
+    ctx.shadowBlur = 6;
+    ctx.font = `${strong ? 700 : 600} ${strong ? 12.5 : 11}px Inter, sans-serif`;
+    ctx.fillStyle = `rgba(241,245,249,${(0.96 * a).toFixed(3)})`;
+    ctx.fillText(main, x, y);
+    if (sub) {
+      ctx.font = '500 9.5px Inter, sans-serif';
+      ctx.fillStyle = `rgba(148,163,184,${(0.9 * a).toFixed(3)})`;
+      ctx.fillText(sub, x, y + 11.5);
+    }
+    ctx.shadowBlur = 0;
+  }
+
   function drawIndia(t) {
     const fit = fitCanvas(indiaCanvas);
     if (!fit || !mapProj) return;
     const { ctx, w, h } = fit;
     ctx.clearRect(0, 0, w, h);
+    state.hit = [];
 
     const age = t - state.enteringMapAt;
-    const drawP = Math.min(1, age / 1400);
-    const pathLen = INDIA_OUTLINE.reduce((acc, p, i, arr) => {
-      if (i === 0) return 0;
-      const a = mapProj.project(arr[i - 1][0], arr[i - 1][1]);
-      const b = mapProj.project(p[0], p[1]);
-      return acc + Math.hypot(b.x - a.x, b.y - a.y);
-    }, 0);
+    const reveal = Math.min(1, age / 1500);
+    const dashP = Math.min(1, age / 1900);
 
-    ctx.save();
-    ctx.translate(w / 2, h / 2);
-    ctx.scale(mapView.k, mapView.k);
-    ctx.translate(-mapView.fx, -mapView.fy);
+    // idle turntable keeps the 3D view alive while nothing is selected
+    if (!state.selected) CAM.yaw = -0.10 + Math.sin(t * 0.00013) * 0.055;
 
-    // subtle dot grid inside canvas bounds
-    const tl = toMap(0, 0, w, h), br = toMap(w, h, w, h);
-    ctx.fillStyle = 'rgba(96,165,250,0.05)';
-    for (let x = Math.floor(tl.x / 26) * 26; x < br.x; x += 26) {
-      for (let y = Math.floor(tl.y / 26) * 26; y < br.y; y += 26) {
-        ctx.beginPath(); ctx.arc(x, y, 1, 0, Math.PI * 2); ctx.fill();
+    const mid = mapProj.project((MAP_BOX.lng0 + MAP_BOX.lng1) / 2, (MAP_BOX.lat0 + MAP_BOX.lat1) / 2);
+    const cScreen = cam3(mid.x, mid.y, 0);
+    const glowR = Math.min(w, h) * 0.7;
+    const bg = ctx.createRadialGradient(cScreen.x, cScreen.y, 0, cScreen.x, cScreen.y, glowR);
+    bg.addColorStop(0, 'rgba(37,99,235,0.17)');
+    bg.addColorStop(0.55, 'rgba(30,64,175,0.07)');
+    bg.addColorStop(1, 'rgba(3,7,18,0)');
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, w, h);
+
+    // landmass: top face (h=0) and extruded wall (h=-slab)
+    const top = [], bot = [];
+    for (const [lng, lat] of INDIA_OUTLINE) {
+      const p = mapProj.project(lng, lat);
+      top.push(cam3(p.x, p.y, 0));
+      bot.push(cam3(p.x, p.y, -CAM.slab));
+    }
+    // the slab fades away as the camera dives into a depot cluster
+    const slabA = Math.max(0, Math.min(1, (13 - mapView.k) / 6));
+
+    ctx.globalAlpha = reveal * slabA;
+
+    for (let i = 0; i < top.length; i++) {
+      const j = (i + 1) % top.length;
+      const g = ctx.createLinearGradient(top[i].x, top[i].y, bot[j].x, bot[j].y);
+      g.addColorStop(0, 'rgba(15,34,72,0.94)');
+      g.addColorStop(1, 'rgba(2,8,22,0.98)');
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.moveTo(top[i].x, top[i].y);
+      ctx.lineTo(top[j].x, top[j].y);
+      ctx.lineTo(bot[j].x, bot[j].y);
+      ctx.lineTo(bot[i].x, bot[i].y);
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    // ground grid on the plane (screen density stays constant at any zoom)
+    const step = Math.max(1.2, 40 / mapView.k);
+    const spanX = (w / 2 + 80) / mapView.k;
+    const spanY = (h / 2 + 80) / (mapView.k * Math.max(0.2, Math.sin(CAM.elev)));
+    for (let gx = Math.floor((mapView.fx - spanX) / step) * step; gx <= mapView.fx + spanX; gx += step) {
+      for (let gy = Math.floor((mapView.fy - spanY) / step) * step; gy <= mapView.fy + spanY; gy += step) {
+        const q = cam3(gx, gy, 0);
+        if (q.x < -30 || q.x > w + 30 || q.y < -30 || q.y > h + 30) continue;
+        const tw = 0.5 + 0.5 * Math.sin(t * 0.0016 + gx * 0.02 + gy * 0.03);
+        ctx.fillStyle = `rgba(96,165,250,${(0.05 + 0.05 * tw).toFixed(3)})`;
+        ctx.beginPath();
+        ctx.arc(q.x, q.y, 1.1, 0, Math.PI * 2);
+        ctx.fill();
       }
     }
 
-    // India polygon
-    const first = mapProj.project(INDIA_OUTLINE[0][0], INDIA_OUTLINE[0][1]);
+    // top face
     ctx.beginPath();
-    ctx.moveTo(first.x, first.y);
-    for (let i = 1; i < INDIA_OUTLINE.length; i++) {
-      const p = mapProj.project(INDIA_OUTLINE[i][0], INDIA_OUTLINE[i][1]);
-      ctx.lineTo(p.x, p.y);
-    }
+    ctx.moveTo(top[0].x, top[0].y);
+    for (let i = 1; i < top.length; i++) ctx.lineTo(top[i].x, top[i].y);
     ctx.closePath();
-
-    const bbox = INDIA_OUTLINE.reduce((b, [lng, lat]) => {
-      const p = mapProj.project(lng, lat);
-      b.x0 = Math.min(b.x0, p.x); b.x1 = Math.max(b.x1, p.x);
-      b.y0 = Math.min(b.y0, p.y); b.y1 = Math.max(b.y1, p.y);
-      return b;
-    }, { x0: Infinity, x1: -Infinity, y0: Infinity, y1: -Infinity });
-    const grad = ctx.createLinearGradient(bbox.x0, bbox.y0, bbox.x1, bbox.y1);
-    grad.addColorStop(0, `rgba(37,99,235,${(0.16 * drawP).toFixed(3)})`);
-    grad.addColorStop(0.55, `rgba(99,102,241,${(0.20 * drawP).toFixed(3)})`);
-    grad.addColorStop(1, `rgba(6,182,212,${(0.16 * drawP).toFixed(3)})`);
-    ctx.fillStyle = grad;
+    const bb = top.reduce((b, p) => ({
+      x0: Math.min(b.x0, p.x), x1: Math.max(b.x1, p.x),
+      y0: Math.min(b.y0, p.y), y1: Math.max(b.y1, p.y)
+    }), { x0: Infinity, x1: -Infinity, y0: Infinity, y1: -Infinity });
+    const fg = ctx.createLinearGradient(bb.x0, bb.y0, bb.x1, bb.y1);
+    fg.addColorStop(0, 'rgba(37,99,235,0.30)');
+    fg.addColorStop(0.55, 'rgba(99,102,241,0.34)');
+    fg.addColorStop(1, 'rgba(6,182,212,0.28)');
+    ctx.fillStyle = fg;
     ctx.fill();
 
-    // animated outline draw-in
-    ctx.strokeStyle = `rgba(125,211,252,${(0.55 + 0.35 * drawP).toFixed(3)})`;
-    ctx.lineWidth = 1.6;
-    ctx.setLineDash([pathLen, pathLen]);
-    ctx.lineDashOffset = pathLen * (1 - drawP);
+    // outline: glow + self-drawing bright stroke
+    let plen = 0;
+    for (let i = 1; i < top.length; i++) plen += Math.hypot(top[i].x - top[i - 1].x, top[i].y - top[i - 1].y);
     ctx.shadowColor = 'rgba(56,189,248,0.55)';
-    ctx.shadowBlur = 12;
+    ctx.shadowBlur = 18;
+    ctx.strokeStyle = 'rgba(125,211,252,0.28)';
+    ctx.lineWidth = 2.4;
     ctx.stroke();
     ctx.shadowBlur = 0;
+    ctx.setLineDash([plen, plen]);
+    ctx.lineDashOffset = plen * (1 - dashP);
+    ctx.strokeStyle = 'rgba(191,219,254,0.95)';
+    ctx.lineWidth = 1.7;
+    ctx.stroke();
     ctx.setLineDash([]);
 
-    // connection arcs HQ → each location
+    ctx.globalAlpha = 1;
+
+    // delivery corridors: BEML HQ → each project location, arcing off the plane
     const hq = state.locations.find(l => l.hq) || state.locations[0];
     if (hq) {
       const a = mapProj.project(hq.lng, hq.lat);
       state.locations.forEach((loc, i) => {
         if (loc.id === hq.id) return;
-        const appear = Math.min(1, Math.max(0, (age - 1500 - i * 160) / 900));
+        const appear = Math.min(1, Math.max(0, (age - 1600 - i * 140) / 900));
         if (appear <= 0) return;
         const b = mapProj.project(loc.lng, loc.lat);
-        const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2 - Math.hypot(b.x - a.x, b.y - a.y) * 0.22;
+        const N = 26, pts = [];
+        for (let s = 0; s <= N; s++) {
+          const f = s / N;
+          pts.push(cam3(a.x + (b.x - a.x) * f, a.y + (b.y - a.y) * f, Math.sin(f * Math.PI) * 40));
+        }
         ctx.beginPath();
-        ctx.moveTo(a.x, a.y);
-        ctx.quadraticCurveTo(mx, my, b.x, b.y);
-        ctx.strokeStyle = `rgba(148,163,184,${(0.22 * appear).toFixed(3)})`;
-        ctx.lineWidth = 1;
-        ctx.setLineDash([4, 6]);
-        ctx.lineDashOffset = -t * 0.02;
+        ctx.moveTo(pts[0].x, pts[0].y);
+        for (const p of pts.slice(1)) ctx.lineTo(p.x, p.y);
+        ctx.strokeStyle = hexA(loc.color || '#14B8A6', 0.3 * appear);
+        ctx.lineWidth = 1.1;
+        ctx.setLineDash([5, 6]);
         ctx.stroke();
         ctx.setLineDash([]);
+        // travelling delivery pulse
+        const ph = (t * 0.00019 + i * 0.21) % 1;
+        const p = pts[Math.min(N, Math.round(ph * N))];
+        orb(ctx, p, 2.6, loc.color || '#5EEAD4', 0.85 * appear, 3.2);
       });
     }
 
-    // city dots (context)
+    // context cities
     ctx.font = '9px Inter, sans-serif';
+    ctx.textAlign = 'left';
     for (const c of CITY_DOTS) {
       if (state.locations.some(l => l.city === c.name)) continue;
-      const p = mapProj.project(c.lng, c.lat);
-      ctx.fillStyle = 'rgba(148,163,184,0.35)';
+      const p = pinOf(c.lng, c.lat, 0).base;
+      ctx.fillStyle = 'rgba(148,163,184,0.32)';
       ctx.beginPath(); ctx.arc(p.x, p.y, 1.8, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = 'rgba(148,163,184,0.4)';
+      ctx.fillStyle = 'rgba(148,163,184,0.38)';
       ctx.fillText(c.name, p.x + 5, p.y + 3);
     }
 
-    // BEML location markers
-    state.locations.forEach((loc, i) => {
-      const appear = Math.min(1, Math.max(0, (age - 900 - i * 130) / 500));
-      if (appear <= 0) return;
-      const p = mapProj.project(loc.lng, loc.lat);
-      const isSel = state.selected === loc.id;
-      const pulse = 0.5 + 0.5 * Math.sin(t * 0.003 + i * 1.4);
+    if (state.view === 'locations') drawLocationPins(ctx, t, age);
+    else drawDepotPins(ctx, t);
 
-      // pulse ring
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, (8 + pulse * 10) * appear, 0, Math.PI * 2);
-      ctx.strokeStyle = hexA(loc.color, (0.5 - pulse * 0.32) * appear);
-      ctx.lineWidth = 1.5;
-      ctx.stroke();
-
-      // marker
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, (isSel ? 6.5 : 4.6) * appear, 0, Math.PI * 2);
-      ctx.fillStyle = hexA(loc.color, appear);
-      ctx.shadowColor = loc.color;
-      ctx.shadowBlur = isSel ? 18 : 10;
-      ctx.fill();
-      ctx.shadowBlur = 0;
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, ((isSel ? 6.5 : 4.6) + 3) * appear, 0, Math.PI * 2);
-      ctx.strokeStyle = hexA('#ffffff', 0.5 * appear);
-      ctx.lineWidth = 1;
-      ctx.stroke();
-
-      // label
-      const labelA = Math.min(1, Math.max(0, (age - 1300 - i * 130) / 500));
-      if (labelA > 0) {
-        ctx.font = `${isSel ? '700' : '600'} ${isSel ? 12 : 10.5}px Inter, sans-serif`;
-        ctx.fillStyle = `rgba(241,245,249,${(0.92 * labelA).toFixed(3)})`;
-        ctx.shadowColor = 'rgba(0,0,0,0.9)';
-        ctx.shadowBlur = 6;
-        ctx.fillText(loc.code, p.x + 11, p.y - 6);
-        ctx.font = `500 8.5px Inter, sans-serif`;
-        ctx.fillStyle = `rgba(148,163,184,${(0.75 * labelA).toFixed(3)})`;
-        ctx.fillText(loc.city.toUpperCase(), p.x + 11, p.y + 5);
-        ctx.shadowBlur = 0;
-      }
-    });
-
-    ctx.restore();
-
-    // title watermark
-    ctx.font = '700 12px Inter, sans-serif';
-    ctx.fillStyle = 'rgba(148,163,184,0.35)';
+    // watermark
+    ctx.font = '700 11.5px Inter, sans-serif';
+    ctx.fillStyle = 'rgba(148,163,184,0.32)';
     ctx.textAlign = 'center';
-    ctx.fillText('BEML METRO BUSINESS MAP · INDIA', w / 2, h - 16);
+    ctx.fillText(state.view === 'locations'
+      ? 'BEML METRO BUSINESS MAP · 3D · INDIA'
+      : 'DEPOT VIEW · CLICK A DEPOT TO SIGN IN', w / 2, h - 16);
     ctx.textAlign = 'left';
   }
 
-  function hexA(hex, a) {
-    const h = hex.replace('#', '');
-    const r = parseInt(h.substring(0, 2), 16), g = parseInt(h.substring(2, 4), 16), b = parseInt(h.substring(4, 6), 16);
-    return `rgba(${r},${g},${b},${Math.max(0, Math.min(1, a)).toFixed(3)})`;
+  function drawLocationPins(ctx, t, age) {
+    state.locations
+      .map((loc, i) => ({ loc, i, pin: pinOf(loc.lng, loc.lat, CAM.pinH) }))
+      .sort((a, b) => b.pin.top.d - a.pin.top.d)
+      .forEach(({ loc, i, pin }) => {
+        const appear = Math.min(1, Math.max(0, (age - 900 - i * 120) / 500));
+        if (appear <= 0) return;
+        const isSel = state.selected === loc.id;
+        const push = isSel ? 1.12 : 1;
+        const color = loc.color || '#0D9488';
+        const pulse = 0.5 + 0.5 * Math.sin(t * 0.003 + i * 1.4);
+        const base = { x: pin.base.x, y: pin.base.y, s: pin.base.s };
+        const top = { x: pin.base.x + (pin.top.x - pin.base.x) * push, y: pin.base.y + (pin.top.y - pin.base.y) * push, s: pin.base.s };
+
+        groundRing(ctx, base, 11 + pulse * 9, color, appear);
+        pillar(ctx, base, top, color, appear);
+        orb(ctx, top, (isSel ? 6.4 : 5) * push, color, appear, isSel ? 3.6 : 2.7);
+        if (loc.hq) {
+          ctx.beginPath();
+          ctx.arc(top.x, top.y, 12, 0, Math.PI * 2);
+          ctx.strokeStyle = 'rgba(252,211,77,0.75)';
+          ctx.lineWidth = 1.2;
+          ctx.setLineDash([3, 4]);
+          ctx.stroke();
+          ctx.setLineDash([]);
+        }
+        drawLabel(ctx, top.x + 12, top.y - 2, loc.code, loc.city.toUpperCase(), appear, isSel);
+        if (loc.hq) drawLabel(ctx, top.x + 12, top.y + 14, 'HQ', '', appear * 0.9, false);
+        state.hit.push({ kind: 'location', id: loc.id, x: top.x, y: top.y });
+        state.hit.push({ kind: 'location', id: loc.id, x: base.x, y: base.y });
+      });
   }
 
-  function markerAt(px, py) {
-    if (!mapProj) return null;
-    const fit = fitCanvas(indiaCanvas);
-    if (!fit) return null;
-    const { w, h } = fit;
-    const m = toMap(px, py, w, h);
-    for (const loc of state.locations) {
-      const p = mapProj.project(loc.lng, loc.lat);
-      if (Math.hypot(p.x - m.x, p.y - m.y) < 13 / mapView.k) return loc;
+  function drawDepotPins(ctx, t) {
+    const loc = state.locations.find(l => l.id === state.selected);
+    if (!loc) return;
+
+    // every other location stays as a faint ground anchor
+    for (const other of state.locations) {
+      if (other.id === loc.id) continue;
+      const p = pinOf(other.lng, other.lat, 0).base;
+      ctx.fillStyle = hexA(other.color || '#0D9488', 0.5);
+      ctx.beginPath(); ctx.arc(p.x, p.y, 2.4, 0, Math.PI * 2); ctx.fill();
     }
-    return null;
+
+    const dAge = performance.now() - state.enteringDepotsAt;
+    state.depots
+      .map((d, i) => ({ d, i, pin: pinOf(d.lng, d.lat, CAM.depotH) }))
+      .sort((a, b) => b.pin.top.d - a.pin.top.d)
+      .forEach(({ d, i, pin }) => {
+        const appear = Math.min(1, Math.max(0, (dAge - i * 110) / 520));
+        if (appear <= 0) return;
+        const meta = DEPOT_STATUS[d.status] || DEPOT_STATUS.delivered;
+        const isSel = state.selectedDepot === d.id;
+        const push = isSel ? 1.25 : 1;
+        const base = pin.base;
+        const top = { x: base.x + (pin.top.x - base.x) * push, y: base.y + (pin.top.y - base.y) * push, s: base.s };
+        const pulse = 0.5 + 0.5 * Math.sin(t * 0.0035 + i);
+
+        groundRing(ctx, base, (isSel ? 13 : 8) + pulse * 4, meta.color, appear);
+        // returning line from the city anchor to the depot
+        ctx.strokeStyle = hexA(meta.color, 0.16 * appear);
+        ctx.lineWidth = 1;
+        ctx.setLineDash([3, 5]);
+        ctx.beginPath();
+        ctx.moveTo(base.x, base.y);
+        ctx.lineTo(top.x, top.y);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        pillar(ctx, base, top, meta.color, appear);
+
+        const bs = (isSel ? 8 : 6.6) * push;
+        roundRectPath(ctx, top.x - bs, top.y - bs * 0.8, bs * 2, bs * 1.6, 3);
+        ctx.save();
+        ctx.shadowColor = meta.color;
+        ctx.shadowBlur = isSel ? 22 : 12;
+        ctx.fillStyle = hexA(meta.color, 0.95 * appear);
+        ctx.fill();
+        ctx.restore();
+        roundRectPath(ctx, top.x - bs, top.y - bs * 0.8, bs * 2, bs * 1.6, 3);
+        ctx.strokeStyle = `rgba(255,255,255,${(0.6 * appear).toFixed(3)})`;
+        ctx.lineWidth = 1;
+        ctx.stroke();
+
+        drawLabel(ctx, top.x + 13, top.y - 1, d.name,
+          `${meta.label} · ${d.delivered}/${d.trainsets} trainsets`, appear, isSel);
+        state.hit.push({ kind: 'depot', id: d.id, x: top.x, y: top.y });
+        state.hit.push({ kind: 'depot', id: d.id, x: base.x, y: base.y });
+      });
+  }
+
+  // ── pointer hit-testing happens in screen space, so it always matches
+  //    exactly what the tilted projection drew ──
+  function hitTest(px, py) {
+    let best = null, bestD = Infinity;
+    for (const c of state.hit) {
+      const d = Math.hypot(c.x - px, c.y - py);
+      if (d < 26 && d < bestD) { best = c; bestD = d; }
+    }
+    return best;
   }
 
   // ═══════════════ main loop ═══════════════
@@ -511,13 +706,13 @@
       m.classList.add('active'); g.classList.remove('active');
       requestAnimationFrame(() => {
         const fit = fitCanvas(indiaCanvas);
-        if (fit) {
-          buildMapProjection(fit.w, fit.h);
-          const c = mapProj.unproject(fit.w / 2, fit.h / 2);
-          mapView = { k: 1, fx: (mapProj.project(c.lng, c.lat).x), fy: (mapProj.project(c.lng, c.lat).y) };
-          const mid = mapProj.project((MAP_BOX.lng0 + MAP_BOX.lng1) / 2, (MAP_BOX.lat0 + MAP_BOX.lat1) / 2);
-          mapView.fx = mid.x; mapView.fy = mid.y;
-        }
+        if (!fit) return;
+        buildMapProjection(fit.w, fit.h);
+        const mid = mapProj.project((MAP_BOX.lng0 + MAP_BOX.lng1) / 2, (MAP_BOX.lat0 + MAP_BOX.lat1) / 2);
+        mapView = { k: 1, fx: mid.x, fy: mid.y };
+        // the map stands up into 3D and settles
+        CAM.elev = CAM.elevFrom;
+        tween({ from: CAM.elevFrom, to: 0.99, dur: 1700, ease: easeInOut, onUpdate: v => CAM.elev = v });
       });
     }
   }
@@ -568,16 +763,15 @@
       }
     });
   }
-  const easeIn = (p) => p * p * p;
 
   function backToGlobe() {
-    closeDrawer();
+    clearLocation();
     globeR = 0;
     gotoStage('globe');
     startCountdown();
   }
 
-  // ═══════════════ locations UI ═══════════════
+  // ═══════════════ data ═══════════════
   async function loadLocations() {
     try {
       const res = await fetch('/api/locations');
@@ -586,37 +780,63 @@
         state.locations = data.locations;
         state.live.users = data.totalUsers || 0;
         state.live.ncr = data.ncrCount || 0;
+        if (state.selected) {
+          const loc = state.locations.find(l => l.id === state.selected);
+          state.depots = (loc && loc.depots) || [];
+        }
       }
     } catch { /* keep fallback */ }
-    renderLocationCards();
+    renderSidePanel();
     renderLiveBadge();
+    renderStats();
+    updateLegend();
+  }
+
+  function depotSummary(depots) {
+    let delivered = 0, toDeliver = 0;
+    const counts = { delivered: 0, 'in-delivery': 0, planned: 0 };
+    for (const d of depots) {
+      counts[d.status] = (counts[d.status] || 0) + 1;
+      delivered += d.delivered || 0;
+      toDeliver += d.toDeliver || 0;
+    }
+    const total = delivered + toDeliver;
+    return { delivered, toDeliver, total, counts, pct: total ? Math.round((delivered / total) * 100) : 0 };
   }
 
   function renderLiveBadge() {
     const badge = $('mapLive');
     if (!badge) return;
     const totalUsers = state.locations.reduce((s, l) => s + (l.users || 0), 0) || state.live.users;
-    badge.innerHTML = `<span class="live-dot"></span>LIVE · ${state.locations.length} LOCATIONS · ${totalUsers} USERS`;
+    const depots = state.locations.reduce((s, l) => s + ((l.depots || []).length), 0);
+    badge.innerHTML = `<span class="live-dot"></span>LIVE · ${state.locations.length} LOCATIONS · ${depots} DEPOTS · ${totalUsers} USERS`;
   }
 
-  function renderLocationCards() {
-    const wrap = $('locationCards');
-    if (!wrap) return;
-    wrap.innerHTML = '';
-    for (const loc of state.locations) {
-      const card = document.createElement('div');
-      card.className = 'loc-card' + (state.selected === loc.id ? ' selected' : '');
-      card.style.setProperty('--loc', loc.color || '#2563EB');
-      card.innerHTML = `
-        <h4>${esc(loc.code)} ${loc.hq ? '<span class="hq-badge">HQ</span>' : ''}</h4>
-        <div class="loc-city">${esc(loc.name)} · ${esc(loc.city)}, ${esc(loc.state || '')}</div>
-        <div class="loc-meta">
-          <span><b>${loc.users || 0}</b> users</span>
-          <span><b>${loc.letters || 0}</b> letters</span>
-          <span><b>${(loc.projects || []).length}</b> projects</span>
-        </div>`;
-      card.onclick = () => selectLocation(loc.id);
-      wrap.appendChild(card);
+  function renderStats() {
+    const depots = state.locations.reduce((s, l) => s + ((l.depots || []).length), 0);
+    const trainsets = state.locations.reduce((s, l) => s + (l.trainsets || 0), 0);
+    const set = (id, v) => { const el = $(id); if (el) el.textContent = v; };
+    set('statLocations', state.locations.length);
+    set('statDepots', depots);
+    set('statTrainsets', trainsets);
+  }
+
+  function updateLegend() {
+    const el = $('mapLegend');
+    if (!el) return;
+    const loc = state.locations.find(l => l.id === state.selected);
+    if (state.view === 'depots' && loc) {
+      const s = depotSummary(state.depots);
+      el.innerHTML = `<b>${esc(loc.org)} · ${esc(loc.city)}</b>` +
+        Object.keys(DEPOT_STATUS).map(k =>
+          `<span><i style="background:${DEPOT_STATUS[k].color}"></i>${DEPOT_STATUS[k].label} ${s.counts[k] || 0}</span>`).join('');
+      el.classList.add('expanded');
+    } else {
+      el.innerHTML = `<b>BEML Metro Business Map</b>` +
+        `<span><i style="background:#F59E0B"></i>BEML HQ</span>` +
+        `<span><i style="background:#14B8A6"></i>Metro location</span>` +
+        `<span><i style="background:#94A3B8"></i>Delivery corridor</span>`;
+      el.classList.remove('expanded');
     }
   }
 
@@ -624,35 +844,171 @@
     return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   }
 
+  function el(tag, cls, html) {
+    const n = document.createElement(tag);
+    if (cls) n.className = cls;
+    if (html != null) n.innerHTML = html;
+    return n;
+  }
+
+  // ═══════════════ side panel: locations → depots ═══════════════
+  function renderSidePanel() {
+    const wrap = $('locationCards');
+    if (!wrap) return;
+    const loc = state.locations.find(l => l.id === state.selected);
+    const heading = $('mapHeading'), sub = $('mapSub');
+    if (heading) {
+      heading.innerHTML = loc
+        ? `${esc(loc.org)} <em>${esc(loc.city)}</em> depots`
+        : `Select your <em>BEML</em> location`;
+    }
+    if (sub) {
+      sub.textContent = loc
+        ? `${loc.name} · ${state.depots.length} depot${state.depots.length === 1 ? '' : 's'} carrying ${loc.trainsets} trainsets`
+        : 'Pick a city on the 3D map to see every BEML depot there — delivered, in delivery and planned rolling stock.';
+    }
+    wrap.innerHTML = '';
+
+    if (!loc) {
+      for (const l of state.locations) {
+        const card = el('div', 'loc-card' + (state.selected === l.id ? ' selected' : ''), `
+          <h4>${esc(l.code)} ${l.hq ? '<span class="hq-badge">HQ</span>' : ''}</h4>
+          <div class="loc-city">${esc(l.name)} · ${esc(l.city)}, ${esc(l.state || '')}</div>
+          <div class="loc-meta">
+            <span><b>${(l.depots || []).length}</b> depots</span>
+            <span><b>${l.trainsets || 0}</b> trainsets</span>
+            <span><b>${(l.projects || []).length}</b> projects</span>
+          </div>`);
+        card.style.setProperty('--loc', l.color || '#0D9488');
+        card.onclick = () => selectLocation(l.id);
+        wrap.appendChild(card);
+      }
+      return;
+    }
+
+    const back = el('button', 'map-back depot-back', '← All locations');
+    back.type = 'button';
+    back.onclick = () => clearLocation();
+    wrap.appendChild(back);
+
+    if (!state.depots.length) {
+      wrap.appendChild(el('div', 'depot-empty', 'Depot list needs a live connection. Reconnecting…'));
+      return;
+    }
+
+    const s = depotSummary(state.depots);
+    const summary = el('div', 'depot-summary', `
+      <div class="depot-summary-top"><b>${s.delivered}</b> of <b>${s.total}</b> trainsets delivered
+        <span>${s.pct}%</span></div>
+      <div class="depot-bar"><i style="width:${s.pct}%"></i></div>
+      <div class="depot-chips">
+        ${Object.keys(DEPOT_STATUS).map(k => `<span class="chip s-${k}"><i></i>${DEPOT_STATUS[k].label} ${s.counts[k] || 0}</span>`).join('')}
+      </div>
+      <button type="button" class="depot-continue">Continue with ${esc(loc.org)} · ${esc(loc.city)} →</button>`);        summary.style.setProperty('--loc', loc.color || '#0D9488');
+    summary.querySelector('.depot-continue').onclick = () => openDrawer(loc, null);
+    wrap.appendChild(summary);
+
+    for (const d of state.depots) {
+      const meta = DEPOT_STATUS[d.status] || DEPOT_STATUS.delivered;
+      const card = el('div', 'loc-card depot-card' + (state.selectedDepot === d.id ? ' selected' : ''), `
+        <h4>${esc(d.name)}</h4>
+        <div class="loc-city">${esc(d.line)}</div>
+        <div class="loc-meta">
+          <span class="chip s-${d.status}"><i></i>${meta.label}</span>
+          <span><b>${d.delivered}</b> delivered</span>
+          <span><b>${d.toDeliver}</b> to deliver</span>
+        </div>`);
+      card.style.setProperty('--loc', meta.color);
+      card.onclick = () => selectDepot(d.id);
+      wrap.appendChild(card);
+    }
+  }
+
+  // fly the camera to a flat map point at a given zoom
+  function flyTo(fx, fy, k, dur) {
+    tween({ from: mapView.fx, to: fx, dur, ease: easeInOut, onUpdate: v => mapView.fx = v });
+    tween({ from: mapView.fy, to: fy, dur, ease: easeInOut, onUpdate: v => mapView.fy = v });
+    tween({ from: mapView.k, to: k, dur, ease: easeInOut, onUpdate: v => mapView.k = v });
+  }
+
+  // zoom that fits a location's depot cluster in frame
+  function zoomForDepots(loc) {
+    const pts = (loc.depots && loc.depots.length ? loc.depots : [loc]).map(d => mapProj.project(d.lng, d.lat));
+    const cx = pts.reduce((s, p) => s + p.x, 0) / pts.length;
+    const cy = pts.reduce((s, p) => s + p.y, 0) / pts.length;
+    const r = Math.max(0.6, ...pts.map(p => Math.hypot(p.x - cx, p.y - cy)));
+    const target = Math.min(mapFrame.w, mapFrame.h) * 0.34;
+    return { cx, cy, k: Math.max(1.2, Math.min(CAM.maxK, target / r)) };
+  }
+
   function selectLocation(id) {
     const loc = state.locations.find(l => l.id === id);
     if (!loc) return;
     state.selected = id;
-    renderLocationCards();
-
-    // fly the camera to the marker
-    const fit = fitCanvas(indiaCanvas);
-    if (fit && mapProj) {
-      const p = mapProj.project(loc.lng, loc.lat);
-      tween({ from: mapView.fx, to: p.x, dur: 900, ease: easeInOut, onUpdate: v => mapView.fx = v });
-      tween({ from: mapView.fy, to: p.y, dur: 900, ease: easeInOut, onUpdate: v => mapView.fy = v });
-      tween({ from: mapView.k, to: 1.55, dur: 900, ease: easeInOut, onUpdate: v => mapView.k = v });
+    state.selectedDepot = null;
+    state.view = 'depots';
+    state.depots = loc.depots || [];
+    state.enteringDepotsAt = performance.now();
+    if (mapProj) {
+      const t = zoomForDepots(loc);
+      flyTo(t.cx, t.cy, t.k, 1000);
     }
+    renderSidePanel();
+    updateLegend();
+  }
 
-    openDrawer(loc);
+  function selectDepot(id) {
+    const d = state.depots.find(x => x.id === id);
+    const loc = state.locations.find(l => l.id === state.selected);
+    if (!d || !loc) return;
+    state.selectedDepot = id;
+    renderSidePanel();
+    openDrawer(loc, d);
+  }
+
+  function clearLocation() {
+    closeDrawer();
+    state.selected = null;
+    state.selectedDepot = null;
+    state.view = 'locations';
+    state.depots = [];
+    if (mapProj) {
+      const mid = mapProj.project((MAP_BOX.lng0 + MAP_BOX.lng1) / 2, (MAP_BOX.lat0 + MAP_BOX.lat1) / 2);
+      flyTo(mid.x, mid.y, 1, 750);
+    }
+    renderSidePanel();
+    updateLegend();
   }
 
   // ═══════════════ auth drawer ═══════════════
-  function openDrawer(loc) {
+  function openDrawer(loc, depot) {
     const d = $('authDrawer');
-    if (!d) return;
-    d.style.setProperty('--loc', loc.color || '#2563EB');
+    if (!d) return;        d.style.setProperty('--loc', (depot && (DEPOT_STATUS[depot.status] || {}).color) || loc.color || '#0D9488');
     $('authLocOrg').textContent = loc.org;
-    $('authLocName').textContent = loc.name;
-    $('authLocCity').textContent = `${loc.city}, ${loc.state || 'India'} · ${loc.role || ''}`;
+    $('authLocName').textContent = depot ? depot.name : loc.name;
+    $('authLocCity').textContent = depot
+      ? `${depot.line} · ${loc.city}, ${loc.state || 'India'}`
+      : `${loc.city}, ${loc.state || 'India'} · ${loc.role || ''}`;
+    const depotLine = $('authLocDepot');
+    if (depotLine) {
+      depotLine.style.display = depot ? 'flex' : 'none';
+      depotLine.innerHTML = depot
+        ? `<i></i>${esc((DEPOT_STATUS[depot.status] || {}).label || '')} · ${depot.delivered}/${depot.trainsets} trainsets`
+        : '';
+    }
     $('authLocProjects').innerHTML = (loc.projects || []).slice(0, 5).map(p => `<span>${esc(p)}</span>`).join('');
-    $('regLocChip').textContent = `${loc.org} · ${loc.city}`;
-    $('signinLocChip').textContent = `${loc.org} · ${loc.city}`;
+    $('regLocChip').textContent = depot ? `${loc.org} · ${depot.name}` : `${loc.org} · ${loc.city}`;
+    $('signinLocChip').textContent = depot ? `${loc.org} · ${depot.name}` : `${loc.org} · ${loc.city}`;
+    const adminHint = $('signinAdminHint');
+    if (adminHint) {
+      if (depot) {
+        $('signinAdminId').textContent = `${depot.id}-admin`;
+        adminHint.style.display = 'block';
+        $('signinUsername').value = `${depot.id}-admin`;
+      } else {
+        adminHint.style.display = 'none';
+      }
+    }
     $('authError').style.display = 'none';
     d.classList.add('open');
     switchTab('register');
@@ -662,15 +1018,6 @@
   function closeDrawer() {
     const d = $('authDrawer');
     if (d) d.classList.remove('open');
-    state.selected = null;
-    renderLocationCards();
-    // ease camera back out
-    if (mapProj) {
-      const mid = mapProj.project((MAP_BOX.lng0 + MAP_BOX.lng1) / 2, (MAP_BOX.lat0 + MAP_BOX.lat1) / 2);
-      tween({ from: mapView.fx, to: mid.x, dur: 700, ease: easeInOut, onUpdate: v => mapView.fx = v });
-      tween({ from: mapView.fy, to: mid.y, dur: 700, ease: easeInOut, onUpdate: v => mapView.fy = v });
-      tween({ from: mapView.k, to: 1, dur: 700, ease: easeInOut, onUpdate: v => mapView.k = v });
-    }
   }
 
   function switchTab(tab) {
@@ -700,8 +1047,10 @@
     e.preventDefault();
     const btn = $('regSubmit'), errEl = $('authError');
     const loc = state.locations.find(l => l.id === state.selected);
+    if (!loc) { authError('Please pick your BEML location on the map first.'); return; }
     const payload = {
       locationId: state.selected,
+      depotId: state.selectedDepot || null,
       name: $('regName').value.trim(),
       email: $('regEmail').value.trim(),
       phone: $('regPhone').value.trim(),
@@ -709,7 +1058,7 @@
       password: $('regPassword').value,
       confirmPassword: $('regConfirm').value
     };
-    if (payload.password !== payload.confirm) {
+    if (payload.password !== payload.confirmPassword) {
       authError('Passwords do not match.'); return;
     }
     btn.disabled = true; btn.textContent = 'Creating your workspace…';
@@ -761,8 +1110,9 @@
     $('successTitle').textContent = kind === 'created' ? 'Account Created' : 'Welcome Back';
     $('successMsg').innerHTML =
       (kind === 'created'
-        ? `Your secure workspace for <span class="success-loc">${esc(data.org || loc?.org || '')} · ${esc(data.city || loc?.city || '')}</span> is ready.<br>User ID: <b style="color:#93C5FD">${esc(data.username)}</b>`
-        : `Signed in as <b style="color:#93C5FD">${esc(data.name || data.username)}</b><br><span class="success-loc">${esc(data.org || '')} · ${esc(data.city || '')}</span>`);
+        ? `Your secure workspace for <span class="success-loc">${esc(data.org || loc?.org || '')} · ${esc(data.city || loc?.city || '')}</span> is ready.<br>User ID: <b style="color:#5EEAD4">${esc(data.username)}</b>`
+        : `Signed in as <b style="color:#5EEAD4">${esc(data.name || data.username)}</b><br><span class="success-loc">${esc(data.org || '')} · ${esc(data.city || '')}</span>`)
+      + (data.depot ? `<br><span class="success-loc">Depot: ${esc(data.depot)}</span>` : '');
     s.classList.add('show');
     setTimeout(() => {
       s.classList.remove('show');
@@ -781,8 +1131,7 @@
       loadLocations();
       state.pollTimer = setInterval(loadLocations, 30000);
     }
-    if (state.stage === 'map' && state.selected) { /* keep */ }
-    else if (!wasRunning) { gotoStage('globe'); startCountdown(); }
+    if (!wasRunning) { gotoStage('globe'); startCountdown(); }
     if (!animHandle) animHandle = requestAnimationFrame(loop);
 
     // wire once
@@ -810,36 +1159,49 @@
       const sin = $('formSignin'); if (sin) sin.onsubmit = submitSignin;
       const sugg = $('regUsernameSuggest');
       if (sugg) sugg.onclick = () => suggestUsername(state.selected);
-      // password toggles + strength
       wirePasswordToggles();
-      // canvas interaction
       if (indiaCanvas) {
-        indiaCanvas.addEventListener('pointermove', (e) => {
+        const pos = (e) => {
           const r = indiaCanvas.getBoundingClientRect();
-          pointer.x = e.clientX - r.left; pointer.y = e.clientY - r.top;
-          const loc = markerAt(pointer.x, pointer.y);
-          mapHover = loc;
-          indiaCanvas.style.cursor = loc ? 'pointer' : 'grab';
+          return { x: e.clientX - r.left, y: e.clientY - r.top };
+        };
+        indiaCanvas.addEventListener('pointermove', (e) => {
+          const p = pos(e); pointer = p;
+          const hit = hitTest(p.x, p.y);
+          indiaCanvas.style.cursor = hit ? 'pointer' : (state.view === 'depots' ? 'zoom-out' : 'grab');
           const tip = $('mapTooltip');
-          if (loc && tip) {
-            tip.style.display = 'block';
-            tip.style.left = (e.clientX - r.left) + 'px';
-            tip.style.top = (e.clientY - r.top) + 'px';
-            tip.innerHTML = `<b>${esc(loc.code)} · ${esc(loc.city)}</b><span>${esc(loc.name)}</span><i>${loc.users || 0} users · ${loc.letters || 0} letters · click to select</i>`;
-          } else if (tip) tip.style.display = 'none';
+          if (!tip) return;
+          if (!hit) { tip.style.display = 'none'; return; }
+          tip.style.display = 'block';
+          tip.style.left = p.x + 'px';
+          tip.style.top = p.y + 'px';
+          if (hit.kind === 'location') {
+            const loc = state.locations.find(l => l.id === hit.id);
+            const depots = loc.depots || [];
+            tip.innerHTML = `<b>${esc(loc.code)} · ${esc(loc.city)}</b><span>${esc(loc.name)}</span>
+              <i>${depots.length} depots · ${loc.trainsets || 0} trainsets · click to open</i>`;
+          } else {
+            const d = state.depots.find(x => x.id === hit.id);
+            const meta = DEPOT_STATUS[d.status] || DEPOT_STATUS.delivered;
+            tip.innerHTML = `<b>${esc(d.name)}</b><span>${esc(d.line)}</span>
+              <i>${meta.label} · ${d.delivered}/${d.trainsets} trainsets · click to sign in</i>`;
+          }
         });
         indiaCanvas.addEventListener('pointerleave', () => {
-          mapHover = null;
           const tip = $('mapTooltip'); if (tip) tip.style.display = 'none';
         });
         indiaCanvas.addEventListener('click', (e) => {
-          const r = indiaCanvas.getBoundingClientRect();
-          const loc = markerAt(e.clientX - r.left, e.clientY - r.top);
-          if (loc) selectLocation(loc.id);
+          const p = pos(e);
+          const hit = hitTest(p.x, p.y);
+          if (!hit) { if (state.view === 'depots') clearLocation(); return; }
+          if (hit.kind === 'location') selectLocation(hit.id);
+          else selectDepot(hit.id);
         });
       }
       document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape' && state.stage === 'map' && state.selected) closeDrawer();
+        if (e.key !== 'Escape') return;
+        if ($('authDrawer')?.classList.contains('open')) closeDrawer();
+        else if (state.stage === 'map' && state.view === 'depots') clearLocation();
       });
     }
   }
@@ -880,6 +1242,9 @@
     stop();
     cancelTweens();
     state.selected = null;
+    state.selectedDepot = null;
+    state.view = 'locations';
+    state.depots = [];
     globeR = 0; globeAdvancing = false;
     closeDrawer();
     document.querySelectorAll('.auth-form input').forEach(i => { i.value = ''; });
@@ -888,7 +1253,7 @@
     start();
   }
 
-  window.DocVaultPortal = { start, stop, reset, selectLocation };
+  window.DocVaultPortal = { start, stop, reset, selectLocation, selectDepot };
 
   document.addEventListener('DOMContentLoaded', () => {
     globeCanvas = $('globeCanvas');
