@@ -2329,6 +2329,7 @@ async function syncUsersFromSheet(force = false) {
 // ── Live BEML locations with per-location stats ──
 app.get('/api/locations', async (req, res) => {
   try {
+    await loadAllDataCache();
     await syncUsersFromSheet();
     const locations = BEML_LOCATIONS.map(loc => {
       const sheetName = SHEET_NAMES[loc.org];
