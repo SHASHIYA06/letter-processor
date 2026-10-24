@@ -11,7 +11,9 @@ import crypto from 'crypto';
 export const USER_COLUMNS = [
   'S.No', 'Username', 'Full Name', 'Email', 'Phone', 'Role',
   'Org Code', 'Location ID', 'City', 'State', 'Status',
-  'Created At', 'Last Login', 'Password Hash'
+  'Created At', 'Last Login', 'Password Hash',
+  // Appended (backward-compatible): depot + project scoping for the mirror
+  'Depot ID', 'Depot', 'Projects'
 ];
 
 const SCRYPT_OPTS = { N: 16384, r: 8, p: 1 };
@@ -111,7 +113,7 @@ export function createUserStore(dataDir) {
       return candidate;
     },
 
-    create({ name, email, phone, username, password, locationId, org, city, state, role = 'user' }) {
+    create({ name, email, phone, username, password, locationId, org, city, state, role = 'user', status = 'active', depotId = null, depot = null, projects = [] }) {
       const uname = String(username || '').trim().toLowerCase();
       const user = {
         id: crypto.randomUUID(),
@@ -125,7 +127,10 @@ export function createUserStore(dataDir) {
         locationId,
         city,
         state,
-        status: 'active',
+        status,
+        depotId: depotId || null,
+        depot: depot || null,
+        projects: Array.isArray(projects) ? projects : [],
         createdAt: new Date().toISOString(),
         lastLogin: null,
         lastIp: null,
@@ -157,6 +162,16 @@ export function createUserStore(dataDir) {
       return user;
     },
 
+    // Delete a user record entirely (admin removal). Returns the removed user
+    // or null if not found.
+    remove(id) {
+      const idx = data.users.findIndex(x => x.id === id);
+      if (idx === -1) return null;
+      const [removed] = data.users.splice(idx, 1);
+      save();
+      return removed;
+    },
+
     // Upsert a row synced from the Google Sheets "Users" mirror (keeps Vercel/ephemeral FS alive)
     upsertFromSheet(row) {
       // Expected row: [sno, username, name, email, phone, role, org, locationId, city, state, status, createdAt, lastLogin, pwHash]
@@ -180,7 +195,10 @@ export function createUserStore(dataDir) {
         createdAt: row[11] || new Date().toISOString(),
         lastLogin: row[12] || null,
         lastIp: existing?.lastIp || null,
-        passwordHash: String(row[13] || '')
+        passwordHash: String(row[13] || ''),
+        depotId: String(row[14] || '') || null,
+        depot: String(row[15] || '') || null,
+        projects: String(row[16] || '') ? String(row[16]).split(',').map(s => s.trim()).filter(Boolean) : (existing?.projects || [])
       };
       if (existing) {
         Object.assign(existing, rec);

@@ -2191,14 +2191,10 @@ async function mirrorUserAppend(user) {
   if (!sheets) return;
   try {
     await ensureHeaders(USERS_SHEET, USER_COLUMNS);
-    const row = [
-      String(user.seq || ''), user.username, user.name, user.email, user.phone,
-      user.role || 'user', user.org, user.locationId, user.city, user.state,
-      user.status || 'active', user.createdAt || '', user.lastLogin || '', ''
-    ];
+    const row = userSheetRow(user);
     await sheets.spreadsheets.values.append({
       spreadsheetId: SPREADSHEET_ID,
-      range: `${USERS_SHEET}!A:N`,
+      range: `${USERS_SHEET}!A:Q`,
       valueInputOption: 'RAW',
       insertDataOption: 'INSERT_ROWS',
       requestBody: { values: [row] }
@@ -2207,6 +2203,83 @@ async function mirrorUserAppend(user) {
   } catch (err) {
     console.log('⚠️  User sheet mirror failed:', err.message);
   }
+}
+
+// Build a full Users-sheet row (incl. password hash + depot/project columns).
+// The hash MUST be written or a Vercel cold start cannot rebuild the account
+// from the mirror — this was the root cause of "users not syncing".
+function userSheetRow(user) {
+  return [
+    String(user.seq || ''), user.username, user.name, user.email, user.phone,
+    user.role || 'user', user.org, user.locationId, user.city, user.state,
+    user.status || 'active', user.createdAt || '', user.lastLogin || '',
+    user.passwordHash || '',
+    user.depotId || '', user.depot || '',
+    Array.isArray(user.projects) ? user.projects.join(',') : ''
+  ];
+}
+
+// Find the 1-based sheet row number for a username (scans column B).
+async function findUserSheetRow(username) {
+  if (!sheets) return 0;
+  const res = await sheets.spreadsheets.values.get({
+    spreadsheetId: SPREADSHEET_ID,
+    range: `${USERS_SHEET}!B1:B`
+  });
+  const rows = res.data.values || [];
+  const u = String(username || '').trim().toLowerCase();
+  for (let i = 0; i < rows.length; i++) {
+    if (String(rows[i][0] || '').trim().toLowerCase() === u) return i + 1;
+  }
+  return 0;
+}
+
+// Overwrite an existing user row in the sheet (status / hash / depot changes).
+async function mirrorUserUpdate(user) {
+  if (!sheets || !user?.username) return;
+  try {
+    await ensureHeaders(USERS_SHEET, USER_COLUMNS);
+    const rowNum = await findUserSheetRow(user.username);
+    if (!rowNum) { await mirrorUserAppend(user); return; }
+    await sheets.spreadsheets.values.update({
+      spreadsheetId: SPREADSHEET_ID,
+      range: `${USERS_SHEET}!A${rowNum}:Q${rowNum}`,
+      valueInputOption: 'RAW',
+      requestBody: { values: [userSheetRow(user)] }
+    });
+    console.log(`🪪 User row updated in sheet: ${user.username} → ${user.status}`);
+  } catch (err) {
+    console.log('⚠️  User sheet update failed:', err.message);
+  }
+}
+
+// Delete a user's row from the sheet (admin removal of login data).
+async function mirrorUserDelete(username) {
+  if (!sheets) return false;
+  try {
+    const rowNum = await findUserSheetRow(username);
+    if (!rowNum) return false;
+    await sheets.spreadsheets.batchUpdate({
+      spreadsheetId: SPREADSHEET_ID,
+      requestBody: {
+        requests: [{ deleteDimension: {
+          range: { sheetId: await usersSheetId(), dimension: 'ROWS', startIndex: rowNum - 1, endIndex: rowNum }
+        }}]
+      }
+    });
+    console.log(`🪪 User row deleted from sheet: ${username}`);
+    return true;
+  } catch (err) {
+    console.log('⚠️  User sheet delete failed:', err.message);
+    return false;
+  }
+}
+
+// Resolve the numeric sheetId of the Users tab (needed for deleteDimension).
+async function usersSheetId() {
+  const meta = await sheets.spreadsheets.get({ spreadsheetId: SPREADSHEET_ID });
+  const tab = (meta.data.sheets || []).find(s => s.properties?.title === USERS_SHEET);
+  return tab?.properties?.sheetId;
 }
 
 // Best-effort: update Last Login column for a user in the sheet
@@ -2239,11 +2312,13 @@ async function syncUsersFromSheet(force = false) {
   try {
     const res = await sheets.spreadsheets.values.get({
       spreadsheetId: SPREADSHEET_ID,
-      range: `${USERS_SHEET}!A2:N`
+      range: `${USERS_SHEET}!A2:Q`
     });
     const rows = res.data.values || [];
     for (const row of rows) {
-      if (row[13]) userStore.upsertFromSheet(row); // only rows that carry a password hash
+      // Import every row that has a username. Rows without a password hash still
+      // load so admins can see/manage them; they simply can't password-login.
+      if (row[1]) userStore.upsertFromSheet(row);
     }
     _sheetSyncDone = true;
   } catch (err) {
@@ -2284,7 +2359,7 @@ app.get('/api/auth/username-suggest', (req, res) => {
 // ── Register a location-scoped user ──
 app.post('/api/auth/register', async (req, res) => {
   try {
-    const { locationId, depotId, name, email, phone, username, password, confirmPassword } = req.body || {};
+    const { locationId, depotId, name, email, phone, staffId, username, password, confirmPassword } = req.body || {};
 
     const loc = getLocationById(locationId);
     if (!loc) return res.status(400).json({ success: false, error: 'Invalid or missing location. Please select a BEML location on the map.' });
@@ -2301,20 +2376,18 @@ app.post('/api/auth/register', async (req, res) => {
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email))) {
       return res.status(400).json({ success: false, error: 'Please enter a valid email address.' });
     }
-    if (userStore.findByEmail(email)) {
-      return res.status(409).json({ success: false, error: 'An account with this email already exists. Please sign in instead.' });
-    }
     if (phone && !/^[0-9+\-\s]{8,15}$/.test(String(phone))) {
       return res.status(400).json({ success: false, error: 'Please enter a valid phone number.' });
     }
 
-    const uname = String(username || userStore.nextUsername(loc.userPrefix)).trim().toLowerCase();
-    if (!/^[a-z0-9._-]{4,30}$/.test(uname)) {
-      return res.status(400).json({ success: false, error: 'Username must be 4–30 characters (letters, numbers, dot, dash, underscore).' });
+    // User ID IS the BEML staff number: exactly 5 digits. Accept `staffId` or
+    // `username` for compatibility, but the value must be a 5-digit numeric ID.
+    const staffNo = String(staffId || username || '').trim();
+    if (!/^\d{5}$/.test(staffNo)) {
+      return res.status(400).json({ success: false, error: 'User ID must be your BEML staff number — exactly 5 digits (e.g. 10234).' });
     }
-    if (userStore.findByUsername(uname)) {
-      return res.status(409).json({ success: false, error: 'That username is taken. Try another or use the suggested one.' });
-    }
+    const uname = staffNo;
+
     if (!password || String(password).length < 8) {
       return res.status(400).json({ success: false, error: 'Password must be at least 8 characters.' });
     }
@@ -2322,34 +2395,53 @@ app.post('/api/auth/register', async (req, res) => {
       return res.status(400).json({ success: false, error: 'Passwords do not match.' });
     }
 
-    await syncUsersFromSheet(); // re-check uniqueness against mirror
-    if (userStore.findByUsername(uname)) {
-      return res.status(409).json({ success: false, error: 'That username is taken. Try another or use the suggested one.' });
+    await syncUsersFromSheet(); // re-check against the mirror
+
+    const userProjects = [scopeFromLegacyOrg(loc.org) || 'BEML'];
+    const existing = userStore.findByUsername(uname);
+    if (existing) {
+      // Same email on a *different* active account is still a conflict.
+      const emailOwner = userStore.findByEmail(email);
+      if (emailOwner && emailOwner.username !== uname) {
+        return res.status(409).json({ success: false, error: 'An account with this email already exists. Please sign in instead.' });
+      }
+      const st = String(existing.status || 'active');
+      if (st === 'active' || st === 'disabled') {
+        return res.status(409).json({ success: false, error: st === 'disabled'
+          ? 'This staff number is registered but disabled. Contact your administrator.'
+          : 'This staff number is already registered. Please sign in instead.' });
+      }
+      // status is 'pending' or 'denied' → allow re-request: refresh details and
+      // reset to pending so the admin can review it again.
+      const updated = userStore.patch(existing.id, {
+        name: String(name).trim(), email: String(email).trim().toLowerCase(), phone: String(phone || '').trim(),
+        locationId: loc.id, org: loc.org, city: loc.city, state: loc.state,
+        projects: userProjects, depotId: depot ? depot.id : null, depot: depot ? depot.name : null,
+        passwordHash: hashPassword(password), status: 'pending'
+      });
+      mirrorUserUpdate(updated).catch(() => {});
+      auditEvent({ user: { username: uname, role: 'user' }, ip: req.ip, get: () => null }, 'user.rerequest', { locationId: loc.id, org: loc.org });
+      console.log(`🔁 Re-request: ${uname} → pending (${loc.org})`);
+      return res.json({ success: true, pending: true, username: uname, status: 'pending',
+        message: 'Your registration has been re-submitted. An administrator must approve your access before you can sign in.' });
     }
 
+    // New account — created as PENDING. No token is issued: the user cannot enter
+    // until an administrator approves this staff number.
     const user = userStore.create({
       name, email, phone, username: uname, password,
-      locationId: loc.id, org: loc.org, city: loc.city, state: loc.state, role: 'user'
+      locationId: loc.id, org: loc.org, city: loc.city, state: loc.state, role: 'user',
+      status: 'pending',
+      depotId: depot ? depot.id : null, depot: depot ? depot.name : null,
+      projects: userProjects
     });
-    // Multi-project: scope the account to the metro project tied to this location
-    const userProjects = [scopeFromLegacyOrg(loc.org) || 'BEML'];
-    userStore.patch(user.id, { projects: userProjects, depotId: depot ? depot.id : null, depot: depot ? depot.name : null });
-    user.projects = userProjects;
-    user.depotId = depot ? depot.id : null;
-    user.depot = depot ? depot.name : null;
 
     mirrorUserAppend(user).catch(() => {});
-
-    const token = signUserToken(user);
-    auditEvent({ user: { username: user.username, role: user.role }, ip: req.ip, scopes: userProjects, get: (h) => h === 'x-project-id' ? userProjects[0] : null }, 'user.register', { locationId: loc.id, org: loc.org, projects: userProjects });
-    console.log(`✅ Registration: ${user.username} → ${loc.org} (${loc.city}) projects=[${userProjects}]`);
+    auditEvent({ user: { username: user.username, role: 'user' }, ip: req.ip, get: () => null }, 'user.register', { locationId: loc.id, org: loc.org, status: 'pending' });
+    console.log(`📝 Registration (pending): ${user.username} → ${loc.org} (${loc.city})`);
     res.json({
-      success: true, token,
-      username: user.username, name: user.name, role: user.role,
-      org: user.org, locationId: user.locationId, city: user.city,
-      depotId: user.depotId || null, depot: user.depot || null,
-      projects: userProjects,
-      depots: DEPOTS
+      success: true, pending: true, username: user.username, status: 'pending',
+      message: 'Registration received. An administrator must approve your access before you can sign in.'
     });
   } catch (err) {
     console.log('❌ Registration failed:', err.message);
@@ -2403,8 +2495,14 @@ app.post('/api/login', async (req, res) => {
       return res.status(403).json({ success: false, error: 'Account temporarily locked after repeated failures. Try again later.' });
     }
     if (user.status && user.status !== 'active') {
-      auditEvent({ user: { username: user.username }, ip: req.ip }, 'login.disabled', {});
-      return res.status(403).json({ success: false, error: 'This account is disabled. Contact your administrator.' });
+      const st = String(user.status);
+      auditEvent({ user: { username: user.username }, ip: req.ip }, 'login.blocked', { status: st });
+      const msg = st === 'pending'
+        ? 'Your registration is awaiting administrator approval. You cannot sign in yet.'
+        : st === 'denied'
+          ? 'Your registration was not approved. Contact your administrator or register again.'
+          : 'This account is disabled. Contact your administrator.';
+      return res.status(403).json({ success: false, error: msg, status: st });
     }
     if (verifyPassword(user, password)) {
       const patch = { lastLogin: new Date().toISOString(), lastIp: req.ip, failedLogins: 0, lockedUntil: null };
@@ -2718,6 +2816,74 @@ app.post('/api/admin/users/:id/reset-password', authenticateToken, (req, res) =>
   auditEvent(req, 'admin.password_reset', { target: target.username });
   // Returned once to the administrator over authenticated API — never logged.
   res.json({ success: true, temporaryPassword: temp });
+});
+
+// ── Registration approval workflow (permit / deny a staff number) ──
+// Approve → status 'active' (user may now sign in). Mirrors to the Sheet so the
+// change survives a Vercel cold start in every isolate.
+app.post('/api/admin/users/:id/approve', authenticateToken, async (req, res) => {
+  if (!requireGlobalAdmin(req, res)) return;
+  const target = userStore.findById(req.params.id);
+  if (!target) return res.status(404).json({ success: false, error: 'User not found' });
+  if (target.status === 'active') return res.json({ success: true, user: publicProfile(target), already: true });
+  const updated = userStore.patch(target.id, { status: 'active', deniedReason: null });
+  await mirrorUserUpdate(updated);
+  auditEvent(req, 'admin.user_approved', { target: target.username, staffNo: target.username });
+  res.json({ success: true, user: publicProfile(updated) });
+});
+
+// Deny → status 'denied'. The staff number may register again later (re-request),
+// but cannot sign in until approved.
+app.post('/api/admin/users/:id/deny', authenticateToken, async (req, res) => {
+  if (!requireGlobalAdmin(req, res)) return;
+  const target = userStore.findById(req.params.id);
+  if (!target) return res.status(404).json({ success: false, error: 'User not found' });
+  if (target.role === 'global_admin') return res.status(400).json({ success: false, error: 'Cannot deny a global administrator.' });
+  const reason = req.body?.reason ? String(req.body.reason).slice(0, 300) : null;
+  const updated = userStore.patch(target.id, { status: 'denied', deniedReason: reason });
+  await mirrorUserUpdate(updated);
+  auditEvent(req, 'admin.user_denied', { target: target.username, reason });
+  res.json({ success: true, user: publicProfile(updated) });
+});
+
+// Delete a user's login record entirely — removes from local store AND the
+// Google Sheets "Users" tab. The person must register from scratch afterwards.
+app.delete('/api/admin/users/:id', authenticateToken, async (req, res) => {
+  if (!requireGlobalAdmin(req, res)) return;
+  const target = userStore.findById(req.params.id);
+  if (!target) return res.status(404).json({ success: false, error: 'User not found' });
+  if (target.role === 'global_admin') {
+    const remaining = userStore.getAll().filter(u => u.role === 'global_admin' && u.id !== target.id);
+    if (!remaining.length) return res.status(400).json({ success: false, error: 'Cannot delete the last global administrator.' });
+  }
+  if (target.id === req.user.uid) return res.status(400).json({ success: false, error: 'You cannot delete your own account.' });
+  userStore.remove(target.id);
+  const deletedFromSheet = await mirrorUserDelete(target.username);
+  auditEvent(req, 'admin.user_deleted', { target: target.username, staffNo: target.username, deletedFromSheet });
+  res.json({ success: true, deletedFromSheet, username: target.username });
+});
+
+// Admin changes the operator sign-in passcode. Verifies the current password
+// against the stored hash, then re-hashes and mirrors the new one.
+app.post('/api/admin/change-passcode', authenticateToken, async (req, res) => {
+  if (!requireGlobalAdmin(req, res)) return;
+  const { currentPassword, newPassword, confirmPassword } = req.body || {};
+  const me = userStore.findById(req.user.uid);
+  if (!me) return res.status(404).json({ success: false, error: 'Account not found.' });
+  if (!verifyPassword(me, currentPassword || '')) {
+    auditEvent(req, 'admin.passcode_change_failed', { reason: 'wrong_current' });
+    return res.status(403).json({ success: false, error: 'Current passcode is incorrect.' });
+  }
+  if (!newPassword || String(newPassword).length < 8) {
+    return res.status(400).json({ success: false, error: 'New passcode must be at least 8 characters.' });
+  }
+  if (newPassword !== confirmPassword) {
+    return res.status(400).json({ success: false, error: 'New passcodes do not match.' });
+  }
+  const updated = userStore.patch(me.id, { passwordHash: hashPassword(newPassword), mustChangePassword: false });
+  await mirrorUserUpdate(updated);
+  auditEvent(req, 'admin.passcode_changed', { target: me.username });
+  res.json({ success: true, message: 'Passcode updated successfully.' });
 });
 
 app.get('/api/admin/audit', authenticateToken, (req, res) => {

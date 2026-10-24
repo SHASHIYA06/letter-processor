@@ -217,9 +217,9 @@
               </div>
             </div>
             <div class="auth-field">
-              <label>User ID <button type="button" class="username-suggest" id="regUsernameSuggest">↻ suggest</button></label>
-              <input type="text" id="regUsername" placeholder="auto-generated for your location" required pattern="[a-zA-Z0-9._-]{4,30}">
-              <div class="field-hint">Unique across BEML — letters, numbers, dot, dash, underscore.</div>
+              <label>BEML Staff Number <span class="req-star">*</span></label>
+              <input type="text" id="regStaffId" placeholder="5-digit staff number (e.g. 10234)" required inputmode="numeric" pattern="[0-9]{5}" maxlength="5" autocomplete="off">
+              <div class="field-hint">Your User ID is your BEML staff number — exactly 5 digits. Admin approval required after registering.</div>
             </div>
             <div class="auth-row">
               <div class="auth-field">
@@ -319,6 +319,7 @@
           <span class="dot"></span>
           <span id="currentUser">admin</span>
         </div>
+        <button class="btn btn-primary" onclick="openAdminPanel()" id="adminPanelBtn" style="display:none">👥 Admin</button>
         <button class="btn btn-secondary" onclick="handleLogout()" id="logoutBtn" style="display:none">🚪 Logout</button>
       </div>
     </header>
@@ -431,6 +432,44 @@
         </div>
       </div>
       <div class="modal-body" id="viewerBody" style="padding:0;min-height:500px"></div>
+    </div>
+  </div>
+
+  <!-- ADMIN: user management (visible to global admins only) -->
+  <div class="modal-overlay" id="adminModal">
+    <div class="modal" style="max-width:1000px;max-height:90vh">
+      <div class="modal-header">
+        <h3>👥 User Management</h3>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-secondary btn-sm" onclick="adminLoadUsers()">🔄 Refresh</button>
+          <button class="modal-close" onclick="closeModal('adminModal')">&times;</button>
+        </div>
+      </div>
+      <div class="modal-body" style="padding:16px;overflow:auto;max-height:calc(90vh - 150px)">
+        <div class="admin-tabs" style="display:flex;gap:8px;margin-bottom:14px">
+          <button class="btn btn-primary btn-sm" id="adminTabPending" onclick="adminShowTab('pending')">Pending Approval</button>
+          <button class="btn btn-secondary btn-sm" id="adminTabAll" onclick="adminShowTab('all')">All Users</button>
+          <button class="btn btn-secondary btn-sm" id="adminTabPass" onclick="adminShowTab('passcode')">Change Passcode</button>
+        </div>
+
+        <div id="adminPendingPane">
+          <p style="color:var(--text-muted);font-size:.82rem;margin:0 0 10px">Staff numbers awaiting your approval. Approve to let them sign in; deny to block (they can re-register later).</p>
+          <div id="adminPendingList"></div>
+        </div>
+
+        <div id="adminAllPane" style="display:none">
+          <p style="color:var(--text-muted);font-size:.82rem;margin:0 0 10px">Every registered account across all BEML locations and depots. You can approve, deny, block, or delete a login record.</p>
+          <div id="adminAllList"></div>
+        </div>
+
+        <div id="adminPassPane" style="display:none;max-width:420px">
+          <p style="color:var(--text-muted);font-size:.82rem;margin:0 0 12px">Change the administrator sign-in passcode. You must know your current passcode.</p>
+          <div class="auth-field" style="margin-bottom:10px"><label>Current passcode</label><input type="password" id="admCurPw" autocomplete="current-password"></div>
+          <div class="auth-field" style="margin-bottom:10px"><label>New passcode</label><input type="password" id="admNewPw" minlength="8" autocomplete="new-password"></div>
+          <div class="auth-field" style="margin-bottom:14px"><label>Confirm new passcode</label><input type="password" id="admConfPw" minlength="8" autocomplete="new-password"></div>
+          <button class="btn btn-primary" onclick="adminChangePasscode()">Update Passcode</button>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -3059,6 +3098,7 @@
         
         if (data.valid) {
           document.getElementById('currentUser').textContent = (data.name || data.username) + (data.org ? ' · ' + data.org : '');
+          setAdminVisibility(data.role === 'admin');
           hideLogin();
           return true;
         } else {
@@ -3101,6 +3141,7 @@
         localStorage.setItem('docvault_depots', JSON.stringify(depotList));
       }
       document.getElementById('currentUser').textContent = (data.name || data.username) + (data.org ? ' · ' + data.org : '');
+      setAdminVisibility(data.role === 'admin' || data.role === 'global_admin');
       hideLogin();
       loadAllData();
       showToast('Welcome, ' + (data.name || data.username) + '!' + (data.city ? ' (' + data.city + ')' : ''), 'success');
@@ -3227,6 +3268,115 @@
           select.value = vendorListCache[0] || '';
         }
       }
+    }
+
+    // === ADMIN USER MANAGEMENT ===
+    let adminUsersCache = [];
+
+    // Show/hide the Admin button based on role (global admins only).
+    function setAdminVisibility(isAdmin) {
+      const btn = document.getElementById('adminPanelBtn');
+      if (btn) btn.style.display = isAdmin ? 'inline-flex' : 'none';
+    }
+
+    async function openAdminPanel() {
+      document.getElementById('adminModal').classList.add('show');
+      adminShowTab('pending');
+      await adminLoadUsers();
+    }
+
+    function adminShowTab(tab) {
+      const tabs = { pending: 'adminPendingPane', all: 'adminAllPane', passcode: 'adminPassPane' };
+      Object.entries(tabs).forEach(([k, id]) => {
+        document.getElementById(id).style.display = (k === tab) ? '' : 'none';
+        const btn = document.getElementById('adminTab' + k.charAt(0).toUpperCase() + k.slice(1));
+        if (btn) { btn.className = 'btn btn-sm ' + (k === tab ? 'btn-primary' : 'btn-secondary'); }
+      });
+    }
+
+    async function adminLoadUsers() {
+      try {
+        const res = await authFetch('/api/admin/users');
+        const data = await res.json();
+        if (!data.success) { showToast(data.error || 'Failed to load users', 'error'); return; }
+        adminUsersCache = data.users || [];
+        renderAdminPending();
+        renderAdminAll();
+      } catch { showToast('Connection error loading users', 'error'); }
+    }
+
+    function statusChip(status) {
+      const s = String(status || 'active');
+      const color = s === 'active' ? '#22C55E' : s === 'pending' ? '#FBBF24' : s === 'denied' ? '#F97316' : '#EF4444';
+      return `<span style="color:${color};font-weight:700;text-transform:capitalize">${esc(s)}</span>`;
+    }
+
+    function renderAdminPending() {
+      const list = adminUsersCache.filter(u => u.status === 'pending' || u.status === 'denied');
+      const el = document.getElementById('adminPendingList');
+      if (!list.length) { el.innerHTML = '<p style="color:var(--text-muted);font-size:.85rem">No accounts awaiting approval. 🎉</p>'; return; }
+      el.innerHTML = list.map(u => `
+        <div class="admin-row" style="display:flex;align-items:center;gap:12px;padding:10px;border:1px solid var(--border);border-radius:8px;margin-bottom:8px">
+          <div style="flex:1;min-width:0">
+            <b>${esc(u.username)}</b> · ${esc(u.name || '')} ${statusChip(u.status)}
+            <div style="color:var(--text-muted);font-size:.78rem">${esc(u.org || '')} ${u.city ? '· ' + esc(u.city) : ''} ${u.depot ? '· ' + esc(u.depot) : ''} · ${esc((u.email || ''))}</div>
+          </div>
+          <button class="btn btn-primary btn-sm" onclick="adminSetStatus('${u.id}','approve',this)">✅ Approve</button>
+          <button class="btn btn-secondary btn-sm" onclick="adminSetStatus('${u.id}','deny',this)">❌ Deny</button>
+        </div>`).join('');
+    }
+
+    function renderAdminAll() {
+      const el = document.getElementById('adminAllList');
+      if (!adminUsersCache.length) { el.innerHTML = '<p style="color:var(--text-muted)">No users.</p>'; return; }
+      el.innerHTML = adminUsersCache.map(u => `
+        <div class="admin-row" style="display:flex;align-items:center;gap:12px;padding:10px;border:1px solid var(--border);border-radius:8px;margin-bottom:8px">
+          <div style="flex:1;min-width:0">
+            <b>${esc(u.username)}</b> · ${esc(u.name || '')} · <span style="color:var(--text-muted)">${esc(u.role || 'user')}</span> ${statusChip(u.status)}
+            <div style="color:var(--text-muted);font-size:.78rem">${esc(u.org || '')} ${u.city ? '· ' + esc(u.city) : ''} ${u.depot ? '· ' + esc(u.depot) : ''} · ${esc(u.email || '')}</div>
+          </div>
+          ${u.status !== 'active' ? `<button class="btn btn-primary btn-sm" onclick="adminSetStatus('${u.id}','approve',this)">✅</button>` : `<button class="btn btn-secondary btn-sm" onclick="adminSetStatus('${u.id}','disable',this)" title="Block">🚫</button>`}
+          ${u.status === 'disabled' ? `<button class="btn btn-secondary btn-sm" onclick="adminSetStatus('${u.id}','activate',this)" title="Unblock">🔓</button>` : ''}
+          ${u.status === 'active' && u.role !== 'global_admin' ? `<button class="btn btn-secondary btn-sm" onclick="adminSetStatus('${u.id}','deny',this)" title="Deny">❌</button>` : ''}
+          <button class="btn btn-secondary btn-sm" style="color:#EF4444;border-color:#EF4444" onclick="adminDeleteUser('${u.id}', '${esc(u.username)}')" title="Delete login record">🗑</button>
+        </div>`).join('');
+    }
+
+    async function adminSetStatus(id, action, btn) {
+      const body = action === 'approve' ? {} : action === 'deny' ? { reason: 'Denied by administrator' } : { status: action === 'activate' ? 'active' : 'disabled' };
+      const url = action === 'approve' ? `/api/admin/users/${id}/approve`
+        : action === 'deny' ? `/api/admin/users/${id}/deny`
+        : `/api/admin/users/${id}/status`;
+      if (btn) { btn.disabled = true; btn.textContent = '…'; }
+      try {
+        const res = await authFetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+        const data = await res.json();
+        if (data.success) { showToast('Updated ✓', 'success'); await adminLoadUsers(); }
+        else { showToast(data.error || 'Action failed', 'error'); if (btn) { btn.disabled = false; btn.textContent = '…'; } }
+      } catch { showToast('Connection error', 'error'); if (btn) { btn.disabled = false; btn.textContent = '…'; } }
+    }
+
+    async function adminDeleteUser(id, username) {
+      if (!confirm(`Delete login record for ${username}? This removes their account from the Google Sheet database. They must register again from scratch.`)) return;
+      try {
+        const res = await authFetch(`/api/admin/users/${id}`, { method: 'DELETE' });
+        const data = await res.json();
+        if (data.success) { showToast(`Deleted ${username}` + (data.deletedFromSheet ? ' (removed from Sheet ✓)' : ' (local only)'), 'success'); await adminLoadUsers(); }
+        else showToast(data.error || 'Delete failed', 'error');
+      } catch { showToast('Connection error', 'error'); }
+    }
+
+    async function adminChangePasscode() {
+      const cur = document.getElementById('admCurPw').value;
+      const nw = document.getElementById('admNewPw').value;
+      const cf = document.getElementById('admConfPw').value;
+      if (nw !== cf) { showToast('New passcodes do not match', 'error'); return; }
+      try {
+        const res = await authFetch('/api/admin/change-passcode', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ currentPassword: cur, newPassword: nw, confirmPassword: cf }) });
+        const data = await res.json();
+        if (data.success) { showToast('Passcode updated ✓', 'success'); document.getElementById('admCurPw').value = document.getElementById('admNewPw').value = document.getElementById('admConfPw').value = ''; }
+        else showToast(data.error || 'Update failed', 'error');
+      } catch { showToast('Connection error', 'error'); }
     }
 
     // === INIT ===

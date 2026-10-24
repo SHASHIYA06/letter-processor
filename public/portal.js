@@ -1027,16 +1027,6 @@
     $('authError').style.display = 'none';
   }
 
-  async function suggestUsername(locationId) {
-    const input = $('regUsername');
-    if (!input) return;
-    try {
-      const res = await fetch(`/api/auth/username-suggest?locationId=${encodeURIComponent(locationId)}`);
-      const data = await res.json();
-      if (data.success && data.username) input.value = data.username;
-    } catch { /* leave as-is */ }
-  }
-
   function authError(msg) {
     const el = $('authError');
     el.textContent = msg;
@@ -1054,7 +1044,7 @@
       name: $('regName').value.trim(),
       email: $('regEmail').value.trim(),
       phone: $('regPhone').value.trim(),
-      username: $('regUsername').value.trim(),
+      staffId: $('regStaffId').value.trim(),
       password: $('regPassword').value,
       confirmPassword: $('regConfirm').value
     };
@@ -1069,7 +1059,10 @@
         body: JSON.stringify(payload)
       });
       const data = await res.json();
-      if (data.success) {
+      if (data.success && data.pending) {
+        // Registered, but NOT granted access yet — no token, workspace stays locked.
+        showPending(data, loc);
+      } else if (data.success) {
         showSuccess(data, loc, 'created');
       } else {
         authError(data.error || 'Registration failed.');
@@ -1103,6 +1096,19 @@
     } finally {
       btn.disabled = false; btn.textContent = 'Sign In →';
     }
+  }
+
+  function showPending(data, loc) {
+    const s = $('authSuccess');
+    $('successTitle').textContent = 'Registration Received';
+    $('successMsg').innerHTML =
+      `Your BEML staff number <b style="color:#5EEAD4">${esc(data.username || '')}</b> has been registered for ` +
+      `<span class="success-loc">${esc(loc?.org || 'BEML')} · ${esc(loc?.city || '')}</span>.<br><br>` +
+      `<b style="color:#FBBF24">Awaiting administrator approval.</b><br>` +
+      `You can sign in once an administrator permits your account. If you were denied, you can register again with the same staff number.`;
+    s.classList.add('show');
+    // No portalAuthenticated() call — the workspace is intentionally NOT entered.
+    setTimeout(() => { s.classList.remove('show'); switchTab('signin'); }, 3200);
   }
 
   function showSuccess(data, loc, kind) {
@@ -1157,8 +1163,6 @@
       document.querySelectorAll('.auth-tabs button').forEach(b => b.onclick = () => switchTab(b.dataset.tab));
       const reg = $('formRegister'); if (reg) reg.onsubmit = submitRegister;
       const sin = $('formSignin'); if (sin) sin.onsubmit = submitSignin;
-      const sugg = $('regUsernameSuggest');
-      if (sugg) sugg.onclick = () => suggestUsername(state.selected);
       wirePasswordToggles();
       if (indiaCanvas) {
         const pos = (e) => {
