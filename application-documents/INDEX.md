@@ -26,6 +26,8 @@ or is explicitly labelled **Proposed** / **Not implemented**.
 | [MEMORY.md](MEMORY.md) | Durable decisions, current state, essential developer context |
 | [RULES.md](RULES.md) | Enforceable coding/security/documentation rules |
 | [TASKS.md](TASKS.md) | Actionable backlog with priority, dependencies, status |
+| [MASTER-PROMPT.md](MASTER-PROMPT.md) | Self-contained paste-ready rebuild prompt (sync'd to `5d99aaf`) |
+| [COMPLETE-BLUEPRINT.md](COMPLETE-BLUEPRINT.md) | MRD, GRD, structure, architecture, database, forms, SKILL.md, MCP/RAG/LangChain/Langflow/LangGraph blueprint |
 
 Additional documents from the master specification (DATABASE_SCHEMA, SECURITY,
 AI_ARCHITECTURE, RAG_ARCHITECTURE, TEST_PLAN, RUNBOOK, GLOSSARY, …) are tracked as
@@ -38,6 +40,16 @@ pending in [TASKS.md](TASKS.md) and will be created as their subsystems land.
 3. No API keys, passwords, passcodes, session tokens, or production secrets appear in any document.
 4. Documents are updated in the same change as any architecture, schema, API, or workflow change.
 5. Related documents are cross-linked.
+
+## Freshness note (2026-10-24)
+
+The documents above were pinned at commit `2970623`. Since then: write-route guards are
+wired and covered by `tests/acceptance-write-guards.mjs` (T-01 done); depot-wise location
+and depot admins, letterhead DOCX and AI advanced options landed; three acceptance suites
+run (44 checks); serverless cold-start bootstrap + `Users`-sheet sync are implemented and
+`ADMIN_BOOTSTRAP_PASSCODE` is a required Vercel Production variable. Where the older
+documents conflict, [COMPLETE-BLUEPRINT.md](COMPLETE-BLUEPRINT.md) and
+[MASTER-PROMPT.md](MASTER-PROMPT.md) reflect the current code.
 
 ## About `node_modules/`
 
